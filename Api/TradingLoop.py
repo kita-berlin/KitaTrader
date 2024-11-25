@@ -26,7 +26,7 @@ class TradingLoop:
                 self.chart.x_close = self.chart.x + 0.4
             pass
 
-            self.bars.ChartTimeArray = self.bars.OpenTimes.data[
+            self.bars.ChartTimeArray = self.bars.open_times.data[
                 -self.bin_settings.bars_in_chart :
             ]
             self.chart.source.data = {
@@ -58,12 +58,12 @@ class TradingLoop:
         self.initial_account_balance = self.Account.equity = self.Account.balance = (
             self.bin_settings.init_balance
         )
-        self.TradeDirection = self.bin_settings.TradeDirection
+        self.trade_direction = self.bin_settings.trade_direction
 
         self.running_mode = (
-            RunningMode.visual_backtesting
+            RunningMode.VisualBacktesting
             if self.bin_settings.is_visual_mode
-            else RunningMode.silent_backtesting
+            else RunningMode.SilentBacktesting
         )
         self.is_stop = False
         self.bars = None
@@ -118,7 +118,7 @@ class TradingLoop:
         self.on_start()
 
     #####################################
-    def Tick(self):
+    def tick(self):
         # update quote, bars, Indicators
         # of 1st tick must update all bars and Indicators which have been inized in on_start()
         for symbol in self.symbol_list:
@@ -147,7 +147,7 @@ class TradingLoop:
                             > self.bin_settings.bars_in_chart
                             // self.chart.x_axis_step
                             and 0
-                            == self.bars.OpenTimes.data[
+                            == self.bars.open_times.data[
                                 -self.bin_settings.bars_in_chart :
                             ][-1].timestamp()
                             % self.bars.default_timeframe_seconds
@@ -156,24 +156,24 @@ class TradingLoop:
                                 self.bin_settings.bars_in_chart - 1
                             )
 
-                        self.chart.OhlcPlot.xaxis.ticker = FixedTicker(
+                        self.chart.ohlc_plot.xaxis.ticker = FixedTicker(
                             ticks=self.chart.x_axis_labels
                         )
 
-                        self.chart.OhlcPlot.xaxis.major_label_overrides = {
-                            tick: self.bars.OpenTimes.data[
+                        self.chart.ohlc_plot.xaxis.major_label_overrides = {
+                            tick: self.bars.open_times.data[
                                 -self.bin_settings.bars_in_chart :
                             ][tick].strftime("%d-%m-%Y %H:%M")
                             for tick in self.chart.x_axis_labels
                         }
                         # endregion
 
-                        self.chart.UpdateChartDrawings()
+                        self.chart.update_chart_drawings()
 
         ########################################
         # Update Account
         if len(self.positions) >= 1:
-            if Platform.mt5_live == self.bin_settings.Platform:
+            if Platform.Mt5Live == self.bin_settings.platform:
                 import MetaTrader5 as mt5
 
                 account_info = mt5.account_info()
@@ -188,7 +188,7 @@ class TradingLoop:
                 for x in self.positions:
                     open_positions_profit += (
                         (x.current_price - x.entry_price)
-                        * (1 if x.trade_type == TradeType.buy else -1)
+                        * (1 if x.trade_type == TradeType.Buy else -1)
                         * x.volume_in_units
                     )
                     self.Account.unrealized_net_profit += open_positions_profit
@@ -203,9 +203,9 @@ class TradingLoop:
         return False
 
     ###########################################
-    def Stop(self):
+    def stop(self):
         # call bot
-        self.OnStop()
+        self.on_stop()
 
 
 # end of file

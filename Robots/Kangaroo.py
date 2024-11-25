@@ -6,26 +6,13 @@ from math import sqrt
 from typing import List
 from datetime import timedelta
 
-# the following weired imports are a sugestion from copilot
-# to solve the problem of differences between visual studio editor
-# and script runtime. The proble is that the script runtime cannot
-# find ..folders because there is no parent module ?!?
-try:
-    from ..Api.Indicators import indicators
-    from ..Api.PyLogger import PyLogger
-    from ..Api.HedgePosition import HedgePosition
-    from ..Api.TradingBot import TradingBot
-    from ..Api.AlgoApiEnums import *
-    from ..Api.CoFu import *
-    from ..Api.Constants import *
-except:
-    from Indicators import IIndicator
-    from PyLogger import PyLogger
-    from HedgePosition import HedgePosition
-    from TradingBot import TradingBot
-    from AlgoApiEnums import *
-    from CoFu import *
-    from Constants import *
+from Indicators import Indicators
+from PyLogger import PyLogger
+from HedgePosition import HedgePosition
+from TradingBot import TradingBot
+from AlgoApiEnums import *
+from Api.CoFu import *
+from Constants import *
 # endregion
 
 # import talib
@@ -49,6 +36,7 @@ class Kangaroo(TradingBot):
         self.rebuy_percent = 0.1
         self.take_profit_percent = 0.1
         self.volume = 1000
+
     # endregion
     pass
 
@@ -80,20 +68,20 @@ class Kangaroo(TradingBot):
         self.sma = indicators.moving_average(
             source =self.indi_bars.close_prices,
             periods =self.time_period,
-            ma_type =MovingAverageType.simple,
+            ma_type =MovingAverageType.Simple,
         )
 
         self.sd = indicators.standard_deviation(
             source =self.indi_bars.close_prices,
             periods =self.time_period,
-            ma_type =MovingAverageType.simple,
+            ma_type =MovingAverageType.Simple,
         )
 
         self.bb_indi:indicators.bollinger_bands = indicators.bollinger_bands(
             source =self.indi_bars.close_prices,
             periods =self.time_period,
             standard_deviations =2,
-            ma_type =MovingAverageType.simple,
+            ma_type =MovingAverageType.Simple,
             shift =0,
         )
         """
@@ -204,7 +192,7 @@ class Kangaroo(TradingBot):
                             + "; {:.2f}".format(self.Calmar)
                         )
 
-                    if self.TradeDirection == TradeDirection.mode1:
+                    if self.trade_direction == TradeDirection.Mode1:
                         self.is_long = not self.is_long  # flip direction
                     is_just_closed = True
         pass
@@ -302,7 +290,7 @@ class Kangaroo(TradingBot):
         self.invest_count = 0
 
     ###################################
-    def get_tick_fitness(self):
+    def get_tick_fitness(self) -> float:
         # ret_val = 0.0
         self.history  # list of closed positions
         self.positions  # list of current open positions; Count matches self.invest_count
@@ -329,6 +317,5 @@ class Kangaroo(TradingBot):
             self.calmar = revenue / self.max_equity_drawdown_value[0]
 
         self.prev_revenue = revenue
-        pass
 
         return self.Calmar

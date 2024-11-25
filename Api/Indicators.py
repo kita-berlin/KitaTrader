@@ -72,7 +72,7 @@ class standard_deviation(IIndicator):
         self,
         source: DataSeries,
         periods: int = 14,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
     ):
         self.source: DataSeries = source
         self.periods: int = periods
@@ -81,7 +81,7 @@ class standard_deviation(IIndicator):
         pass
 
     def initialize(self) -> None:
-        self._movingAverage: moving_average = indicators.moving_average(
+        self._movingAverage: moving_average = Indicators.moving_average(
             self.source, self.periods, self.ma_type
         )
 
@@ -98,7 +98,7 @@ class standard_deviation(IIndicator):
         self.Result[index] = np.sqrt(num1 / self.periods)
 
 
-class bollinger_bands(IIndicator):
+class BollingerBands(IIndicator):
     Main: DataSeries = DataSeries()
     Top: DataSeries = DataSeries()
     Bottom: DataSeries = DataSeries()
@@ -108,7 +108,7 @@ class bollinger_bands(IIndicator):
         source: DataSeries,
         periods: int = 20,
         standard_deviations: float = 2.0,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
         shift: int = 0,
     ):
         self.source: DataSeries = source
@@ -124,10 +124,10 @@ class bollinger_bands(IIndicator):
         pass
 
     def initialize(self):
-        self.moving_average = indicators.moving_average(
+        self.moving_average = Indicators.moving_average(
             self.source, self.periods, self.ma_type
         )
-        self.standard_deviation = indicators.standard_deviation(
+        self.standard_deviation = Indicators.standard_deviation(
             self.source, self.periods
         )
 
@@ -143,20 +143,20 @@ class bollinger_bands(IIndicator):
             self.Top[index1] = self.moving_average.Result.data[index] + num
 
 
-class indicators:
+class Indicators:
     indicator_list = []
 
     def __init__(self, tradingClass):
-        self.TradingClass = tradingClass
+        self.trading_class = tradingClass
         pass
 
     def moving_average(
         self,
         source: DataSeries,
         periods: int = 14,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
     ) -> moving_average:
-        if MovingAverageType.simple == ma_type:
+        if MovingAverageType.Simple == ma_type:
             indicator = simple_moving_average(source, periods)
             # if MovingAverageType...
 
@@ -168,7 +168,7 @@ class indicators:
         self,
         source: DataSeries,
         periods: int = 14,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
     ) -> standard_deviation:
         indicator = standard_deviation(source, periods, ma_type)
         source.indicator_list.append(indicator)
@@ -180,10 +180,10 @@ class indicators:
         source: DataSeries,
         periods: int = 20,
         standard_deviations: float = 2.0,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
         shift: int = 0,
-    ) -> bollinger_bands:
-        indicator = bollinger_bands(
+    ) -> BollingerBands:
+        indicator = BollingerBands(
             source, periods, standard_deviations, ma_type, shift
         )
         source.indicator_list.append(indicator)
@@ -210,14 +210,14 @@ class indicators:
     def high_minus_low(self, bars=None):
         # High Minus Low indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
     def true_range(self, bars):
         # True Range indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
@@ -288,28 +288,28 @@ class indicators:
     def median_price(self, bars):
         # Median Price indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
     def williams_accumulation_distribution(self, bars):
         # Williams Accumulation Distribution indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
     def fractal_chaos_bands(self, bars):
         # Fractal Chaos Bands indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
     def typical_price(self, bars):
         # Typical Price indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
@@ -374,7 +374,7 @@ class indicators:
     def weighted_close(self, bars):
         # Weighted Close indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
@@ -384,7 +384,7 @@ class indicators:
 
     def ease_of_movement(self, periods: int, ma_type):
         # Ease Of Movement indicator instance
-        bars = self.TradingClass.bars
+        bars = self.trading_class.bars
 
         pass
 

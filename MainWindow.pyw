@@ -1,5 +1,5 @@
+import os
 import time
-from datetime import datetime
 from bokeh.layouts import column, row
 from bokeh.models import Select, Slider, Spacer
 from bokeh.models.widgets import (
@@ -13,71 +13,43 @@ from bokeh.models.widgets import (
 from bokeh.server.server import Server
 from bokeh.application import Application
 from bokeh.application.handlers.function import FunctionHandler
-
-from Settings import *
-from TradingClass import TradingClass
-from CoFu import *
+from Api.AlgoApi import AlgoApi
+from Api.Settings import *
+from Api.CoFu import *
 
 
 #############################################
 class MainWindow:
     def __init__(self):
         self.isSave = False
-        self.TradingClass = TradingClass()
+        self.algo_api = AlgoApi()
         self.tradeState = 0
 
         # OnAnyInputChanged
         # region
         def OnAnyInputChanged(attr, old, new):
             if self.isSave:
-                system_settings = SystemSettings(
+                self.system_settings = SystemSettings(
+                    robot_name="dummy",
                     default_symbol_name=symbolInput.value,
-                    TradeDirection=modeInput.value,
+                    default_timeframe_value=timeframeInput.value,
+                    default_timeframe_unit=timeframeUnitInput.value,
+                    trade_direction=modeInput.value,
                     init_balance=initBalanceInput.value,
                     start_dt=startDateInput.value,
                     end_dt=endDateInput.value,
-                    Rebuy1stPercent=rebuy1stInput.value,
-                    RebuyPercent=rebuyInput.value,
-                    TakeProfitPercent=takeProfitInput.value,
-                    Volume=volumeInput.value,
                     is_visual_mode=str(0 in visualMode.active),
                     speed=str(self.speed.value),
                     chart_bars=chartBarsInput.value,
-                    default_timeframe_value=timeframeInput.value,
-                    TimeframeUnits=timeframeUnitInput.value,
-                    Platform="me_files",
+                    data_rate="0",
+                    platform="MeFiles",
                     platform_parameter=folderInput.value,
                 )
                 self.CoFu.SaveSettings(
-                    os.path.join("Files", "System.json"), system_settings
+                    os.path.join("Files", "System.json"), self.system_settings
                 )
             pass
 
-        # endregion
-
-        # Load setting
-        # region
-        error, system_settings = self.TradingClass.LoadSettings(self)
-        if "" != error:
-            today = datetime.now()
-            system_settings = Guiparameters(
-                "",  # data path
-                "",  # symbol
-                str(TradeDirection.neither).split(".")[1],
-                "0",  # balance
-                "2024-01-01",
-                today.strftime("%Y-%m-%d"),
-                "0",
-                "0",
-                "0",
-                "0",  # volume
-                0,  # visual mode
-                0,  # speed
-                "0",  # chart bars
-                "0",  # timeframe value
-                str(TimeframeUnits.sec).split(".")[1],
-                Platform=Platform.me_files,
-            )
         # endregion
 
         # Widgets
@@ -85,7 +57,7 @@ class MainWindow:
         # File input
         folderTitle = Div(text="Data path:", width=100)
         folderInput = TextInput(
-            value=system_settings.platform_parameter,
+            value=self.system_settings.platform_parameter,
             sizing_mode="fixed",
             width=800,
             height=30,
@@ -95,7 +67,7 @@ class MainWindow:
         # symbol input
         symbolTitle = Div(text="symbol", width=100)
         symbolInput = TextInput(
-            value=system_settings.default_symbol_name,
+            value=self.system_settings.default_symbol_name,
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -106,7 +78,7 @@ class MainWindow:
         modeTitle = Div(text="Mode:", width=100)
         modeInput = Select(
             options=[member.name for member in TradeDirection],
-            value=system_settings.TradeDirection,
+            value=self.system_settings.trade_direction,
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -116,7 +88,7 @@ class MainWindow:
         # Balance input
         initBalanceTitle = Div(text="Init. Balance:", width=100)
         initBalanceInput = TextInput(
-            value=system_settings.init_balance,
+            value=self.system_settings.init_balance,
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -126,7 +98,7 @@ class MainWindow:
         # start date
         startDateTitle = Div(text="start date:", width=100)
         startDateInput = DatePicker(
-            value=system_settings.start_dt,
+            value=self.system_settings.start_dt,
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -136,7 +108,7 @@ class MainWindow:
         # End date
         endDateTitle = Div(text="End date:", width=100)
         endDateInput = DatePicker(
-            value=system_settings.end_dt,
+            value=self.system_settings.end_dt,
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -146,7 +118,7 @@ class MainWindow:
         # 1st rebuy percent input
         rebuy1stTitle = Div(text="1st RebuyPercent%:", width=100)
         rebuy1stInput = TextInput(
-            value=system_settings.Rebuy1stPercent,
+            value="dummy",
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -156,7 +128,7 @@ class MainWindow:
         # RebuyPercent percent input
         rebuyTitle = Div(text="RebuyPercent%:", width=100)
         rebuyInput = TextInput(
-            value=system_settings.RebuyPercent,
+            value="dummy",
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -166,7 +138,7 @@ class MainWindow:
         # Take profit input
         takeProfitTitle = Div(text="Take profit%:", width=100)
         takeProfitInput = TextInput(
-            value=system_settings.TakeProfitPercent,
+            value="dummy",
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -176,7 +148,7 @@ class MainWindow:
         # Volume input
         volumeTitle = Div(text="Volume:", width=100)
         volumeInput = TextInput(
-            value=system_settings.Volume,
+            value="dummy",
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -185,23 +157,23 @@ class MainWindow:
 
         # speed slider
         self.speed = Slider(
-            title="speed", start=0, value=int(system_settings.speed), end=1000, step=1
+            title="speed", start=0, value=int(self.system_settings.speed), end=1000, step=1
         )
         self.speed.on_change("value", OnAnyInputChanged)
 
         # Visual mode checkbox
         visualMode = CheckboxGroup(labels=["Visual Mode"], active=[])
         visualMode.on_change("active", OnAnyInputChanged)
-        if "True" == system_settings.is_visual_mode:
+        if "True" == self.system_settings.is_visual_mode:
             if 0 == len(visualMode.active):
                 visualMode.active.append(0)
         else:
             if len(visualMode.active) > 0:
                 visualMode.active.remove(0)
 
-        # start, Pause, Stop control
+        # start, Pause, stop control
         self.controlButtons = RadioButtonGroup(
-            labels=["start", "Pause", "Stop"], active=2
+            labels=["start", "Pause", "stop"], active=2
         )
         pass
 
@@ -209,51 +181,47 @@ class MainWindow:
         def onChartTimeframeUnitChanged(attr, old, new):
             if self.isSave:
                 OnAnyInputChanged(attr, old, new)
-                self.TradingClass.GuiParams.TimeframeUnits = new
-                self.TradingClass.default_timeframe_seconds = (
-                    self.TradingClass.get_timeframe_from_gui_params(
-                        self.TradingClass.GuiParams
-                    )
+                self.algo_api.GuiParams.TimeframeUnits = new
+                self.algo_api.default_timeframe_seconds = (
+                    self.algo_api.get_timeframe_from_gui_params(self.algo_api.GuiParams)
                 )
 
-                self.TradingClass.bars = self.TradingClass.market_data.get_bars(
-                    self.TradingClass.bin_settings
+                self.algo_api.bars = self.algo_api.market_data.get_bars(
+                    self.algo_api.bin_settings
                 )
-                self.TradingClass.update_chart_text_and_bars()
+                self.algo_api.update_chart_text_and_bars()
 
         ###################################
         def onChartTimeframeChanged(attr, old, new):
             if self.isSave:
                 OnAnyInputChanged(attr, old, new)
-                self.TradingClass.GuiParams.default_timeframe_value = new
-                self.TradingClass.default_timeframe_seconds = (
-                    self.TradingClass.get_timeframe_from_gui_params(
-                        self.TradingClass.GuiParams
-                    )
+                self.algo_api.GuiParams.default_timeframe_value = new
+                self.algo_api.default_timeframe_seconds = (
+                    self.algo_api.get_timeframe_from_gui_params(self.algo_api.GuiParams)
                 )
 
-                self.TradingClass.bars = self.TradingClass.market_data.get_bars(
-                    self.TradingClass.bin_settings
+                self.algo_api.bars = self.algo_api.market_data.get_bars(
+                    self.algo_api.bin_settings
                 )
-                self.TradingClass.update_chart_text_and_bars()
+                self.algo_api.update_chart_text_and_bars()
 
         ###################################
         def onChartBarsChanged(attr, old, new):
             if self.isSave:
                 OnAnyInputChanged(attr, old, new)
                 newSize = int(new)
-                if newSize > int(self.TradingClass.bars.count / 1.1):
-                    self.TradingClass.bars = self.TradingClass.market_data.get_bars(
-                        self.TradingClass.bin_settings
+                if newSize > int(self.algo_api.bars.count / 1.1):
+                    self.algo_api.bars = self.algo_api.market_data.get_bars(
+                        self.algo_api.bin_settings
                     )
 
-                self.TradingClass.chart.bars_in_chart = newSize
-                self.TradingClass.update_chart_text_and_bars()
+                self.algo_api.chart.bars_in_chart = newSize
+                self.algo_api.update_chart_text_and_bars()
 
         # bars in chart input
         chartBarsTitle = Div(text="bars in chart:", width=100)
         chartBarsInput = TextInput(
-            value=system_settings.chart_bars,
+            value=self.system_settings.chart_bars,
             sizing_mode="fixed",
             width=150,
             height=30,
@@ -263,7 +231,7 @@ class MainWindow:
         # Timeframe in chart input
         timeFrameTitle = Div(text="Timeframe:", width=60)
         timeframeInput = TextInput(
-            value=system_settings.default_timeframe_value,
+            value=self.system_settings.default_timeframe_value,
             sizing_mode="fixed",
             width=75,
             height=30,
@@ -272,7 +240,7 @@ class MainWindow:
 
         timeframeUnitTitle = Div(text="Unit:", width=20)
         timeframeUnitInput = Select(
-            value=system_settings.TimeframeUnits,
+            value=self.system_settings.TimeframeUnits,
             options=[member.name for member in TimeframeUnits],
             sizing_mode="fixed",
             width=70,
@@ -284,16 +252,16 @@ class MainWindow:
         # Text output labels
         # region
         balanceLabel = Div(text="Balance:", width=70)
-        self.TradingClass.BalanceValue = Div(text=initBalanceInput.value, width=100)
+        self.algo_api.BalanceValue = Div(text=initBalanceInput.value, width=100)
 
         equityLabel = Div(text="Equity:", width=70)
-        self.TradingClass.EquityValue = Div(text=initBalanceInput.value, width=100)
+        self.algo_api.EquityValue = Div(text=initBalanceInput.value, width=100)
 
         datetimeLabel = Div(text="DateTime:", width=70)
-        self.TradingClass.DatetimeValue = Div(text=startDateInput.value, width=150)
+        self.algo_api.DatetimeValue = Div(text=startDateInput.value, width=150)
 
         maxEqDdLabel = Div(text="Max.Eq.Dd:", width=70)
-        self.TradingClass.MaxEqDdValue = Div(text="0", width=100)
+        self.algo_api.MaxEqDdValue = Div(text="0", width=100)
         self.isSave = True
         # endregion
 
@@ -306,18 +274,18 @@ class MainWindow:
             self.doc.add_next_tick_callback(MainLoop)
 
             if 0 == self.tradeState:  # idle
-                if 0 != self.TradingClass.bars.count:
+                if 0 != self.algo_api.bars.count:
                     time.sleep(0.1)
                     if self.controlButtons.active == 0:  # wait for start pressed
                         self.prevDtMs = int(time.time_ns() / 200000.0)
-                        self.TradingClass.start()  # start the bot
+                        self.algo_api.start()  # start the bot
                         self.tradeState = 1
 
             elif 1 == self.tradeState:  # trade loop
                 if self.controlButtons.active == 1:  # Pause pressed
                     self.tradeState = 2
                 elif (
-                    self.TradingClass.Tick()
+                    self.algo_api.tick()
                     or self.controlButtons.active
                     == 2  # End date reached or stop pressed
                 ):
@@ -325,28 +293,28 @@ class MainWindow:
                 else:  # active loop
                     if 1000 != self.speed.value:
                         time.sleep((1000.0 - self.speed.value) / 1000.0)
-                        self.TradingClass.update_chart_text_and_bars()
-                    elif self.TradingClass.time.date() != self.MyPrevTime.date():
-                        self.TradingClass.update_chart_text_and_bars()
+                        self.algo_api.update_chart_text_and_bars()
+                    elif self.algo_api.time.date() != self.MyPrevTime.date():
+                        self.algo_api.update_chart_text_and_bars()
 
             elif 2 == self.tradeState:  # pause
                 if self.controlButtons.active == 0:  # Pause pressed
                     self.tradeState = 1
 
             elif 3 == self.tradeState:  # stop
-                self.TradingClass.Stop()
-                self.TradingClass.update_chart_text_and_bars()
-                self.TradingClass.pre_start(system_settings)
+                self.algo_api.stop()
+                self.algo_api.update_chart_text_and_bars()
+                self.algo_api.pre_start(self.system_settings)
                 self.tradeState = 0
                 self.controlButtons.active = 2
 
-            self.MyPrevTime = self.TradingClass.time
+            self.MyPrevTime = self.algo_api.time
 
         ###################################
         def ModifyDoc(doc):
             self.doc = doc
-            self.TradingClass.pre_start(system_settings)  # init grafic, etc.
-            self.MyPrevTime = self.TradingClass.time
+            self.algo_api.pre_start(self.system_settings)  # init grafic, etc.
+            self.MyPrevTime = self.algo_api.time
 
             doc.title = "Quantrosoft Python Backtester"
             doc.add_root(
@@ -372,18 +340,18 @@ class MainWindow:
                         startDateInput,
                         Spacer(width=20),
                         balanceLabel,
-                        self.TradingClass.BalanceValue,
+                        self.algo_api.BalanceValue,
                         equityLabel,
-                        self.TradingClass.EquityValue,
+                        self.algo_api.EquityValue,
                     ),
                     row(
                         endDateTitle,
                         endDateInput,
                         Spacer(width=20),
                         datetimeLabel,
-                        self.TradingClass.DatetimeValue,
+                        self.algo_api.DatetimeValue,
                         maxEqDdLabel,
-                        self.TradingClass.MaxEqDdValue,
+                        self.algo_api.MaxEqDdValue,
                     ),
                     row(
                         rebuy1stTitle,
@@ -406,12 +374,12 @@ class MainWindow:
                         timeframeUnitTitle,
                         timeframeUnitInput,
                     ),
-                    self.TradingClass.chart.OhlcPlot,
+                    self.algo_api.chart.ohlc_plot,
                 )
             )
 
             self.tradeState = 0
-            self.TradingClass.update_chart_text_and_bars()
+            self.algo_api.update_chart_text_and_bars()
             doc.add_next_tick_callback(MainLoop)
             # https://docs.bokeh.org/en/latest/_modules/bokeh/events.html
             doc.js_on_event("connection_lost", ConnectionLost)

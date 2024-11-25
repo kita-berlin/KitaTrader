@@ -27,9 +27,9 @@ class QuoteProvider:
             symbol_info.broker_symbol_name,
             TradingClass.bin_settings.start_dt,
             TradingClass.bin_settings.end_dt,
-            mt5.COPY_TICKS_ALL,  # combination of flags defining the type of requested ticks
+            mt5.COPY_tickS_ALL,  # combination of flags defining the type of requested ticks
         )
-        print("Ticks received:", len(ticks))
+        print("ticks received:", len(ticks))
 
         # create data_frame out of the obtained data
         ticks_frame = pd.data_frame(ticks)
@@ -42,9 +42,9 @@ class QuoteProvider:
 
         # Find UTC offset
         current_tick = mt5.symbol_info_tick(self.symbol_info.broker_symbol_name)
-        current_tick_time = datetime.fromtimestamp(currentTick.time)
+        current_tick_time = datetime.fromtimestamp(currenttick.time)
         utc_offset = int(
-            0.5 + (currentTickTime - datetime.utcnow()).total_seconds() / 3600
+            0.5 + (currenttickTime - datetime.utcnow()).total_seconds() / 3600
         )
 
         # Find all timezones with the same offset
@@ -53,8 +53,8 @@ class QuoteProvider:
             timezone = pytz.timezone(tz)
             # Check if the offset matches (consider daylight saving time)
             if (
-                timezone.utcoffset(currentTickTime) is not None
-                and timezone.utcoffset(currentTickTime).total_seconds() / 3600
+                timezone.utcoffset(currenttickTime) is not None
+                and timezone.utcoffset(currenttickTime).total_seconds() / 3600
                 == utcOffset
             ):
                 self.broker_tz_info = timezone
@@ -81,9 +81,9 @@ class QuoteProvider:
         # Info: MT5 uses broker time
         # start datetime is current broker time
         current_tick = mt5.symbol_info_tick(self.symbol_info.name)
-        dt_now = self.get_utc_from_broker_time(datetime.fromtimestamp(currentTick.time))
+        dt_now = self.get_utc_from_broker_time(datetime.fromtimestamp(currenttick.time))
 
-        if self.trading_platform.bin_settings.Platform == Platform.mt5_live:
+        if self.trading_platform.bin_settings.platform == Platform.Mt5Live:
             start_dt = dtNow
         else:
             start_dt = self.trading_platform.get_utc_time_from_local_time(
@@ -108,7 +108,7 @@ class QuoteProvider:
         # debug_mt5_rates_start = datetime.fromtimestamp(self.Rates[0][0])
         # debug_mt5_rates_end = datetime.fromtimestamp(self.Rates[-1][0])
 
-        if self.trading_platform.bin_settings.Platform == Platform.mt5_live:
+        if self.trading_platform.bin_settings.platform == Platform.Mt5Live:
             self.current_index = len(self.Rates) - 1
         else:
             for i in range(len(self.Rates)):
@@ -123,7 +123,7 @@ class QuoteProvider:
 
     ######################################
     def get_next_quote(self):  # -> str, QuoteBar:
-        if Platform.mt5_backtest == self.trading_platform.bin_settings.Platform:
+        if Platform.Mt5Backtest == self.trading_platform.bin_settings.platform:
             self.current_index += 1
             self.current_index = min(self.current_index, len(self.Rates) - 1)
 
@@ -133,14 +133,14 @@ class QuoteProvider:
     def get_current_quote(self):
         qb = QuoteBar()
 
-        if Platform.mt5_live == self.trading_platform.bin_settings.Platform:
+        if Platform.Mt5Live == self.trading_platform.bin_settings.platform:
             current_tick = mt5.symbol_info_tick(self.symbol_info.name)
             qb.time = self.get_utc_from_broker_time(
-                datetime.fromtimestamp(currentTick.time)
+                datetime.fromtimestamp(currenttick.time)
             )
-            qb.open = qb.high = qb.low = qb.close = currentTick.bid
-            qb.open_ask = currentTick.ask
-            qb.milli_seconds = currentTick.time % 1000
+            qb.open = qb.high = qb.low = qb.close = currenttick.bid
+            qb.open_ask = currenttick.ask
+            qb.milli_seconds = currenttick.time % 1000
             time.sleep(0.1)
         else:
             qb.time = self.get_utc_from_broker_time(

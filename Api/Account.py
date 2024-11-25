@@ -5,11 +5,11 @@ from CoFu import *
 
 
 class Account:
-    def __init__(self, binParams: BinSettings):
-        if binParams.Platform == Platform.mt5_live:
+    def __init__(self, bin_settings: BinSettings):
+        if bin_settings.platform == Platform.Mt5Live:
             import MetaTrader5 as mt5
             account_info = mt5.account_info()  # pylint: disable=no-member
-            self.account_type = AccountType.hedged
+            self.account_type = AccountType.Hedged
             self.balance = account_info.balance
             self.equity = account_info.equity
             self.margin = account_info.margin
@@ -33,15 +33,15 @@ class Account:
             self.user_nick_name = account_info.name
 
         if (
-            binParams.Platform == Platform.me_files
-            or binParams.Platform == Platform.csv
-            or binParams.Platform == Platform.mt5_backtest
+            bin_settings.platform == Platform.MeFiles
+            or bin_settings.platform == Platform.Csv
+            or bin_settings.platform == Platform.Mt5Backtest
         ):
-            self.account_type = AccountType.hedged
-            self.balance = binParams.init_balance
-            self.equity = binParams.init_balance
+            self.account_type = AccountType.Hedged
+            self.balance = bin_settings.init_balance
+            self.equity = bin_settings.init_balance
             self.margin = 0
-            self.free_margin = binParams.init_balance
+            self.free_margin = bin_settings.init_balance
             # ACCOUNT_TRADE_MODE_DEMO, ACCOUNT_TRADE_MODE_CONTEST, ACCOUNT_TRADE_MODE_REAL
             self.is_live = 0
             self.margin_level = 0
@@ -55,5 +55,5 @@ class Account:
             self.asset = "EUR"
             self.total_margin_calculation_type = 0
             self.credit = 0
-            self.user_nick_name = "me_files"
+            self.user_nick_name = "MeFiles"
         pass

@@ -5,7 +5,7 @@ from AlgoApiEnums import *
 class Position:
     def __init__(self):
         self.symbol_name = ""
-        self.trade_type = TradeType.buy
+        self.trade_type = TradeType.Buy
         self.volume_in_units = 0
         self.id = 0
         self.gross_profit = 0
@@ -16,21 +16,21 @@ class Position:
         self.swap = 0
         self.commissions = 0
         self.entry_time = datetime.min
-        self.pips = 0
+        self.Pips = 0
         self.label = ""
         self.comment = ""
         self.quantity = 0
         self.has_trailing_stop = False
         self.margin = 0
         # self.current_price is a property
-        self.stop_loss_trigger_method = StopTriggerMethod.trade
+        self.stop_loss_trigger_method = StopTriggerMethod.Trade
         self.closing_price = 0
         self.max_drawdown = 0
         self.symbol = None
 
     def modify_stop_loss_price(self, stopLoss):
         """
-        Shortcut for Robot.modify_position method to change the Stop Loss price.
+        Shortcut for Robot.modify_position method to change the stop Loss price.
         """
         pass
 
@@ -42,19 +42,19 @@ class Position:
 
     def modify_stop_loss_pips(self, stopLossPips):
         """
-        Shortcut for the Robot.modify_position method to change the Stop Loss in pips.
+        Shortcut for the Robot.modify_position method to change the stop Loss in Pips.
         """
         pass
 
     def modify_take_profit_pips(self, takeProfitPips):
         """
-        Shortcut for the Robot.modify_position method to change the Take Profit in pips.
+        Shortcut for the Robot.modify_position method to change the Take Profit in Pips.
         """
         pass
 
-    def modify_trailing_stop(self, hasTrailingStop):
+    def modify_trailing_stop(self, hasTrailingstop):
         """
-        Shortcut for the Robot.modify_position method to change the Trailing Stop.
+        Shortcut for the Robot.modify_position method to change the Trailing stop.
         """
         pass
 
@@ -78,23 +78,23 @@ class Position:
 
     @property
     def current_price(self):
-        return self.symbol.bid if self.trade_type == TradeType.buy else self.symbol.ask
+        return self.symbol.bid if self.trade_type == TradeType.Buy else self.symbol.ask
 
     @property
     def net_profit(self):
-        if 0 == self.id:  # me_files and Mt5 backtest
+        if 0 == self.id:  # MeFiles and Mt5 backtest
             if 0 == self.closing_price:
                 # Position still open and in Positions queue
                 return (
                     (self.current_price - self.entry_price)
-                    * (1 if self.trade_type == TradeType.buy else -1)
+                    * (1 if self.trade_type == TradeType.Buy else -1)
                     * self.volume_in_units
                 )
             else:
                 # Position closed and in History queue
                 return (
                     (self.closing_price - self.entry_price)
-                    * (1 if self.trade_type == TradeType.buy else -1)
+                    * (1 if self.trade_type == TradeType.Buy else -1)
                     * self.volume_in_units
                 )
         else:  # Mt5 live

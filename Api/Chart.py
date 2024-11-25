@@ -153,9 +153,9 @@ class Chart(ChartArea):
             return
 
         marker = None
-        if ChartIconType.up_arrow == iconType:
+        if ChartIconType.UpArrow == iconType:
             marker = "triangle"
-        elif ChartIconType.down_arrow == iconType:
+        elif ChartIconType.DownArrow == iconType:
             marker = "triangle-down"  # type
 
         x_value = self.get_xfrom_datetime(time)
@@ -192,11 +192,11 @@ class Chart(ChartArea):
     #     pass
 
     # @property
-    # def chart_type(self) -> chart_type:
+    # def ChartType(self) -> ChartType:
     #     pass
 
-    # @chart_type.setter
-    # def chart_type(self, value: chart_type):
+    # @ChartType.setter
+    # def ChartType(self, value: ChartType):
     #     pass
 
     @property
@@ -232,7 +232,7 @@ class Chart(ChartArea):
     chart_bars: Bars
 
     # @property
-    # def time_frame(self) -> time_frame:
+    # def Timeframe(self) -> Timeframe:
     #     pass
 
     @property
@@ -291,10 +291,10 @@ class Chart(ChartArea):
     # def add_hotkey(self, hotkeyHandler, key, modifiers =None) -> bool:
     #     pass
 
-    # def try_change_time_frame(self, timeFrame: time_frame) -> bool:
+    # def try_change_time_frame(self, timeFrame: Timeframe) -> bool:
     #     pass
 
-    # def try_change_time_frame_and_symbol(self, timeFrame: time_frame, symbolName: str) -> bool:
+    # def try_change_time_frame_and_symbol(self, timeFrame: Timeframe, symbolName: str) -> bool:
     #     pass
 
     # def take_chartshot(self) -> Union[bytearray, None]:

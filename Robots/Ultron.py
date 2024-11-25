@@ -49,20 +49,20 @@ class Ultron(TradingBot):
         self.sma = indicators.moving_average(
             source =self.indi_bars.close_prices,
             periods =self.time_period,
-            ma_type =MovingAverageType.simple,
+            ma_type =MovingAverageType.Simple,
         )
 
         self.sd = indicators.standard_deviation(
             source =self.indi_bars.close_prices,
             periods =self.time_period,
-            ma_type =MovingAverageType.simple,
+            ma_type =MovingAverageType.Simple,
         )
 
         self.bb_indi:indicators.bollinger_bands = indicators.bollinger_bands(
             source =self.indi_bars.close_prices,
             periods =self.time_period,
             standard_deviations =2,
-            ma_type =MovingAverageType.simple,
+            ma_type =MovingAverageType.Simple,
             shift =0,
         )
         """

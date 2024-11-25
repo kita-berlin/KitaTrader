@@ -5,7 +5,8 @@
 
 2. Naming Conventions:
    •	Variables and Functions: snake_case.
-   •	Classes: PascalCase.
+   •	Classes: PascalCase (CamelCase).
+   •	Enums and their members: PascalCase (CamelCase).
    •	Constants: UPPER_CASE_WITH_UNDERSCORES.
 
 3. Imports:
@@ -33,4 +34,5 @@
 8. Miscellaneous:
    •	Use descriptive variable names.
    •	Avoid mutable default arguments in functions.
+   •	Using Black (Hotkey ^K^D) to beautify the code.
 
