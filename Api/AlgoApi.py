@@ -101,8 +101,10 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
         # Load the module dynamically
         module_name = os.path.splitext(os.path.basename(file_path))[0]
         spec = importlib.util.spec_from_file_location(module_name, file_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        if spec is not None:
+            module = importlib.util.module_from_spec(spec)
+            if spec.loader is not None:
+                spec.loader.exec_module(module)
 
         # Retrieve the class from the module
         if hasattr(module, class_name):
