@@ -23,15 +23,15 @@ class Bars:
     high_prices: DataSeries  # Gets the High price bars data.#
     low_prices: DataSeries  # Gets the Low price bars data.#
     close_prices: DataSeries  # Gets the Close price bars data.#
-    tick_volumes: DataSeries  # Gets the Tick volumes data.#
+    tick_volumes: DataSeries  # Gets the tick volumes data.#
     open_asks: DataSeries  # The ask value at open time (open_prices are bids)
     open_times: TimeSeries  # Gets the open bar time data.#
     is_new_bar: bool = False
     chart_time_array = []
     # endregion
 
-    def __init__(self, tradingClass, timeframeSeconds: int, symbolName: str):
-        self.TradingClass = tradingClass
+    def __init__(self, trading_class, timeframeSeconds: int, symbolName: str):
+        self.trading_class = trading_class
         self.default_timeframe_seconds = timeframeSeconds
         self.symbol_name = symbolName
 
@@ -55,7 +55,7 @@ class Bars:
         epoc_dt = quote.time.timestamp() // 60
         tf_minutes = self.default_timeframe_seconds // 60
         tf_modulo = epoc_dt % tf_minutes
-        if 0 == self.open_times.count or self.TradingClass.is_new_bar(
+        if 0 == self.open_times.count or self.trading_class.is_new_bar(
             self.default_timeframe_seconds, quote.time, self.open_times.data[-1]
         ):
             self.open_times.data = np.append(self.open_times.data, quote.time)
@@ -126,7 +126,7 @@ class Bars:
         ...
 
     def tick_event(self, callback: Callable[[bars_tick_event_args], None]) -> None:
-        #Occurs when a new Tick arrives.#
+        #Occurs when a new tick arrives.#
         ...
 
     def bar_opened_event(self, callback: Callable[[bar_opened_event_args], None]) -> None:

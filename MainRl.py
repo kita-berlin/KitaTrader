@@ -1,15 +1,15 @@
-import gymnasium as gym
-from gymnasium import spaces
-import numpy as np
-import pandas as pd
-from TradingClass import TradingClass
-from stable_baselines3 import PPO
-import talib
-import pickle
-from stable_baselines3.common.logger import configure
-from stable_baselines3.common.env_checker import check_env
 import os
 import random
+import numpy as np
+import pandas as pd
+import pickle
+import gymnasium as gym
+from gymnasium import spaces
+from stable_baselines3 import PPO
+from stable_baselines3.common.logger import configure
+from stable_baselines3.common.env_checker import check_env
+import talib
+from Api.AlgoApi import AlgoApi
 
 
 class trading_env(gyself.Env):
@@ -22,8 +22,8 @@ class trading_env(gyself.Env):
         self.start_date = start_date
         self.end_date = end_date
 
-        self.TradingClass = TradingClass()
-        error, self.system_settings = self.TradingClass.load_settings(self)
+        self.algo_api = AlgoApi()
+        error, self.system_settings = self.algo_api.load_settings(self)
         self.system_settings.start_dt = start_date
         self.system_settings.end_dt = end_date
         self.df = data_file
@@ -75,13 +75,13 @@ class trading_env(gyself.Env):
         obs = np.vstack((obs, past_actions_rewards))
 
         additional_features = [
-            self.TradingClass.invest_count,
-            self.TradingClass.Account.balance,
-            self.TradingClass.Account.unrealized_net_profit,
-            self.TradingClass.avg_open_duration_sum[0],
-            self.TradingClass.avg_price,
-            self.TradingClass.cluster_profit,
-            self.TradingClass.is_long,
+            self.algo_api.invest_count,
+            self.algo_api.Account.balance,
+            self.algo_api.Account.unrealized_net_profit,
+            self.algo_api.avg_open_duration_sum[0],
+            self.algo_api.avg_price,
+            self.algo_api.cluster_profit,
+            self.algo_api.is_long,
         ]
 
         self.additional_features_history.append(additional_features)
@@ -108,17 +108,17 @@ class trading_env(gyself.Env):
 
         self.current_step = 0
 
-        self.TradingClass = TradingClass()
-        error, self.system_settings = self.TradingClass.load_settings(self)
+        self.algo_api = TradingClass()
+        error, self.system_settings = self.algo_api.load_settings(self)
         self.system_settings.start_dt = self.start_date
         self.system_settings.end_dt = self.end_date
         self.df = self.data_file
         self.df = self.df.loc[self.start_date : self.end_date]
         self.open_trades_count = 0
 
-        self.TradingClass.is_train = self.is_train
-        self.TradingClass.pre_start(self.system_settings)
-        self.TradingClass.on_start()
+        self.algo_api.is_train = self.is_train
+        self.algo_api.pre_start(self.system_settings)
+        self.algo_api.on_start()
 
         self.past_actions = []
         self.past_rewards = []
@@ -130,13 +130,13 @@ class trading_env(gyself.Env):
         return obs, {}
 
     def step(self, action):
-        self.TradingClass.bin_settings.rebuy1st_percent = (
+        self.algo_api.bin_settings.rebuy1st_percent = (
             self.floats_Rebuy1stPercent[action[0]]
         )
-        self.TradingClass.bin_settings.rebuy_percent = self.floats_RebuyPercent[
+        self.algo_api.bin_settings.rebuy_percent = self.floats_RebuyPercent[
             action[1]
         ]
-        self.TradingClass.bin_settings.take_profit_percent = (
+        self.algo_api.bin_settings.take_profit_percent = (
             self.floats_TakeProfitPercent[action[2]]
         )
 
@@ -144,18 +144,18 @@ class trading_env(gyself.Env):
             terminated = True
         else:
             terminated = False
-            self.TradingClass.Tick()  ############## do one tick ##########
+            self.algo_api.tick()  ############## do one tick ##########
 
         truncated = False
 
-        reward = self.TradingClass.calculate_reward(self.TradingClass)
+        reward = self.algo_api.calculate_reward(self.algo_api)
         info = {}
 
         self.past_actions.append(
             [
-                self.TradingClass.bin_settings.Rebuy1stPercent,
-                self.TradingClass.bin_settings.rebuy_percent,
-                self.TradingClass.bin_settings.take_profit_percent,
+                self.algo_api.bin_settings.Rebuy1stPercent,
+                self.algo_api.bin_settings.rebuy_percent,
+                self.algo_api.bin_settings.take_profit_percent,
             ]
         )
         self.past_rewards.append(reward)
@@ -171,10 +171,10 @@ class trading_env(gyself.Env):
         #    pass
 
         # Update previous time (time of last tick)
-        if self.TradingClass.prev_time.date() != self.TradingClass.time.date():
-            print(self.TradingClass.time.date())
+        if self.algo_api.prev_time.date() != self.algo_api.time.date():
+            print(self.algo_api.time.date())
 
-        self.TradingClass.prev_time = self.TradingClass.time
+        self.algo_api.prev_time = self.algo_api.time
         return obs, reward, terminated, truncated, info
 
     def render(self, mode="human"):

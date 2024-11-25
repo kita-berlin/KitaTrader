@@ -12,22 +12,22 @@ class MainConsole:
         settings_path = os.path.join("Files", "System.json")
         error, settings = CoFu.load_settings(settings_path)
         if "" != error:
-            today = datetime.now()
+            # create empty sttings file
             settings = SystemSettings(
-                "",  # data path
-                "",  # symbol
-                "2024-01-01",
-                today.strftime("%Y-%m-%d"),
-                "0",
-                "0",
-                "0",
-                "0",  # volume
-                0,  # visual mode
-                0,  # speed
-                "0",  # chart bars
-                "0",  # timeframe value
-                str(TimeframeUnits.sec).split(".")[1],
-                Platform=Platform.me_files,
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14"
             )
 
         trading = AlgoApi(settings)
@@ -35,7 +35,7 @@ class MainConsole:
         trading.start()
 
         while True:
-            if trading.Tick():
+            if trading.tick():
                 break
 
             reward = trading.calculate_reward(trading)

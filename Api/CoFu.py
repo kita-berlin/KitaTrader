@@ -115,7 +115,7 @@ class MovingAverageType(Enum):
 
 
 class DataRates(Enum):
-    Ticks = 0
+    ticks = 0
     m1 = 1
     default_timeframe = 2
     # endregion

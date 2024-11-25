@@ -23,14 +23,14 @@ class Position:
         self.has_trailing_stop = False
         self.margin = 0
         # self.current_price is a property
-        self.stop_loss_trigger_method = StopTriggerMethod.trade
+        self.stop_loss_trigger_method = stopTriggerMethod.trade
         self.closing_price = 0
         self.max_drawdown = 0
         self.symbol = None
 
     def modify_stop_loss_price(self, stopLoss):
         """
-        Shortcut for Robot.modify_position method to change the Stop Loss price.
+        Shortcut for Robot.modify_position method to change the stop Loss price.
         """
         pass
 
@@ -42,7 +42,7 @@ class Position:
 
     def modify_stop_loss_pips(self, stopLossPips):
         """
-        Shortcut for the Robot.modify_position method to change the Stop Loss in pips.
+        Shortcut for the Robot.modify_position method to change the stop Loss in pips.
         """
         pass
 
@@ -52,9 +52,9 @@ class Position:
         """
         pass
 
-    def modify_trailing_stop(self, hasTrailingStop):
+    def modify_trailing_stop(self, hasTrailingstop):
         """
-        Shortcut for the Robot.modify_position method to change the Trailing Stop.
+        Shortcut for the Robot.modify_position method to change the Trailing stop.
         """
         pass
 

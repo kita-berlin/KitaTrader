@@ -9,8 +9,8 @@
    "end_dt": "2024-12-31",
    "is_visual_mode": "False",
    "speed": "1000",
-   "data_rate": "m1", // Ticks, m1, default_timeframe
+   "data_rate": "m1", // ticks, m1, default_timeframe
    "chart_bars": "200",
    "Platform": "me_files", // mt5_live, mt5_backtest, me_files, cTrader, csv
-   "platform_parameter": "G:\\Meine Ablage\\TickBars\\mbars" // Mt5: AccountNr, Password; cTrader: xxx,yyy; me_files and csv:Path to the Files
+   "platform_parameter": "G:\\Meine Ablage\\tickBars\\mbars" // Mt5: AccountNr, Password; cTrader: xxx,yyy; me_files and csv:Path to the Files
 }

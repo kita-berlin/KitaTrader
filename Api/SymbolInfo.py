@@ -58,15 +58,15 @@ class ConcreteAsset(Asset):
 
 
 class SymbolInfo:
-    def __init__(self, tradingClass, symbolName: str):
-        self.TradingClass = tradingClass
+    def __init__(self, trading_class, symbolName: str):
+        self.trading_class = trading_class
         self.name = symbolName
         self.bars_list: list[Bars] = []
 
         # Platform specific inits
         if (
-            Platform.mt5_live == tradingClass.bin_settings.Platform
-            or Platform.mt5_backtest == tradingClass.bin_settings.Platform
+            Platform.mt5_live == self.trading_class.bin_settings.Platform
+            or Platform.mt5_backtest == self.trading_class.bin_settings.Platform
         ):
             import MetaTrader5 as mt5
 
@@ -90,19 +90,19 @@ class SymbolInfo:
             from ..QuoteProviders.QuoteProviderMt5 import QuoteProvider
         pass
 
-        if Platform.me_files == tradingClass.bin_settings.Platform:
+        if Platform.me_files == self.trading_class.bin_settings.Platform:
             try:
                 from ..QuoteProviders.QuoteProviderMeFiles import QuoteProvider
             except:
                 from QuoteProviders.QuoteProviderMeFiles import QuoteProvider
 
-        if Platform.csv == tradingClass.bin_settings.Platform:
+        if Platform.csv == self.trading_class.bin_settings.Platform:
             try:
                 from ..QuoteProviders.QuoteProviderCsv import QuoteProvider
             except:
                 from QuoteProviders.QuoteProviderCsv import QuoteProvider
 
-        if Platform.mt5_live == tradingClass.bin_settings.Platform:
+        if Platform.mt5_live == self.trading_class.bin_settings.Platform:
             mt5.symbol_select(symbolName, True)  # pylint: disable=no-member
             symbol_info = mt5.symbol_info(symbolName)  # pylint: disable=no-member
 
@@ -116,7 +116,7 @@ class SymbolInfo:
             self.volume_in_units_step = (
                 symbol_info.volume_step * symbol_info.trade_contract_size
             )
-            self.leverage = tradingClass.Account.leverage
+            self.leverage = self.trading_class.Account.leverage
             self.lot_size = symbol_info.trade_contract_size
             self.tick_value = symbol_info.trade_tick_value
             self.swap_long = symbol_info.swap_long
@@ -259,45 +259,49 @@ class SymbolInfo:
         pass
 
         if (
-            tradingClass.bin_settings.Platform == Platform.me_files
-            or tradingClass.bin_settings.Platform == Platform.csv
-            or tradingClass.bin_settings.Platform == Platform.mt5_backtest
+            self.trading_class.bin_settings.Platform == Platform.me_files
+            or self.trading_class.bin_settings.Platform == Platform.csv
+            or self.trading_class.bin_settings.Platform == Platform.mt5_backtest
         ):
-            broker = tradingClass.Account.broker_symbol_name + (
-                "_Live" if tradingClass.Account.is_live else "_Demo"
+            broker = self.trading_class.Account.broker_symbol_name + (
+                "_Live" if self.trading_class.Account.is_live else "_Demo"
             )
             # assets_dir = os.path.join(os.getenv("APPDATA"), "_Assets")
             assets_path = os.path.join("Files", f"Assets_{broker}.csv")
-            tradingClass.market_values = MarketValues()
+            self.trading_class.market_values = MarketValues()
             error = self.init_market_info(
-                assets_path, symbolName, tradingClass.market_values
+                assets_path, symbolName, self.trading_class.market_values
             )
             if "" != error:
                 print(error)
                 exit()
 
-            self.tick_size = tradingClass.market_values.point_size
-            self.volume_in_units_min = tradingClass.market_values.min_lot
-            self.volume_in_units_max = tradingClass.market_values.max_lot
+            self.tick_size = self.trading_class.market_values.point_size
+            self.volume_in_units_min = self.trading_class.market_values.min_lot
+            self.volume_in_units_max = self.trading_class.market_values.max_lot
             self.volume_in_units_step = self.volume_in_units_min
-            self.leverage = tradingClass.market_values.symbol_leverage
-            self.lot_size = tradingClass.market_values.lot_size
-            self.tick_value = tradingClass.market_values.point_value
-            self.commission = tradingClass.market_values.commission
-            self.swap_long = tradingClass.market_values.swap_long
-            self.swap_short = tradingClass.market_values.swap_short
+            self.leverage = self.trading_class.market_values.symbol_leverage
+            self.lot_size = self.trading_class.market_values.lot_size
+            self.tick_value = self.trading_class.market_values.point_value
+            self.commission = self.trading_class.market_values.commission
+            self.swap_long = self.trading_class.market_values.swap_long
+            self.swap_short = self.trading_class.market_values.swap_short
             self.swap3_days_rollover = 3
-            self.base_asset = tradingClass.market_values.symbol_currency_base
-            self.quote_asset = tradingClass.market_values.symbol_currency_quote
+            self.base_asset = self.trading_class.market_values.symbol_currency_base
+            self.quote_asset = self.trading_class.market_values.symbol_currency_quote
             self.swap_calculation_type: SymbolSwapCalculationType = (
                 SymbolSwapCalculationType.pips
             )
             self.is_trading_enabled = True
             self.trading_mode = SymbolTradingMode.full_access
 
-            self.quote_provider = QuoteProvider(tradingClass, self)
+            self.quote_provider = (
+                QuoteProvider(  # pylint: disable=possibly-used-before-assignment
+                    self.trading_class, self
+                )
+            )
             error, quote = self.quote_provider.get_quote_at_date(
-                self.TradingClass.bin_settings.start_dt
+                self.trading_class.bin_settings.start_dt
             )
             if None == quote:
                 print(error)

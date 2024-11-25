@@ -147,7 +147,7 @@ class indicators:
     indicator_list = []
 
     def __init__(self, tradingClass):
-        self.TradingClass = tradingClass
+        self.trading_class = tradingClass
         pass
 
     def moving_average(
@@ -210,14 +210,14 @@ class indicators:
     def high_minus_low(self, bars=None):
         # High Minus Low indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
     def true_range(self, bars):
         # True Range indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
@@ -288,28 +288,28 @@ class indicators:
     def median_price(self, bars):
         # Median Price indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
     def williams_accumulation_distribution(self, bars):
         # Williams Accumulation Distribution indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
     def fractal_chaos_bands(self, bars):
         # Fractal Chaos Bands indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
     def typical_price(self, bars):
         # Typical Price indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
@@ -374,7 +374,7 @@ class indicators:
     def weighted_close(self, bars):
         # Weighted Close indicator instance with bars
         if None == bars:
-            bars = self.TradingClass.bars
+            bars = self.trading_class.bars
 
         pass
 
@@ -384,7 +384,7 @@ class indicators:
 
     def ease_of_movement(self, periods: int, ma_type):
         # Ease Of Movement indicator instance
-        bars = self.TradingClass.bars
+        bars = self.trading_class.bars
 
         pass
 

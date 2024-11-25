@@ -4,14 +4,14 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 
-class chart_type(Enum):
+class ChartType(Enum):
     bar = 1
     candlesticks = 2
     line = 3
     dots = 4
 
 
-class time_frame(Enum):
+class Timeframe(Enum):
     one_minute = 1
     one_hour = 2
     one_day = 3

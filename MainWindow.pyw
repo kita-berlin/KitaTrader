@@ -23,7 +23,7 @@ from CoFu import *
 class MainWindow:
     def __init__(self):
         self.isSave = False
-        self.TradingClass = TradingClass()
+        self.trading_class = TradingClass()
         self.tradeState = 0
 
         # OnAnyInputChanged
@@ -57,7 +57,7 @@ class MainWindow:
 
         # Load setting
         # region
-        error, system_settings = self.TradingClass.LoadSettings(self)
+        error, system_settings = self.trading_class.LoadSettings(self)
         if "" != error:
             today = datetime.now()
             system_settings = Guiparameters(
@@ -199,9 +199,9 @@ class MainWindow:
             if len(visualMode.active) > 0:
                 visualMode.active.remove(0)
 
-        # start, Pause, Stop control
+        # start, Pause, stop control
         self.controlButtons = RadioButtonGroup(
-            labels=["start", "Pause", "Stop"], active=2
+            labels=["start", "Pause", "stop"], active=2
         )
         pass
 
@@ -209,46 +209,46 @@ class MainWindow:
         def onChartTimeframeUnitChanged(attr, old, new):
             if self.isSave:
                 OnAnyInputChanged(attr, old, new)
-                self.TradingClass.GuiParams.TimeframeUnits = new
-                self.TradingClass.default_timeframe_seconds = (
-                    self.TradingClass.get_timeframe_from_gui_params(
-                        self.TradingClass.GuiParams
+                self.trading_class.GuiParams.TimeframeUnits = new
+                self.trading_class.default_timeframe_seconds = (
+                    self.trading_class.get_timeframe_from_gui_params(
+                        self.trading_class.GuiParams
                     )
                 )
 
-                self.TradingClass.bars = self.TradingClass.market_data.get_bars(
-                    self.TradingClass.bin_settings
+                self.trading_class.bars = self.trading_class.market_data.get_bars(
+                    self.trading_class.bin_settings
                 )
-                self.TradingClass.update_chart_text_and_bars()
+                self.trading_class.update_chart_text_and_bars()
 
         ###################################
         def onChartTimeframeChanged(attr, old, new):
             if self.isSave:
                 OnAnyInputChanged(attr, old, new)
-                self.TradingClass.GuiParams.default_timeframe_value = new
-                self.TradingClass.default_timeframe_seconds = (
-                    self.TradingClass.get_timeframe_from_gui_params(
-                        self.TradingClass.GuiParams
+                self.trading_class.GuiParams.default_timeframe_value = new
+                self.trading_class.default_timeframe_seconds = (
+                    self.trading_class.get_timeframe_from_gui_params(
+                        self.trading_class.GuiParams
                     )
                 )
 
-                self.TradingClass.bars = self.TradingClass.market_data.get_bars(
-                    self.TradingClass.bin_settings
+                self.trading_class.bars = self.trading_class.market_data.get_bars(
+                    self.trading_class.bin_settings
                 )
-                self.TradingClass.update_chart_text_and_bars()
+                self.trading_class.update_chart_text_and_bars()
 
         ###################################
         def onChartBarsChanged(attr, old, new):
             if self.isSave:
                 OnAnyInputChanged(attr, old, new)
                 newSize = int(new)
-                if newSize > int(self.TradingClass.bars.count / 1.1):
-                    self.TradingClass.bars = self.TradingClass.market_data.get_bars(
-                        self.TradingClass.bin_settings
+                if newSize > int(self.trading_class.bars.count / 1.1):
+                    self.trading_class.bars = self.trading_class.market_data.get_bars(
+                        self.trading_class.bin_settings
                     )
 
-                self.TradingClass.chart.bars_in_chart = newSize
-                self.TradingClass.update_chart_text_and_bars()
+                self.trading_class.chart.bars_in_chart = newSize
+                self.trading_class.update_chart_text_and_bars()
 
         # bars in chart input
         chartBarsTitle = Div(text="bars in chart:", width=100)
@@ -284,16 +284,16 @@ class MainWindow:
         # Text output labels
         # region
         balanceLabel = Div(text="Balance:", width=70)
-        self.TradingClass.BalanceValue = Div(text=initBalanceInput.value, width=100)
+        self.trading_class.BalanceValue = Div(text=initBalanceInput.value, width=100)
 
         equityLabel = Div(text="Equity:", width=70)
-        self.TradingClass.EquityValue = Div(text=initBalanceInput.value, width=100)
+        self.trading_class.EquityValue = Div(text=initBalanceInput.value, width=100)
 
         datetimeLabel = Div(text="DateTime:", width=70)
-        self.TradingClass.DatetimeValue = Div(text=startDateInput.value, width=150)
+        self.trading_class.DatetimeValue = Div(text=startDateInput.value, width=150)
 
         maxEqDdLabel = Div(text="Max.Eq.Dd:", width=70)
-        self.TradingClass.MaxEqDdValue = Div(text="0", width=100)
+        self.trading_class.MaxEqDdValue = Div(text="0", width=100)
         self.isSave = True
         # endregion
 
@@ -306,18 +306,18 @@ class MainWindow:
             self.doc.add_next_tick_callback(MainLoop)
 
             if 0 == self.tradeState:  # idle
-                if 0 != self.TradingClass.bars.count:
+                if 0 != self.trading_class.bars.count:
                     time.sleep(0.1)
                     if self.controlButtons.active == 0:  # wait for start pressed
                         self.prevDtMs = int(time.time_ns() / 200000.0)
-                        self.TradingClass.start()  # start the bot
+                        self.trading_class.start()  # start the bot
                         self.tradeState = 1
 
             elif 1 == self.tradeState:  # trade loop
                 if self.controlButtons.active == 1:  # Pause pressed
                     self.tradeState = 2
                 elif (
-                    self.TradingClass.Tick()
+                    self.trading_class.tick()
                     or self.controlButtons.active
                     == 2  # End date reached or stop pressed
                 ):
@@ -325,28 +325,28 @@ class MainWindow:
                 else:  # active loop
                     if 1000 != self.speed.value:
                         time.sleep((1000.0 - self.speed.value) / 1000.0)
-                        self.TradingClass.update_chart_text_and_bars()
-                    elif self.TradingClass.time.date() != self.MyPrevTime.date():
-                        self.TradingClass.update_chart_text_and_bars()
+                        self.trading_class.update_chart_text_and_bars()
+                    elif self.trading_class.time.date() != self.MyPrevTime.date():
+                        self.trading_class.update_chart_text_and_bars()
 
             elif 2 == self.tradeState:  # pause
                 if self.controlButtons.active == 0:  # Pause pressed
                     self.tradeState = 1
 
             elif 3 == self.tradeState:  # stop
-                self.TradingClass.Stop()
-                self.TradingClass.update_chart_text_and_bars()
-                self.TradingClass.pre_start(system_settings)
+                self.trading_class.stop()
+                self.trading_class.update_chart_text_and_bars()
+                self.trading_class.pre_start(system_settings)
                 self.tradeState = 0
                 self.controlButtons.active = 2
 
-            self.MyPrevTime = self.TradingClass.time
+            self.MyPrevTime = self.trading_class.time
 
         ###################################
         def ModifyDoc(doc):
             self.doc = doc
-            self.TradingClass.pre_start(system_settings)  # init grafic, etc.
-            self.MyPrevTime = self.TradingClass.time
+            self.trading_class.pre_start(system_settings)  # init grafic, etc.
+            self.MyPrevTime = self.trading_class.time
 
             doc.title = "Quantrosoft Python Backtester"
             doc.add_root(
@@ -372,18 +372,18 @@ class MainWindow:
                         startDateInput,
                         Spacer(width=20),
                         balanceLabel,
-                        self.TradingClass.BalanceValue,
+                        self.trading_class.BalanceValue,
                         equityLabel,
-                        self.TradingClass.EquityValue,
+                        self.trading_class.EquityValue,
                     ),
                     row(
                         endDateTitle,
                         endDateInput,
                         Spacer(width=20),
                         datetimeLabel,
-                        self.TradingClass.DatetimeValue,
+                        self.trading_class.DatetimeValue,
                         maxEqDdLabel,
-                        self.TradingClass.MaxEqDdValue,
+                        self.trading_class.MaxEqDdValue,
                     ),
                     row(
                         rebuy1stTitle,
@@ -406,12 +406,12 @@ class MainWindow:
                         timeframeUnitTitle,
                         timeframeUnitInput,
                     ),
-                    self.TradingClass.chart.OhlcPlot,
+                    self.trading_class.chart.ohlc_plot,
                 )
             )
 
             self.tradeState = 0
-            self.TradingClass.update_chart_text_and_bars()
+            self.trading_class.update_chart_text_and_bars()
             doc.add_next_tick_callback(MainLoop)
             # https://docs.bokeh.org/en/latest/_modules/bokeh/events.html
             doc.js_on_event("connection_lost", ConnectionLost)

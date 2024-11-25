@@ -115,7 +115,7 @@ class TotalMarginCalculationType(Enum):
 
 class PendingOrderType(Enum):
     """
-    Represents the type (Limit or Stop) of pending order.
+    Represents the type (Limit or stop) of pending order.
     """
 
     limit = 0
@@ -135,39 +135,39 @@ class PendingOrderType(Enum):
     """
 
 
-class StopTriggerMethod(Enum):
+class stopTriggerMethod(Enum):
     """
-    The trigger side for the Stop Orders.
+    The trigger side for the stop Orders.
     """
 
     trade = 0
     """
-    trade method uses default trigger behavior for Stop orders.
-    buy order and Stop Loss for Sell Position will be triggered when ask >= order price.
-    Sell order and Stop Loss for buy Position will be triggered when bid <= order price.
+    trade method uses default trigger behavior for stop orders.
+    buy order and stop Loss for Sell Position will be triggered when ask >= order price.
+    Sell order and stop Loss for buy Position will be triggered when bid <= order price.
     """
 
     opposite = 1
     """
     Opposite method uses opposite price for order triggering.
-    buy order and Stop Loss for Sell Position will be triggered when bid >= order price.
-    Sell order and Stop Loss for buy Position will be triggered when ask <= order price.
+    buy order and stop Loss for Sell Position will be triggered when bid >= order price.
+    Sell order and stop Loss for buy Position will be triggered when ask <= order price.
     """
 
     double_trade = 2
     """
     Uses default prices for order triggering, but waits for
     additional confirmation - two consecutive prices should meet criteria to trigger order.
-    buy order and Stop Loss for Sell Position will be triggered when two consecutive ask prices >= order price.
-    Sell order and Stop Loss for buy Position will be triggered when two consecutive bid prices <= order price.
+    buy order and stop Loss for Sell Position will be triggered when two consecutive ask prices >= order price.
+    Sell order and stop Loss for buy Position will be triggered when two consecutive bid prices <= order price.
     """
 
     double_opposite = 3
     """
     Uses opposite prices for order triggering, and waits for
     additional confirmation - two consecutive prices should meet criteria to trigger order.
-    buy order and Stop Loss for Sell Position will be triggered when two consecutive bid prices >= order price.
-    Sell order and Stop Loss for buy Position will be triggered when two consecutive ask prices <= order price.
+    buy order and stop Loss for Sell Position will be triggered when two consecutive bid prices >= order price.
+    Sell order and stop Loss for buy Position will be triggered when two consecutive ask prices <= order price.
     """
 
 
@@ -221,7 +221,7 @@ class ErrorCode(Enum):
 
     invalid_stop_loss_take_profit = 8
     """
-    The invalid Stop Loss or Take Profit.
+    The invalid stop Loss or Take Profit.
     """
 
     invalid_request = 9

@@ -1,6 +1,6 @@
 import numpy as np
 from datetime import datetime, timedelta, timezone
-from bokeh.models import FixedTicker
+from bokeh.models import tickers
 from Chart import Chart
 from Settings import *
 from MarketData import *
@@ -26,7 +26,7 @@ class TradingLoop:
                 self.chart.x_close = self.chart.x + 0.4
             pass
 
-            self.bars.ChartTimeArray = self.bars.OpenTimes.data[
+            self.bars.ChartTimeArray = self.bars.open_times.data[
                 -self.bin_settings.bars_in_chart :
             ]
             self.chart.source.data = {
@@ -118,7 +118,7 @@ class TradingLoop:
         self.on_start()
 
     #####################################
-    def Tick(self):
+    def tick(self):
         # update quote, bars, Indicators
         # of 1st tick must update all bars and Indicators which have been inized in on_start()
         for symbol in self.symbol_list:
@@ -147,7 +147,7 @@ class TradingLoop:
                             > self.bin_settings.bars_in_chart
                             // self.chart.x_axis_step
                             and 0
-                            == self.bars.OpenTimes.data[
+                            == self.bars.open_times.data[
                                 -self.bin_settings.bars_in_chart :
                             ][-1].timestamp()
                             % self.bars.default_timeframe_seconds
@@ -156,19 +156,19 @@ class TradingLoop:
                                 self.bin_settings.bars_in_chart - 1
                             )
 
-                        self.chart.OhlcPlot.xaxis.ticker = FixedTicker(
+                        self.chart.ohlc_plot.xaxis.ticker = Fixedticker(
                             ticks=self.chart.x_axis_labels
                         )
 
-                        self.chart.OhlcPlot.xaxis.major_label_overrides = {
-                            tick: self.bars.OpenTimes.data[
+                        self.chart.ohlc_plot.xaxis.major_label_overrides = {
+                            tick: self.bars.open_times.data[
                                 -self.bin_settings.bars_in_chart :
                             ][tick].strftime("%d-%m-%Y %H:%M")
                             for tick in self.chart.x_axis_labels
                         }
                         # endregion
 
-                        self.chart.UpdateChartDrawings()
+                        self.chart.update_chart_drawings()
 
         ########################################
         # Update Account
@@ -203,9 +203,9 @@ class TradingLoop:
         return False
 
     ###########################################
-    def Stop(self):
+    def stop(self):
         # call bot
-        self.OnStop()
+        self.on_stop()
 
 
 # end of file

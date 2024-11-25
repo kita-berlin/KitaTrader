@@ -55,7 +55,7 @@ class PendingOrder(ABC):
 #     @abstractmethod
 #     def order_type(self) -> PendingOrder_type:
 #         """
-#         Specifies whether this order is Stop or Limit.
+#         Specifies whether this order is stop or Limit.
 #         """
 #         pass
 
@@ -133,7 +133,7 @@ class PendingOrder(ABC):
 #     @abstractmethod
 #     def has_trailing_stop(self) -> bool:
 #         """
-#         When has_trailing_stop set to true, server updates Stop Loss every time Position moves in your favor.
+#         When has_trailing_stop set to true, server updates stop Loss every time Position moves in your favor.
 #         """
 #         pass
 
@@ -173,7 +173,7 @@ class PendingOrder(ABC):
 #     @abstractmethod
 #     def modify_stop_loss_pips(self, stopLossPips: Optional[float]) -> trade_result:
 #         """
-#         Shortcut for Robot.modify_PendingOrder method to change Stop Loss
+#         Shortcut for Robot.modify_PendingOrder method to change stop Loss
 #         """
 #         pass
 
@@ -187,7 +187,7 @@ class PendingOrder(ABC):
 #     @abstractmethod
 #     def modify_stop_limit_range(self, stopLimitRangePips: float) -> trade_result:
 #         """
-#         Shortcut for Robot.modify_PendingOrder method to change Stop Limit Range
+#         Shortcut for Robot.modify_PendingOrder method to change stop Limit Range
 #         """
 #         pass
 

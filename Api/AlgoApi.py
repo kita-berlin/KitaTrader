@@ -14,6 +14,7 @@ from Account import Account
 from Chart import Chart
 from PyLogger import PyLogger
 from MarketData import MarketDataParent
+from QuoteProviders.QuoteProviderCsv import QuoteProvider
 from TradingLoop import TradingLoop  # pylint: disable=import-error
 from Quantrobot import Quantrobot
 from TradeResult import TradeResult
@@ -33,6 +34,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
     running_mode: RunningMode
     logger: PyLogger
     is_train: bool = False
+    quote_provider: QuoteProvider
 
     def __init__(self, settings):
         self.bin_settings = BinSettings(
@@ -184,7 +186,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
                double                        volume;           // Requested volume for a deal in lots
                double                        price;            // Price
                double                        stoplimit;        // stop_limit level of the order
-               double                        sl;               // Stop Loss level of the order
+               double                        sl;               // stop Loss level of the order
                double                        tp;               // Take Profit level of the order
                ulong                         deviation;        // Maximal possible deviation from the requested price
                ENUM_ORDER_TYPE               type;             // Order type
