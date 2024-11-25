@@ -1,22 +1,20 @@
-from typing import List, Union
 from enum import Enum
-from abc import ABC, abstractmethod
-from datetime import datetime
+from abc import ABC
 
 
 class ChartType(Enum):
-    bar = 1
-    candlesticks = 2
-    line = 3
-    dots = 4
+    Bar = 1
+    Candlesticks = 2
+    Line = 3
+    Dots = 4
 
 
 class Timeframe(Enum):
-    one_minute = 1
-    one_hour = 2
-    one_day = 3
-    one_week = 4
-    one_month = 5
+    OneMinute = 1
+    OneHour = 2
+    OneDay = 3
+    OneWeek = 4
+    OneMonth = 5
 
 
 class ChartArea(ABC):

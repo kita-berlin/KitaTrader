@@ -56,7 +56,7 @@ class Quantrobot:
             # + ",MaxEquityDrawdown"
         )
 
-        self.log_mode = LoggerConstants.self_made
+        self.log_mode = LoggerConstants.SelfMade
         self.open_logfile(  # pylint: disable=no-member
             self.logger, self.version.split(" ")[0] + ".csv", self.log_mode, header
         )
@@ -66,7 +66,7 @@ class Quantrobot:
         self.max_equity_drawdown_value[0] = 0
 
         self.loaded_robot.on_start(
-            self, self.TradeDirection in [TradeDirection.mode1, TradeDirection.long]
+            self, self.trade_direction in [TradeDirection.Mode1, TradeDirection.Long]
         )
 
     ###################################
@@ -121,11 +121,11 @@ class Quantrobot:
         self.loaded_robot.on_stop(self)
         #self.max(self.max_invest_count[0], self.max_invest_count)
 
-        # if direction == TradeDirection.long == self.loaded_robot.longShorts[0].is_long:
+        # if direction == TradeDirection.Long == self.loaded_robot.longShorts[0].is_long:
         #     invest_count_histo = self.loaded_robot.longShorts[0].investCountHisto
 
         # if len(self.loaded_robot.longShorts) >= 2:
-        #     if direction == TradeDirection.long == self.loaded_robot.longShorts[1].is_long:
+        #     if direction == TradeDirection.Long == self.loaded_robot.longShorts[1].is_long:
         #         invest_count_histo = self.loaded_robot.longShorts[1].investCountHisto
 
         winning_trades = len([x for x in self.history if x.net_profit >= 0])
@@ -196,14 +196,14 @@ class Quantrobot:
             + ",,,,Long: "
             + ConvertUtils.double_to_string(
                 sum(
-                    x.net_profit for x in self.history if x.trade_type == TradeType.buy
+                    x.net_profit for x in self.history if x.trade_type == TradeType.Buy
                 ),
                 2,
             )
             + ",,,,Short:,"
             + ConvertUtils.double_to_string(
                 sum(
-                    x.net_profit for x in self.history if x.trade_type == TradeType.sell
+                    x.net_profit for x in self.history if x.trade_type == TradeType.Sell
                 ),
                 2,
             )

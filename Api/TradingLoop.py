@@ -1,6 +1,6 @@
 import numpy as np
 from datetime import datetime, timedelta, timezone
-from bokeh.models import tickers
+from bokeh.models import FixedTicker
 from Chart import Chart
 from Settings import *
 from MarketData import *
@@ -58,12 +58,12 @@ class TradingLoop:
         self.initial_account_balance = self.Account.equity = self.Account.balance = (
             self.bin_settings.init_balance
         )
-        self.TradeDirection = self.bin_settings.TradeDirection
+        self.trade_direction = self.bin_settings.trade_direction
 
         self.running_mode = (
-            RunningMode.visual_backtesting
+            RunningMode.VisualBacktesting
             if self.bin_settings.is_visual_mode
-            else RunningMode.silent_backtesting
+            else RunningMode.SilentBacktesting
         )
         self.is_stop = False
         self.bars = None
@@ -156,7 +156,7 @@ class TradingLoop:
                                 self.bin_settings.bars_in_chart - 1
                             )
 
-                        self.chart.ohlc_plot.xaxis.ticker = Fixedticker(
+                        self.chart.ohlc_plot.xaxis.ticker = FixedTicker(
                             ticks=self.chart.x_axis_labels
                         )
 
@@ -173,7 +173,7 @@ class TradingLoop:
         ########################################
         # Update Account
         if len(self.positions) >= 1:
-            if Platform.mt5_live == self.bin_settings.Platform:
+            if Platform.Mt5Live == self.bin_settings.platform:
                 import MetaTrader5 as mt5
 
                 account_info = mt5.account_info()
@@ -188,7 +188,7 @@ class TradingLoop:
                 for x in self.positions:
                     open_positions_profit += (
                         (x.current_price - x.entry_price)
-                        * (1 if x.trade_type == TradeType.buy else -1)
+                        * (1 if x.trade_type == TradeType.Buy else -1)
                         * x.volume_in_units
                     )
                     self.Account.unrealized_net_profit += open_positions_profit

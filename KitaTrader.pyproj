@@ -6,7 +6,7 @@
     <ProjectGuid>{636cf776-2a26-42ce-b92c-ad2db37c2232}</ProjectGuid>
     <ProjectHome />
     <StartupFile>MainConsole.py</StartupFile>
-    <SearchPath>Api;Robots;QuoteProviders</SearchPath>
+    <SearchPath>Robots;QuoteProviders;Api</SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>

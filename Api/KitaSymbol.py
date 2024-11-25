@@ -14,14 +14,14 @@ class Symbol(SymbolInfo):
     def spread(self):
         return self.ask - self.bid
 
-    def normalize_volume_in_units(self, volume, rounding_mode=RoundingMode.to_nearest):
+    def normalize_volume_in_units(self, volume, rounding_mode=RoundingMode.ToNearest):
         mod = volume % self.volume_in_units_min
         floor = volume - mod
         ceiling = floor + self.volume_in_units_min
-        if rounding_mode.up == rounding_mode:
+        if RoundingMode.Up == rounding_mode:
             return ceiling
 
-        elif rounding_mode.down == rounding_mode:
+        elif RoundingMode.Down == rounding_mode:
             return floor
 
         else:

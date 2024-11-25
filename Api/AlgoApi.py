@@ -1,6 +1,8 @@
+import importlib.util
 import os
 import importlib
-from datetime import datetime, timedelta, timezone
+from typing import Tuple, Optional
+from datetime import datetime, timezone
 import math
 import uuid
 from typing import Dict
@@ -23,7 +25,10 @@ from CoFu import *
 
 
 class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
-    bin_settings: BinSettings = None
+    # Members
+    # region
+    bin_settings: BinSettings
+    system_settings: SystemSettings
     symbol_dictionary: Dict[str, Symbol] = {}
     symbol_list: list[Symbol] = []
     positions: list[Position] = []
@@ -35,26 +40,48 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
     logger: PyLogger
     is_train: bool = False
     quote_provider: QuoteProvider
+    # endregion
 
-    def __init__(self, settings):
+    def __init__(self):
+        settings_path = os.path.join("Files", "System.json")
+        error, self.system_settings = CoFu.load_settings(settings_path)
+        if "" != error:
+            # create empty sttings file
+            self.system_settings = SystemSettings(
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+            )
+
         self.bin_settings = BinSettings(
-            robot_name=settings.robot_name,
-            default_symbol_name=settings.default_symbol_name,
-            default_timeframe_seconds=self.get_timeframe_from_gui_params(settings),
-            TradeDirection=TradeDirection[settings.TradeDirection],
-            init_balance=float(settings.init_balance),
-            start_dt=(datetime.strptime(settings.start_dt, "%Y-%m-%d")).replace(
+            robot_name=self.system_settings.robot_name,
+            default_symbol_name=self.system_settings.default_symbol_name,
+            default_timeframe_seconds=self.get_timeframe_from_gui_params(self.system_settings),
+            trade_direction=TradeDirection[self.system_settings.trade_direction],
+            init_balance=float(self.system_settings.init_balance),
+            start_dt=(datetime.strptime(self.system_settings.start_dt, "%Y-%m-%d")).replace(
                 tzinfo=timezone.utc
             ),
-            end_dt=(datetime.strptime(settings.end_dt, "%Y-%m-%d")).replace(
+            end_dt=(datetime.strptime(self.system_settings.end_dt, "%Y-%m-%d")).replace(
                 tzinfo=timezone.utc
             ),
-            is_visual_mode=settings.is_visual_mode == "True",
-            speed=int(settings.speed),
-            bars_in_chart=int(settings.chart_bars),
-            data_rate=DataRates[settings.data_rate],
-            Platform=Platform[settings.Platform],
-            platform_parameter=settings.platform_parameter,
+            is_visual_mode=self.system_settings.is_visual_mode == "True",
+            speed=int(self.system_settings.speed),
+            bars_in_chart=int(self.system_settings.chart_bars),
+            data_rate=DataRates[self.system_settings.data_rate],
+            platform=Platform[self.system_settings.platform],
+            platform_parameter=self.system_settings.platform_parameter,
         )
 
         MarketDataParent.__init__(self)
@@ -62,10 +89,8 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
         Quantrobot.__init__(self)
 
         self.loaded_robot = self.load_class_from_file(
-            os.path.join(
-                "robots", settings.robot_name + ".py"
-            ),  # working directory is main
-            settings.robot_name,
+            os.path.join("robots", self.system_settings.robot_name + ".py"),
+            self.system_settings.robot_name,
         )
         self.loaded_robot.__init__(self)
         self.Account = Account(self.bin_settings)
@@ -87,15 +112,15 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
 
     def get_timeframe_from_gui_params(self, system_settings):
         value = int(system_settings.default_timeframe_value)
-        tf = TimeframeUnits[system_settings.default_timeframe_unit]
+        tf = TimeframeUnits[self.system_settings.default_timeframe_unit]
         ret_val = value
-        if TimeframeUnits.min == tf:
+        if TimeframeUnits.Min == tf:
             ret_val = value * 60
-        elif TimeframeUnits.hour == tf:
+        elif TimeframeUnits.Hour == tf:
             ret_val = value * 3600
-        elif TimeframeUnits.day == tf:
+        elif TimeframeUnits.Day == tf:
             ret_val = value * 3600 * 24
-        elif TimeframeUnits.week == tf:
+        elif TimeframeUnits.Week == tf:
             ret_val = value * 3600 * 24 * 7
         return ret_val
 
@@ -154,7 +179,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
     def execute_market_order(
         self, trade_type: TradeType, symbol_name: str, volume: float, label: str = ""
     ) -> Position:
-        is_append_position = True  # default for Platform.me_files
+        is_append_position = True  # default for Platform.MeFiles
 
         pos = Position()
         pos.symbol_name = symbol_name
@@ -164,13 +189,13 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
         pos.quantity = volume / pos.symbol.lot_size
         pos.entry_time = self.time
         pos.entry_price = (
-            pos.symbol.ask if TradeType.buy == trade_type else pos.symbol.bid
+            pos.symbol.ask if TradeType.Buy == trade_type else pos.symbol.bid
         )
         pos.label = label
         pos.margin = volume * pos.entry_price / pos.symbol.leverage
         self.Account.margin += pos.margin
 
-        if self.bin_settings.Platform == Platform.mt5_live:
+        if self.bin_settings.platform == Platform.Mt5Live:
             """
             # order_filling_fok = 0      # Fill Or Kill order
             # order_filling_ioc = 1      # Immediately Or Cancel
@@ -206,8 +231,8 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
                 "volume": volume / pos.symbol.lot_size,
                 "type": (
                     mt5.ORDER_TYPE_BUY
-                    if TradeType.buy == trade_type
-                    else TradeType.sell
+                    if TradeType.Buy == trade_type
+                    else TradeType.Sell
                 ),
                 "price": pos.entry_price,
                 "deviation": 10,
@@ -251,13 +276,13 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
         self.chart.draw_icon(
             str(uuid.uuid4()),
             (
-                ChartIconType.up_arrow
-                if trade_type == TradeType.buy
-                else ChartIconType.down_arrow
+                ChartIconType.UpArrow
+                if trade_type == TradeType.Buy
+                else ChartIconType.DownArrow
             ),
             pos.entry_time,
             pos.entry_price,
-            "blue" if trade_type == TradeType.buy else "red",
+            "blue" if trade_type == TradeType.Buy else "red",
         )
 
         return pos
@@ -266,17 +291,17 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
     def close_position(self, pos: Position):
         trade_result = TradeResult()
         try:
-            if self.bin_settings.Platform == Platform.mt5_live:
+            if self.bin_settings.platform == Platform.Mt5Live:
                 import MetaTrader5 as mt5
 
                 symbol = self.symbol_dictionary[pos.symbol_name]
                 mt5_tt = (
                     mt5.ORDER_TYPE_BUY
-                    if TradeType.sell == pos.trade_type
+                    if TradeType.Sell == pos.trade_type
                     else mt5.ORDER_TYPE_SELL
                 )
                 exit_price = (
-                    symbol.ask if TradeType.buy == pos.trade_type else symbol.bid
+                    symbol.ask if TradeType.Buy == pos.trade_type else symbol.bid
                 )
                 order = {
                     "action": mt5.TRADE_ACTION_DEAL,
@@ -304,6 +329,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
             pass
 
         return trade_result
+
     # endregion
 
     # Long/Short and other arithmetic
@@ -386,25 +412,19 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
         return self.log_stream_writer is not None
 
     def open_logfile(
-        self,
-        logger,
-        filename="",
-        mode=LoggerConstants.header_and_several_lines,
-        header="",
+        self, logger, filename="", mode=LoggerConstants.HeaderAndSeveralLines, header=""
     ):
-        if self.running_mode != RunningMode.optimization:
+        if self.running_mode != RunningMode.Optimization:
             open_state = self.logger.log_open(
                 self.logger.make_log_path(),
                 filename,
-                self.running_mode == RunningMode.real_time,
+                self.running_mode == RunningMode.RealTime,
                 mode,
             )
             # if not openState:
             self.write_log_header(mode, header)
 
-    def write_log_header(
-        self, mode=LoggerConstants.header_and_several_lines, header=""
-    ):
+    def write_log_header(self, mode=LoggerConstants.HeaderAndSeveralLines, header=""):
         log_header = ""
         if (
             self.logger is None or not self.logger.is_open
@@ -413,17 +433,17 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
 
         self.logger.add_text("sep =,")  # Hint for Excel
 
-        if LoggerConstants.self_made == mode:
+        if LoggerConstants.SelfMade == mode:
             log_header = header
         else:
             log_header += (
                 "\nOpenDate,OpenTime,symbol,Lots,open_price,Swap,Swap/Lot,open_asks,open_bid,open_spread_pts"
-                if 0 == (self.logger.mode & LoggerConstants.one_line)
+                if 0 == (self.logger.mode & LoggerConstants.OneLine)
                 else ","
             )
             log_header += (
                 ",CloseDate,ClosingTime,Mode,Volume,closing_price,commission,Comm/Lot,close_ask,close_bid,close_spread_pts"
-                if 0 == (self.logger.mode & LoggerConstants.one_line)
+                if 0 == (self.logger.mode & LoggerConstants.OneLine)
                 else ","
             )
             log_header += ",Number,Dur. d.h.self.s,Balance,point_value,diff_pts,diff_gross,net_profit,net_prof/Lot,account_margin,trade_margin"
@@ -460,7 +480,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
                         i_ask - ConvertUtils.string_to_integer(bid_asks[1])
                     )
 
-        price_diff = (1 if lp.trade_type == TradeType.buy else -1) * (
+        price_diff = (1 if lp.trade_type == TradeType.Buy else -1) * (
             lp.closing_price - lp.entry_price
         )
         point_diff = self.i_price(price_diff, lp.symbol.tick_size)
@@ -502,14 +522,14 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
             elif change_part == "OpenAsks":
                 self.logger.add_text(
                     ConvertUtils.double_to_string(open_ask, lp.symbol.digits)
-                    if lp.trade_type == TradeType.buy
+                    if lp.trade_type == TradeType.Buy
                     else ""
                 )
                 continue
             elif change_part == "OpenBid":
                 self.logger.add_text(
                     ConvertUtils.double_to_string(openBid, lp.symbol.digits)
-                    if lp.trade_type == TradeType.sell
+                    if lp.trade_type == TradeType.Sell
                     else ""
                 )
                 continue
@@ -528,7 +548,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
                 continue
             elif change_part == "Mode":
                 self.logger.add_text(
-                    "Short" if lp.trade_type == TradeType.sell else "Long"
+                    "Short" if lp.trade_type == TradeType.Sell else "Long"
                 )
                 continue
             elif change_part == "PointValue":
@@ -554,18 +574,18 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
             elif change_part == "CloseAsk":
                 self.logger.add_text(
                     "{:.{}f}".format(
-                        self.get_bid_ask_price(lp.symbol, BidAsk.ask), lp.symbol.digits
+                        self.get_bid_ask_price(lp.symbol, BidAsk.Ask), lp.symbol.digits
                     )
-                    if lp.trade_type == TradeType.sell
+                    if lp.trade_type == TradeType.Sell
                     else ""
                 )
                 continue
             elif change_part == "CloseBid":
                 self.logger.add_text(
                     ConvertUtils.double_to_string(
-                        self.get_bid_ask_price(lp.symbol, BidAsk.bid), lp.symbol.digits
+                        self.get_bid_ask_price(lp.symbol, BidAsk.Bid), lp.symbol.digits
                     )
-                    if lp.trade_type == TradeType.buy
+                    if lp.trade_type == TradeType.Buy
                     else ""
                 )
                 continue
@@ -573,8 +593,8 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
                 self.logger.add_text(
                     ConvertUtils.double_to_string(
                         self.i_price(
-                            self.get_bid_ask_price(lp.symbol, BidAsk.ask)
-                            - self.get_bid_ask_price(lp.symbol, BidAsk.bid),
+                            self.get_bid_ask_price(lp.symbol, BidAsk.Ask)
+                            - self.get_bid_ask_price(lp.symbol, BidAsk.Bid),
                             lp.symbol.tick_size,
                         ),
                         0,
@@ -659,7 +679,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
     # region
     @staticmethod
     def get_bid_ask_price(symbol: Symbol, bidAsk):
-        return symbol.bid if BidAsk == BidAsk.bid else symbol.ask
+        return symbol.bid if BidAsk == BidAsk.Bid else symbol.ask
 
     @staticmethod
     def calc_profitmode2_lots(

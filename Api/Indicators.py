@@ -72,7 +72,7 @@ class standard_deviation(IIndicator):
         self,
         source: DataSeries,
         periods: int = 14,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
     ):
         self.source: DataSeries = source
         self.periods: int = periods
@@ -81,7 +81,7 @@ class standard_deviation(IIndicator):
         pass
 
     def initialize(self) -> None:
-        self._movingAverage: moving_average = indicators.moving_average(
+        self._movingAverage: moving_average = Indicators.moving_average(
             self.source, self.periods, self.ma_type
         )
 
@@ -98,7 +98,7 @@ class standard_deviation(IIndicator):
         self.Result[index] = np.sqrt(num1 / self.periods)
 
 
-class bollinger_bands(IIndicator):
+class BollingerBands(IIndicator):
     Main: DataSeries = DataSeries()
     Top: DataSeries = DataSeries()
     Bottom: DataSeries = DataSeries()
@@ -108,7 +108,7 @@ class bollinger_bands(IIndicator):
         source: DataSeries,
         periods: int = 20,
         standard_deviations: float = 2.0,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
         shift: int = 0,
     ):
         self.source: DataSeries = source
@@ -124,10 +124,10 @@ class bollinger_bands(IIndicator):
         pass
 
     def initialize(self):
-        self.moving_average = indicators.moving_average(
+        self.moving_average = Indicators.moving_average(
             self.source, self.periods, self.ma_type
         )
-        self.standard_deviation = indicators.standard_deviation(
+        self.standard_deviation = Indicators.standard_deviation(
             self.source, self.periods
         )
 
@@ -143,7 +143,7 @@ class bollinger_bands(IIndicator):
             self.Top[index1] = self.moving_average.Result.data[index] + num
 
 
-class indicators:
+class Indicators:
     indicator_list = []
 
     def __init__(self, tradingClass):
@@ -154,9 +154,9 @@ class indicators:
         self,
         source: DataSeries,
         periods: int = 14,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
     ) -> moving_average:
-        if MovingAverageType.simple == ma_type:
+        if MovingAverageType.Simple == ma_type:
             indicator = simple_moving_average(source, periods)
             # if MovingAverageType...
 
@@ -168,7 +168,7 @@ class indicators:
         self,
         source: DataSeries,
         periods: int = 14,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
     ) -> standard_deviation:
         indicator = standard_deviation(source, periods, ma_type)
         source.indicator_list.append(indicator)
@@ -180,10 +180,10 @@ class indicators:
         source: DataSeries,
         periods: int = 20,
         standard_deviations: float = 2.0,
-        ma_type: MovingAverageType = MovingAverageType.simple,
+        ma_type: MovingAverageType = MovingAverageType.Simple,
         shift: int = 0,
-    ) -> bollinger_bands:
-        indicator = bollinger_bands(
+    ) -> BollingerBands:
+        indicator = BollingerBands(
             source, periods, standard_deviations, ma_type, shift
         )
         source.indicator_list.append(indicator)

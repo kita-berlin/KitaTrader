@@ -11,8 +11,8 @@ class HedgePosition:
     reverse_id = "Reverse;"
     main_freeze_id = "main_freeze;"
     weekend_freeze_id = "weekend_freeze;"
-    main_position: Position = None
-    freeze_position: Position = None
+    main_position: Optional[Position] = None
+    freeze_position: Optional[Position] = None
     is_profit_earned: bool = False
     freeze_open_bar_count: int = 0
     freeze_corrected_entry_price: float = 0
@@ -61,7 +61,7 @@ class HedgePosition:
     def do_main_open(self, volume, inherited_freeze_price_offset=0, label_ext=main_id):
         if self.main_position is None:
             self.main_position = self.bot.execute_market_order(
-                TradeType.buy if self.is_long else TradeType.sell,
+                TradeType.Buy if self.is_long else TradeType.Sell,
                 self.symbol.name,
                 self.symbol.normalize_volume_in_units(volume),
                 self.label + label_ext,
@@ -75,7 +75,7 @@ class HedgePosition:
         return self.main_position is not None
 
     def do_modify_volume(self, volume: float, current_open_price: float):
-        #last_modified_time = self.time
+        # last_modified_time = self.time
         freeze_corrected_entry_price = current_open_price
         return self.main_position.modify_volume(volume).is_successful
 
@@ -301,8 +301,8 @@ class HedgePosition:
             result = self.bot.open_trade(
                 self.bot,
                 self.symbol,
-                TradeType.buy if not self.is_long else TradeType.sell,
-                TradeDirection.long if not self.is_long else TradeDirection.short,
+                TradeType.Buy if not self.is_long else TradeType.Sell,
+                TradeDirection.Long if not self.is_long else TradeDirection.Short,
                 "",
                 self.label + labelExtension,
                 self.symbol.normalize_volume_in_units(

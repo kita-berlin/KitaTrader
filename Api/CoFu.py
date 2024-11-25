@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Tuple, Optional
 import json
 import commentjson
 from Settings import *
@@ -7,117 +8,118 @@ from Settings import *
 # Enums
 # region
 class TradeStates(Enum):
-    long = 0
-    short = 1
-    flat = 2
+    Long = 0
+    Short = 1
+    Flat = 2
 
 
 class HighLow(Enum):
-    high = 0
-    low = 1
+    High = 0
+    Low = 1
 
 
 class TradeAction(Enum):
-    open = 0
-    close = 1
+    Open = 0
+    Close = 1
 
 
 class BidAsk(Enum):
-    bid = 0
-    ask = 1
+    Bid = 0
+    Ask = 1
 
 
 class ArithmeticOperators(Enum):
-    min = 0
-    max = 1
-    greater = 2
-    greater_equal = 3
-    less = 4
-    less_equal = 5
-    equal = 6
+    Min = 0
+    Max = 1
+    Greater = 2
+    GreaterEqual = 3
+    Less = 4
+    LessEqual = 5
+    Equal = 6
 
 
 class ProfitMode(Enum):
-    lots = 0
-    lots_pro10k = 1
-    profit_percent = 2
-    profit_ammount = 3
-    risk_constant = 4
-    risk_reinvest = 5
-    constant_invest = 6
-    reinvest = 7
+    Lots = 0
+    LotsPro10k = 1
+    ProfitPercent = 2
+    ProfitAmmount = 3
+    RiskConstant = 4
+    RiskReinvest = 5
+    ConstantInvest = 6
+    Reinvest = 7
 
 
 class TradeDirection(Enum):
-    long = 0
-    short = 1
-    both = 2
-    both_in_one_bot = 3
-    neither = 4
-    mode1 = 5
-    mode2 = 6
-    mode3 = 7
+    Long = 0
+    Short = 1
+    Both = 2
+    BothInOneBot = 3
+    Neither = 4
+    Mode1 = 5
+    Mode2 = 6
+    Mode3 = 7
 
 
 class TimeframeUnits(Enum):
-    sec = 0
-    min = 1
-    hour = 2
-    day = 3
-    week = 4
+    Sec = 0
+    Min = 1
+    Hour = 2
+    Day = 3
+    Week = 4
 
 
 class PastFuture(Enum):
-    past = 0
-    future = 1
+    Past = 0
+    Future = 1
 
 
 class PriceMode(Enum):
-    value = 0
-    previous = 1
-    delta = 2
+    Value = 0
+    Previous = 1
+    Delta = 2
 
 
 class IdfPathIndices(Enum):
-    idf_ndx = 0
-    pepper = 1
-    pepper_commission = 2
-    raw = 3  # IC Market raw trading
-    raw_commission = 4
-    dukas = 5
-    dukas_commission = 6
+    IdfNdx = 0
+    Pepper = 1
+    PepperCommission = 2
+    Raw = 3  # IC Market raw trading
+    RawCommission = 4
+    Dukas = 5
+    DukasCommission = 6
 
 
+# must be binaries to be or'ed
 class LoggerConstants(Enum):
-    header_and_several_lines = 0
-    no_header = 1  # must be binaries
-    one_line = 2
-    self_made = 4
+    HeaderAndSeveralLines = 0
+    NoHeader = 1
+    OneLine = 2
+    SelfMade = 4
 
 
 class Platform(Enum):
-    mt5_live = 0
-    mt5_backtest = 1
-    me_files = 2
-    c_trader = 3
-    csv = 4
+    Mt5Live = 0
+    Mt5Backtest = 1
+    MeFiles = 2
+    cTrader = 3
+    Csv = 4
 
 
 class MovingAverageType(Enum):
-    simple = 1
-    exponential = 2
+    Simple = 1
+    Exponential = 2
     TimeSeries = 3
-    triangular = 4
-    vidya = 5
-    weighted = 6
-    wilder_smoothing = 7
-    hull = 8
+    Triangular = 4
+    Vidya = 5
+    Weighted = 6
+    WilderSmoothing = 7
+    Hull = 8
 
 
 class DataRates(Enum):
-    ticks = 0
-    m1 = 1
-    default_timeframe = 2
+    Ticks = 0
+    M1 = 1
+    Timeframe = 2
     # endregion
 
 
@@ -125,7 +127,7 @@ class DataRates(Enum):
 class CoFu:
     ###################################
     @staticmethod
-    def load_settings(path):
+    def load_settings(path) ->  Tuple[str, SystemSettings]:
         try:
             with open(path, "r") as file:
                 settings = commentjson.load(file)

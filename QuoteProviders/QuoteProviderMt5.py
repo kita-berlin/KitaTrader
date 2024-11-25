@@ -83,7 +83,7 @@ class QuoteProvider:
         current_tick = mt5.symbol_info_tick(self.symbol_info.name)
         dt_now = self.get_utc_from_broker_time(datetime.fromtimestamp(currenttick.time))
 
-        if self.trading_platform.bin_settings.Platform == Platform.mt5_live:
+        if self.trading_platform.bin_settings.platform == Platform.Mt5Live:
             start_dt = dtNow
         else:
             start_dt = self.trading_platform.get_utc_time_from_local_time(
@@ -108,7 +108,7 @@ class QuoteProvider:
         # debug_mt5_rates_start = datetime.fromtimestamp(self.Rates[0][0])
         # debug_mt5_rates_end = datetime.fromtimestamp(self.Rates[-1][0])
 
-        if self.trading_platform.bin_settings.Platform == Platform.mt5_live:
+        if self.trading_platform.bin_settings.platform == Platform.Mt5Live:
             self.current_index = len(self.Rates) - 1
         else:
             for i in range(len(self.Rates)):
@@ -123,7 +123,7 @@ class QuoteProvider:
 
     ######################################
     def get_next_quote(self):  # -> str, QuoteBar:
-        if Platform.mt5_backtest == self.trading_platform.bin_settings.Platform:
+        if Platform.Mt5Backtest == self.trading_platform.bin_settings.platform:
             self.current_index += 1
             self.current_index = min(self.current_index, len(self.Rates) - 1)
 
@@ -133,7 +133,7 @@ class QuoteProvider:
     def get_current_quote(self):
         qb = QuoteBar()
 
-        if Platform.mt5_live == self.trading_platform.bin_settings.Platform:
+        if Platform.Mt5Live == self.trading_platform.bin_settings.platform:
             current_tick = mt5.symbol_info_tick(self.symbol_info.name)
             qb.time = self.get_utc_from_broker_time(
                 datetime.fromtimestamp(currenttick.time)

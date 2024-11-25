@@ -87,7 +87,7 @@ class PendingOrder(ABC):
 #     @abstractmethod
 #     def stop_loss_pips(self) -> Optional[float]:
 #         """
-#         The order stop loss in pips
+#         The order stop loss in Pips
 #         """
 #         pass
 
@@ -102,7 +102,7 @@ class PendingOrder(ABC):
 #     @abstractmethod
 #     def take_profit_pips(self) -> Optional[float]:
 #         """
-#         The order take profit in pips
+#         The order take profit in Pips
 #         """
 
 #     @property

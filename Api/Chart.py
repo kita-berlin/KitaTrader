@@ -104,7 +104,7 @@ class Chart(ChartArea):
                             self.x_axis_labels.append(j)
                             break
 
-                self.ohlc_plot.xaxis.ticker = Fixedticker(ticks=self.x_axis_labels)
+                self.ohlc_plot.xaxis.ticker = FixedTicker(ticks=self.x_axis_labels)
 
                 self.ohlc_plot.xaxis.major_label_overrides = {
                     tick: Bars.open_times[tick].strftime("%d-%m-%Y %H:%M")
@@ -153,9 +153,9 @@ class Chart(ChartArea):
             return
 
         marker = None
-        if ChartIconType.up_arrow == iconType:
+        if ChartIconType.UpArrow == iconType:
             marker = "triangle"
-        elif ChartIconType.down_arrow == iconType:
+        elif ChartIconType.DownArrow == iconType:
             marker = "triangle-down"  # type
 
         x_value = self.get_xfrom_datetime(time)

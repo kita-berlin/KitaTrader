@@ -1,4 +1,3 @@
-import os
 import random
 import numpy as np
 import pandas as pd
@@ -6,13 +5,11 @@ import pickle
 import gymnasium as gym
 from gymnasium import spaces
 from stable_baselines3 import PPO
-from stable_baselines3.common.logger import configure
-from stable_baselines3.common.env_checker import check_env
 import talib
 from Api.AlgoApi import AlgoApi
 
 
-class trading_env(gyself.Env):
+class trading_env(gym.Env):
     metadata = {"render.modes": ["human"]}
 
     def __init__(self, data_file, start_date, end_date):
@@ -30,11 +27,13 @@ class trading_env(gyself.Env):
         self.df = self.df.loc[start_date:end_date]
         self.open_trades_count = 0
 
-        self.floats__rebuy1st_percent = [round(x * 0.1, 1) for x in range(1, 21)]
-        self.floats__rebuy_percent = [round(x * 0.01, 10) for x in range(1, 21)]
-        self.floats__take_profit_percent = [round(x * 0.01, 10) for x in range(1, 21)]
+        self.floats_rebuy1st_percent = [round(x * 0.1, 1) for x in range(1, 21)]
+        self.floats_rebuy_percent = [round(x * 0.01, 10) for x in range(1, 21)]
+        self.floats_take_profit_percent = [round(x * 0.01, 10) for x in range(1, 21)]
 
-        self.action_space = spaces.multi_discrete([20, 20, 20])
+        self.action_space = spaces.multi_discrete(  # pylint: disable=not-callable
+            [20, 20, 20]
+        )
 
         self.observation_space = spaces.Box(
             low=-np.inf,
@@ -103,12 +102,12 @@ class trading_env(gyself.Env):
         return obs
 
     def reset(self, seed=None, **kwargs):
-        np.randoself.seed(seed)
+        np.random.seed(seed)
         super().reset(seed=seed)
 
         self.current_step = 0
 
-        self.algo_api = TradingClass()
+        self.algo_api = AlgoApi()
         error, self.system_settings = self.algo_api.load_settings(self)
         self.system_settings.start_dt = self.start_date
         self.system_settings.end_dt = self.end_date
@@ -130,15 +129,9 @@ class trading_env(gyself.Env):
         return obs, {}
 
     def step(self, action):
-        self.algo_api.bin_settings.rebuy1st_percent = (
-            self.floats_Rebuy1stPercent[action[0]]
-        )
-        self.algo_api.bin_settings.rebuy_percent = self.floats_RebuyPercent[
-            action[1]
-        ]
-        self.algo_api.bin_settings.take_profit_percent = (
-            self.floats_TakeProfitPercent[action[2]]
-        )
+        self.algo_api.rebuy_1st_percent = self.floats_rebuy1st_percent[action[0]]
+        self.algo_api.rebuy_percent = self.floats_rebuy_percent[action[1]]
+        self.algo_api.take_profit_percent = self.floats_take_profit_percent[action[2]]
 
         if self.current_step >= len(self.df):
             terminated = True
@@ -153,9 +146,9 @@ class trading_env(gyself.Env):
 
         self.past_actions.append(
             [
-                self.algo_api.bin_settings.Rebuy1stPercent,
-                self.algo_api.bin_settings.rebuy_percent,
-                self.algo_api.bin_settings.take_profit_percent,
+                self.algo_api.rebuy_1st_percent,
+                self.algo_api.rebuy_percent,
+                self.algo_api.take_profit_percent,
             ]
         )
         self.past_rewards.append(reward)
@@ -210,7 +203,7 @@ def main():
 
     def run_test(env, action_strategy, i, trained_model):
         obs, _ = env.reset(seed=i)
-
+        history = []
         terminated = False
         total_rewards = 0
         while not terminated:
@@ -230,20 +223,20 @@ def main():
 
             history.append(
                 [
-                    env.TradingClass.time.strftime("%d-%m-%Y %H:%M:%S"),
-                    env.TradingClass.Account.balance,
-                    env.TradingClass.max_equity_drawdown_value[0],
-                    env.TradingClass.Calmar,
-                    env.TradingClass.cluster_count,
-                    env.TradingClass.invest_count,
-                    env.TradingClass.bin_settings.Rebuy1stPercent,
-                    env.TradingClass.bin_settings.rebuy_percent,
-                    env.TradingClass.bin_settings.take_profit_percent,
+                    env.algo_api.time.strftime("%d-%m-%Y %H:%M:%S"),
+                    env.algo_api.Account.balance,
+                    env.algo_api.max_equity_drawdown_value[0],
+                    env.algo_api.Calmar,
+                    env.algo_api.cluster_count,
+                    env.algo_api.invest_count,
+                    env.algo_api.bin_settings.Rebuy1stPercent,
+                    env.algo_api.bin_settings.rebuy_percent,
+                    env.algo_api.bin_settings.take_profit_percent,
                 ]
             )
 
             if terminated:
-                df_history = pd.data_frame(
+                df_history = pd.DataFrame(
                     history,
                     columns=[
                         "Time",
@@ -258,9 +251,9 @@ def main():
                     ],
                 )
                 return (
-                    env.TradingClass.Account.balance,
-                    env.TradingClass.max_equity_drawdown_value[0],
-                    env.TradingClass.Calmar,
+                    env.algo_api.Account.balance,
+                    env.algo_api.max_equity_drawdown_value[0],
+                    env.algo_api.Calmar,
                     df_history,
                 )
 
@@ -300,7 +293,7 @@ def main():
     nb_dev_up = 2
     nb_dev_dn = 2
 
-    upperband, middleband, lowerband = talib.BBANDS(
+    upperband, middleband, lowerband = talib.BBANDS( # pylint: disable=no-member
         df_full["Close"].shift(1),
         timeperiod=time_period,
         nbdevup=nb_dev_up,
@@ -338,19 +331,19 @@ def main():
 
     # is_train = True
     is_train = False
-    trained_model = get_model(seed=randoself.randint(1, 10), train=isTrain)
+    trained_model = get_model(seed=random.randint(1, 10), train=is_train)
 
     m = 10
     print("\nRunning fixed action strategy")
     fixed_results = evaluate_strategy(test_env, "fixed", 1, trained_model)
 
     print("\nRunning random action strategy")
-    random_results = evaluate_strategy(test_env, "random", M, trained_model)
+    random_results = evaluate_strategy(test_env, "random", m, trained_model)
 
     print("Running model action strategy")
-    model_results = evaluate_strategy(test_env, "model", M, trained_model)
+    model_results = evaluate_strategy(test_env, "model", m, trained_model)
 
-    results_df = pd.data_frame(
+    results_df = pd.DataFrame(
         {
             "Strategy": ["Model", "Fixed", "Random"],
             "Account Balance Mean": [

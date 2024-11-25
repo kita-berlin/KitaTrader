@@ -65,8 +65,8 @@ class SymbolInfo:
 
         # Platform specific inits
         if (
-            Platform.mt5_live == self.trading_class.bin_settings.Platform
-            or Platform.mt5_backtest == self.trading_class.bin_settings.Platform
+            Platform.Mt5Live == self.trading_class.bin_settings.platform
+            or Platform.Mt5Backtest == self.trading_class.bin_settings.platform
         ):
             import MetaTrader5 as mt5
 
@@ -90,19 +90,19 @@ class SymbolInfo:
             from ..QuoteProviders.QuoteProviderMt5 import QuoteProvider
         pass
 
-        if Platform.me_files == self.trading_class.bin_settings.Platform:
+        if Platform.MeFiles == self.trading_class.bin_settings.platform:
             try:
                 from ..QuoteProviders.QuoteProviderMeFiles import QuoteProvider
             except:
                 from QuoteProviders.QuoteProviderMeFiles import QuoteProvider
 
-        if Platform.csv == self.trading_class.bin_settings.Platform:
+        if Platform.Csv == self.trading_class.bin_settings.platform:
             try:
                 from ..QuoteProviders.QuoteProviderCsv import QuoteProvider
             except:
                 from QuoteProviders.QuoteProviderCsv import QuoteProvider
 
-        if Platform.mt5_live == self.trading_class.bin_settings.Platform:
+        if Platform.Mt5Live == self.trading_class.bin_settings.platform:
             mt5.symbol_select(symbolName, True)  # pylint: disable=no-member
             symbol_info = mt5.symbol_info(symbolName)  # pylint: disable=no-member
 
@@ -123,7 +123,7 @@ class SymbolInfo:
             self.swap_short = symbol_info.swap_short
             self.swap3_days_rollover = symbol_info.swap_rollover3days
             self.base_asset = symbol_info.currency_base
-            self.quote_asset = symbol_info.currency_profit
+            self.QuoteAsset = symbol_info.currency_profit
 
             # On Mt5 commissions are in deal info
             self.commission = 0
@@ -137,11 +137,11 @@ class SymbolInfo:
             """
             self.is_trading_enabled = 4 == symbol_info.trade_mode
 
-            self.trading_mode = SymbolTradingMode.fully_disabled
+            self.trading_mode = SymbolTradingMode.FullyDisabled
             if 4 == symbol_info.trade_mode:
-                self.trading_mode = SymbolTradingMode.full_access
+                self.trading_mode = SymbolTradingMode.FullAccess
             if 3 == symbol_info.trade_mode:
-                self.trading_mode = SymbolTradingMode.close_only
+                self.trading_mode = SymbolTradingMode.CloseOnly
             """
             # swap_mode =1
             # ENUM_SYMBOL_SWAP_MODE:
@@ -155,9 +155,9 @@ class SymbolInfo:
             # SYMBOL_SWAP_MODE_REOPEN_CURRENT Swaps are charged by reopening positions. At the end of a trading day the Position is closed. Next day it is reopened by the close price +/- specified number of points (settings SYMBOL_SWAP_LONG and SYMBOL_SWAP_SHORT)
             # SYMBOL_SWAP_MODE_REOPEN_BID Swaps are charged by reopening positions. At the end of a trading day the Position is closed. Next day it is reopened by the current bid price +/- specified number of points (settings SYMBOL_SWAP_LONG and SYMBOL_SWAP_SHORT)
             """
-            self.swap_calculation_type = SymbolSwapCalculationType.percentage
+            self.swap_calculation_type = SymbolSwapCalculationType.Percentage
             if 1 == symbol_info.swap_mode:
-                self.swap_calculation_type = SymbolSwapCalculationType.pips
+                self.swap_calculation_type = SymbolSwapCalculationType.Pips
             """
             # custom =False
             # chart_mode =0
@@ -259,9 +259,9 @@ class SymbolInfo:
         pass
 
         if (
-            self.trading_class.bin_settings.Platform == Platform.me_files
-            or self.trading_class.bin_settings.Platform == Platform.csv
-            or self.trading_class.bin_settings.Platform == Platform.mt5_backtest
+            self.trading_class.bin_settings.platform == Platform.MeFiles
+            or self.trading_class.bin_settings.platform == Platform.Csv
+            or self.trading_class.bin_settings.platform == Platform.Mt5Backtest
         ):
             broker = self.trading_class.Account.broker_symbol_name + (
                 "_Live" if self.trading_class.Account.is_live else "_Demo"
@@ -288,12 +288,12 @@ class SymbolInfo:
             self.swap_short = self.trading_class.market_values.swap_short
             self.swap3_days_rollover = 3
             self.base_asset = self.trading_class.market_values.symbol_currency_base
-            self.quote_asset = self.trading_class.market_values.symbol_currency_quote
+            self.QuoteAsset = self.trading_class.market_values.symbol_currency_quote
             self.swap_calculation_type: SymbolSwapCalculationType = (
-                SymbolSwapCalculationType.pips
+                SymbolSwapCalculationType.Pips
             )
             self.is_trading_enabled = True
-            self.trading_mode = SymbolTradingMode.full_access
+            self.trading_mode = SymbolTradingMode.FullAccess
 
             self.quote_provider = (
                 QuoteProvider(  # pylint: disable=possibly-used-before-assignment
