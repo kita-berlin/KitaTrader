@@ -1,8 +1,9 @@
 ﻿from abc import ABC, abstractmethod
-
+from KitaSymbol import Symbol
 
 ###################################
-class TradingBot(ABC):
+class IRobot(ABC):
+    symbol: Symbol
 
     ###################################
     @abstractmethod
@@ -23,3 +24,5 @@ class TradingBot(ABC):
     # abstractmethod
     def get_tick_fitness(self):
         pass
+
+# end of file

@@ -54,7 +54,7 @@ class TradingLoop:
     def pre_start(self):
         # Init member variables
         # region
-        self.initial_time = self.time = self.PrevTime = self.bin_settings.start_dt
+        self.initial_time = self.time = self.prev_time = self.bin_settings.start_dt
         self.initial_account_balance = self.Account.equity = self.Account.balance = (
             self.bin_settings.init_balance
         )

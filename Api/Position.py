@@ -1,32 +1,35 @@
 from datetime import datetime
+from KitaSymbol import Symbol
 from AlgoApiEnums import *
 
 
 class Position:
+    symbol_name: str = ""
+    symbol: Symbol = None  # type: ignore
+    trade_type: TradeType = TradeType.Buy
+    volume_in_units: float = 0
+    id: int = 0
+    gross_profit: float = 0
+    entry_price: float = 0
+    stop_loss: float = 0
+    # net_profit is a property
+    swap: float = 0
+    commissions: float = 0
+    entry_time: datetime = datetime.min
+    closing_time: datetime = datetime.min
+    pips: float = 0
+    label: str = ""
+    comment: str = ""
+    quantity: float = 0
+    has_trailing_stop: bool = False
+    margin: float = 0
+    # current_price is a property
+    stop_loss_trigger_method: StopTriggerMethod = StopTriggerMethod.Trade
+    closing_price: float = 0
+    max_drawdown: float = 0
+
     def __init__(self):
-        self.symbol_name = ""
-        self.trade_type = TradeType.Buy
-        self.volume_in_units = 0
-        self.id = 0
-        self.gross_profit = 0
-        self.entry_price = 0
-        self.stop_loss = 0
-        self.take_profit_percent = 0
-        # self.net_profit is a property
-        self.swap = 0
-        self.commissions = 0
-        self.entry_time = datetime.min
-        self.Pips = 0
-        self.label = ""
-        self.comment = ""
-        self.quantity = 0
-        self.has_trailing_stop = False
-        self.margin = 0
-        # self.current_price is a property
-        self.stop_loss_trigger_method = StopTriggerMethod.Trade
-        self.closing_price = 0
-        self.max_drawdown = 0
-        self.symbol = None
+        pass
 
     def modify_stop_loss_price(self, stopLoss):
         """
@@ -78,7 +81,7 @@ class Position:
 
     @property
     def current_price(self):
-        return self.symbol.bid if self.trade_type == TradeType.Buy else self.symbol.ask
+        return self.symbol.Bid if self.trade_type == TradeType.Buy else self.symbol.Ask
 
     @property
     def net_profit(self):

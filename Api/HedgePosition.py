@@ -7,12 +7,12 @@ from Position import Position
 class HedgePosition:
     # Member variables
     # region
-    main_id = "Main;"  # cannpt be defined in __init__ because needed in do_main_open(self, volume, inherited_freeze_price_offset =0, label_ext =main_id)
+    main_id = "Main;"  # cannot be defined in __init__ because needed in do_main_open(self, volume, inherited_freeze_price_offset =0, label_ext =main_id)
     reverse_id = "Reverse;"
     main_freeze_id = "main_freeze;"
     weekend_freeze_id = "weekend_freeze;"
-    main_position: Optional[Position] = None
-    freeze_position: Optional[Position] = None
+    main_position: Position = None  # type: ignore
+    freeze_position: Position = None  # type: ignore
     is_profit_earned: bool = False
     freeze_open_bar_count: int = 0
     freeze_corrected_entry_price: float = 0

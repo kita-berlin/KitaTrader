@@ -146,8 +146,8 @@ class BollingerBands(IIndicator):
 class Indicators:
     indicator_list = []
 
-    def __init__(self, tradingClass):
-        self.trading_class = tradingClass
+    def __init__(self, algo_api):
+        self.algo_api = algo_api
         pass
 
     def moving_average(
@@ -210,14 +210,14 @@ class Indicators:
     def high_minus_low(self, bars=None):
         # High Minus Low indicator instance with bars
         if None == bars:
-            bars = self.trading_class.bars
+            bars = self.algo_api.bars
 
         pass
 
     def true_range(self, bars):
         # True Range indicator instance with bars
         if None == bars:
-            bars = self.trading_class.bars
+            bars = self.algo_api.bars
 
         pass
 
@@ -288,28 +288,28 @@ class Indicators:
     def median_price(self, bars):
         # Median Price indicator instance with bars
         if None == bars:
-            bars = self.trading_class.bars
+            bars = self.algo_api.bars
 
         pass
 
     def williams_accumulation_distribution(self, bars):
         # Williams Accumulation Distribution indicator instance with bars
         if None == bars:
-            bars = self.trading_class.bars
+            bars = self.algo_api.bars
 
         pass
 
     def fractal_chaos_bands(self, bars):
         # Fractal Chaos Bands indicator instance with bars
         if None == bars:
-            bars = self.trading_class.bars
+            bars = self.algo_api.bars
 
         pass
 
     def typical_price(self, bars):
         # Typical Price indicator instance with bars
         if None == bars:
-            bars = self.trading_class.bars
+            bars = self.algo_api.bars
 
         pass
 
@@ -374,7 +374,7 @@ class Indicators:
     def weighted_close(self, bars):
         # Weighted Close indicator instance with bars
         if None == bars:
-            bars = self.trading_class.bars
+            bars = self.algo_api.bars
 
         pass
 
@@ -384,7 +384,7 @@ class Indicators:
 
     def ease_of_movement(self, periods: int, ma_type):
         # Ease Of Movement indicator instance
-        bars = self.trading_class.bars
+        bars = self.algo_api.bars
 
         pass
 

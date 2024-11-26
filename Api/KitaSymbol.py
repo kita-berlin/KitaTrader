@@ -6,13 +6,13 @@ from AlgoApiEnums import *
 
 ######################################
 class Symbol(SymbolInfo):
-    def __init__(self, tradingClass, symbolName: str):
-        super().__init__(tradingClass, symbolName)
+    def __init__(self, algo_api, symbolName: str):
+        super().__init__(algo_api, symbolName)
 
     ######################################
     @property
     def spread(self):
-        return self.ask - self.bid
+        return self.Ask - self.Bid
 
     def normalize_volume_in_units(self, volume, rounding_mode=RoundingMode.ToNearest):
         mod = volume % self.volume_in_units_min

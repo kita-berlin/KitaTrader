@@ -6,7 +6,7 @@ from datetime import timedelta
 from indicators import indicators
 from PyLogger import PyLogger
 from HedgePosition import HedgePosition
-from TradingBot import TradingBot
+from IRobot import IRobot
 from AlgoApiEnums import *
 from CoFu import *
 from constants import *
@@ -17,7 +17,7 @@ from constants import *
 
 # Single direction trading bot
 ###################################
-class Ultron(TradingBot):
+class Ultron(IRobot):
     def __init__(self):
 
         # Parameter
@@ -70,7 +70,7 @@ class Ultron(TradingBot):
 
         if not self.is_train:
             print(
-                "Time; Direction; Profit; max_equity_draw_down; cluster_count; invest_count; Calmar; Rebuy1st%; Rebuy%; take_profit%"
+                "Time; Direction; Profit; max_equity_draw_down; cluster_count; invest_count; calmar; Rebuy1st%; Rebuy%; take_profit%"
             )
 
     ###################################
@@ -102,8 +102,8 @@ class Ultron(TradingBot):
         my_lower = self.bb_indi.Bottoself.Last(0)
         """
 
-        current_open = self.symbol.ask if self.is_long else self.symbol.bid
-        current_close = self.symbol.bid if self.is_long else self.symbol.ask
+        current_open = self.symbol.Ask if self.is_long else self.symbol.Bid
+        current_close = self.symbol.Bid if self.is_long else self.symbol.Ask
 
         pass
 
@@ -143,4 +143,4 @@ class Ultron(TradingBot):
         self.prev_revenue = revenue
         pass
 
-        return self.Calmar
+        return self.calmar

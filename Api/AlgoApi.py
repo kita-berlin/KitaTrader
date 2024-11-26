@@ -1,7 +1,6 @@
 import importlib.util
 import os
 import importlib
-from typing import Tuple, Optional
 from datetime import datetime, timezone
 import math
 import uuid
@@ -27,18 +26,18 @@ from CoFu import *
 class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
     # Members
     # region
-    bin_settings: BinSettings
-    system_settings: SystemSettings
-    symbol_dictionary: Dict[str, Symbol] = {}
+    bin_settings: BinSettings = None  # type: ignore
+    system_settings: SystemSettings = None  # type: ignore
+    symbol_dictionary: dict[str, Symbol] = {}  # type: ignore
     symbol_list: list[Symbol] = []
     positions: list[Position] = []
     history: list[Position] = []
+    max_equity_drawdown_value: list[float] = []
     time: datetime
-    max_equity_drawdown_value: float
     chart: Chart
     running_mode: RunningMode
     logger: PyLogger
-    is_train: bool = False
+    is_train: bool
     quote_provider: QuoteProvider
     # endregion
 
@@ -67,12 +66,14 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
         self.bin_settings = BinSettings(
             robot_name=self.system_settings.robot_name,
             default_symbol_name=self.system_settings.default_symbol_name,
-            default_timeframe_seconds=self.get_timeframe_from_gui_params(self.system_settings),
+            default_timeframe_seconds=self.get_timeframe_from_gui_params(
+                self.system_settings
+            ),
             trade_direction=TradeDirection[self.system_settings.trade_direction],
             init_balance=float(self.system_settings.init_balance),
-            start_dt=(datetime.strptime(self.system_settings.start_dt, "%Y-%m-%d")).replace(
-                tzinfo=timezone.utc
-            ),
+            start_dt=(
+                datetime.strptime(self.system_settings.start_dt, "%Y-%m-%d")
+            ).replace(tzinfo=timezone.utc),
             end_dt=(datetime.strptime(self.system_settings.end_dt, "%Y-%m-%d")).replace(
                 tzinfo=timezone.utc
             ),
@@ -191,7 +192,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
         pos.quantity = volume / pos.symbol.lot_size
         pos.entry_time = self.time
         pos.entry_price = (
-            pos.symbol.ask if TradeType.Buy == trade_type else pos.symbol.bid
+            pos.symbol.Ask if TradeType.Buy == trade_type else pos.symbol.Bid
         )
         pos.label = label
         pos.margin = volume * pos.entry_price / pos.symbol.leverage
@@ -303,7 +304,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
                     else mt5.ORDER_TYPE_SELL
                 )
                 exit_price = (
-                    symbol.ask if TradeType.Buy == pos.trade_type else symbol.bid
+                    symbol.Ask if TradeType.Buy == pos.trade_type else symbol.Bid
                 )
                 order = {
                     "action": mt5.TRADE_ACTION_DEAL,
@@ -681,7 +682,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
     # region
     @staticmethod
     def get_bid_ask_price(symbol: Symbol, bidAsk):
-        return symbol.bid if BidAsk == BidAsk.Bid else symbol.ask
+        return symbol.Bid if BidAsk == BidAsk.Bid else symbol.Ask
 
     @staticmethod
     def calc_profitmode2_lots(
@@ -710,7 +711,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
             desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lotSiz)
         elif profitMode in [ProfitMode.constant_invest, ProfitMode.Reinvest]:
             invest_money = (self.initial_account_balance if ProfitMode == ProfitMode.constant_invest else self.Account.balance) * value / 100
-            units = investMoney * symbol.tick_size / symbol.tick_value / symbol.bid
+            units = investMoney * symbol.tick_size / symbol.tick_value / symbol.Bid
             lot_siz = symbol.volume_in_units_to_quantity(units)
             desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lotSiz)
         """
@@ -728,7 +729,7 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
     def calc_1point_and_1lot_2money(symbol: Symbol, reverse=False):
         ret_val = AlgoApi.calc_points_and_lot_2money(symbol, 1, 1)
         if reverse:
-            ret_val *= symbol.bid
+            ret_val *= symbol.Bid
         return ret_val
 
     @staticmethod

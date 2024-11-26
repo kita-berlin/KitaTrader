@@ -30,8 +30,8 @@ class Bars:
     chart_time_array = []
     # endregion
 
-    def __init__(self, trading_class, timeframeSeconds: int, symbolName: str):
-        self.trading_class = trading_class
+    def __init__(self, algo_api, timeframeSeconds: int, symbolName: str):
+        self.algo_api = algo_api
         self.default_timeframe_seconds = timeframeSeconds
         self.symbol_name = symbolName
 
@@ -55,7 +55,7 @@ class Bars:
         epoc_dt = quote.time.timestamp() // 60
         tf_minutes = self.default_timeframe_seconds // 60
         tf_modulo = epoc_dt % tf_minutes
-        if 0 == self.open_times.count or self.trading_class.is_new_bar(
+        if 0 == self.open_times.count or self.algo_api.is_new_bar(
             self.default_timeframe_seconds, quote.time, self.open_times.data[-1]
         ):
             self.open_times.data = np.append(self.open_times.data, quote.time)

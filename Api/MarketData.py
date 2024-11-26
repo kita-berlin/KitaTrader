@@ -3,17 +3,17 @@ from Bars import Bars
 
 
 class MarketDataClass:
-    def __init__(self, tradingClass):
-        self.trading_class = tradingClass
+    def __init__(self, algo_api):
+        self.algo_api = algo_api
         pass
 
     def get_bars(self, timeframeSeconds, symbolName) -> Bars:
-        new_bars = Bars(self.trading_class, timeframeSeconds, symbolName)
-        symbol = self.trading_class.symbol_dictionary[symbolName]
+        new_bars = Bars(self.algo_api, timeframeSeconds, symbolName)
+        symbol = self.algo_api.symbol_dictionary[symbolName]
         symbol.bars_list.append(new_bars)
 
         # build bars
-        bars_start_dt = self.trading_class.bin_settings.start_dt - timedelta(
+        bars_start_dt = self.algo_api.bin_settings.start_dt - timedelta(
             seconds=1000 * timeframeSeconds
         )
         error, quote = symbol.quote_provider.get_quote_at_date(bars_start_dt)
@@ -27,7 +27,7 @@ class MarketDataClass:
             new_bars.update_bar(quote)
             if (
                 new_bars.open_times.count > 0
-                and quote.time >= self.trading_class.bin_settings.start_dt
+                and quote.time >= self.algo_api.bin_settings.start_dt
             ):
                 break
         pass

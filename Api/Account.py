@@ -1,4 +1,3 @@
-from typing import Optional
 from AlgoApiEnums import *
 from Settings import BinSettings
 from CoFu import *

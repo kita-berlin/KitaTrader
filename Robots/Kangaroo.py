@@ -1,27 +1,25 @@
-﻿# Imports
-# region
-import numpy as np
+﻿import numpy as np
 import pandas as pd
 from math import sqrt
 from typing import List
 from datetime import timedelta
-
-from Indicators import Indicators
+from IIndicators import Indicators
 from PyLogger import PyLogger
 from HedgePosition import HedgePosition
-from TradingBot import TradingBot
+from IRobot import IRobot
 from AlgoApiEnums import *
 from Api.CoFu import *
 from Constants import *
-# endregion
 
 # import talib
 # from talib import MA_Type
 
 
-# Single direction trading bot
-###################################
-class Kangaroo(TradingBot):
+class Kangaroo(IRobot):
+    # Members
+    # region
+    sqrt252: float = sqrt(252)
+    # endregion
 
     def __init__(self):
         # History
@@ -42,24 +40,24 @@ class Kangaroo(TradingBot):
 
     ###################################
     def on_start(self, is_long):
-        self.is_long = is_long
 
         # Members; We do declaration here so members will be reinized by 2nd++ on_start()
         # region
+        self.is_long = is_long
         self.current_volume = self.initial_volume = self.volume
-        self.hedge_positions: HedgePosition = []
-        self.max_invest_count: int = [0] * 1
+        self.hedge_positions: List[HedgePosition] = []
+        self.max_invest_count: List[int] = [0] * 1
         self.cluster_count: int = 0
         self.avg_price: float = 0
         self.invest_count: int = 0
         self.current_volume: float = 0
         self.cluster_profit: float = 0
-        self.daily_revenue: float = []
+        self.daily_revenue: List[float] = []
         self.prev_revenue: float = 0
-        self.sqrt252 = sqrt(252)
         self.sharpe_ratio: float = 0
         self.sortino_ratio: float = 0
-        self.Calmar: float = 0
+        self.calmar: float = 0
+        self.is_train: bool = False
 
         """ example how to use indicators
         self.time_period = 14
@@ -89,7 +87,7 @@ class Kangaroo(TradingBot):
 
         if not self.is_train:
             print(
-                "Time; Direction; Profit; max_equity_draw_down; cluster_count; invest_count; Calmar; Rebuy1st%; Rebuy%; take_profit%"
+                "Time; Direction; Profit; max_equity_draw_down; cluster_count; invest_count; calmar; Rebuy1st%; Rebuy%; take_profit%"
             )
 
     ###################################
@@ -121,8 +119,8 @@ class Kangaroo(TradingBot):
         my_lower = self.bb_indi.Bottoself.Last(0)
         """
 
-        current_open = self.symbol.ask if self.is_long else self.symbol.bid
-        current_close = self.symbol.bid if self.is_long else self.symbol.ask
+        current_open = self.symbol.Ask if self.is_long else self.symbol.Bid
+        current_close = self.symbol.Bid if self.is_long else self.symbol.Ask
 
         if 0 == self.invest_count:
             self.cluster_profit = 0
@@ -178,7 +176,7 @@ class Kangaroo(TradingBot):
                     self.loaded_robot.close_all_open_positions(
                         self
                     )  # close all open trades
-                    # "Time; Profit; max_equity_draw_down; cluster_count; invest_count; Calmar; Rebuy1st%; Rebuy%; take_profit%"
+                    # "Time; Profit; max_equity_draw_down; cluster_count; invest_count; calmar; Rebuy1st%; Rebuy%; take_profit%"
                     if not self.is_train:
                         print(
                             self.time.strftime("%d-%m-%Y %H:%M:%S; ")
@@ -189,7 +187,7 @@ class Kangaroo(TradingBot):
                             + "; {:.2f}".format(self.max_equity_drawdown_value[0])
                             + "; {}".format(self.cluster_count)
                             + "; {}".format(self.invest_count)
-                            + "; {:.2f}".format(self.Calmar)
+                            + "; {:.2f}".format(self.calmar)
                         )
 
                     if self.trade_direction == TradeDirection.Mode1:
@@ -240,7 +238,7 @@ class Kangaroo(TradingBot):
                         + "; {:.2f}".format(self.max_equity_drawdown_value[0])
                         + "; {}".format(self.cluster_count)
                         + "; {}".format(self.invest_count)
-                        + "; {:.2f}".format(self.Calmar)
+                        + "; {:.2f}".format(self.calmar)
                         + "; {:.2f}".format(self.rebuy_1st_percent)
                         + "; {:.2f}".format(self.rebuy_percent)
                         + "; {:.2f}".format(self.take_profit_percent)
@@ -249,7 +247,7 @@ class Kangaroo(TradingBot):
             else:
                 pass  # for debugging
 
-        # self.get_tick_fitness()  # calculate Calmar
+        # self.get_tick_fitness()  # calculate calmar
         pass
 
     ###################################
@@ -264,7 +262,7 @@ class Kangaroo(TradingBot):
         return (
             f"{self.version};"
             f"{self.cluster_count}_{self.invest_count};"
-            f"{int(0.5 + (self.symbol.ask if self.is_long else self.symbol.bid) / self.symbol.tick_size)};"
+            f"{int(0.5 + (self.symbol.Ask if self.is_long else self.symbol.Bid) / self.symbol.tick_size)};"
             f"{self.time};"
         )
 
@@ -318,4 +316,4 @@ class Kangaroo(TradingBot):
 
         self.prev_revenue = revenue
 
-        return self.Calmar
+        return self.calmar

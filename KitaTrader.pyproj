@@ -51,7 +51,7 @@
     <Compile Include="Api\CoFu.py" />
     <Compile Include="Api\DataSeries.py" />
     <Compile Include="Api\HedgePosition.py" />
-    <Compile Include="Api\Indicators.py" />
+    <Compile Include="Api\IIndicator.py" />
     <Compile Include="Api\LeverageTier.py" />
     <Compile Include="Api\LogParams.py" />
     <Compile Include="Api\MarketData.py" />
@@ -66,7 +66,7 @@
     <Compile Include="Api\SymbolInfo.py" />
     <Compile Include="Api\TimeSeries.py" />
     <Compile Include="Api\TradeResult.py" />
-    <Compile Include="Api\TradingBot.py" />
+    <Compile Include="Api\IRobot.py" />
     <Compile Include="Api\TradingLoop.py" />
     <Compile Include="MainConsole.py" />
     <Compile Include="MainRl.py" />

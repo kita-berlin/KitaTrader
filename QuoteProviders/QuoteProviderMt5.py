@@ -138,8 +138,8 @@ class QuoteProvider:
             qb.time = self.get_utc_from_broker_time(
                 datetime.fromtimestamp(currenttick.time)
             )
-            qb.open = qb.high = qb.low = qb.close = currenttick.bid
-            qb.open_ask = currenttick.ask
+            qb.open = qb.high = qb.low = qb.close = currenttick.Bid
+            qb.open_ask = currenttick.Ask
             qb.milli_seconds = currenttick.time % 1000
             time.sleep(0.1)
         else:

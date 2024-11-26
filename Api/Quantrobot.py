@@ -309,8 +309,8 @@ class Quantrobot:
         #         self.log_add_text_line("histo_rest_quotient: " + ConvertUtils.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
         self.log_close()
 
-    def calculate_reward(self, tradingClass):
-        return self.loaded_robot.get_tick_fitness(tradingClass)
+    def calculate_reward(self, algo_api):
+        return self.loaded_robot.get_tick_fitness(algo_api)
 
     # pylint: disable=<no-member>
 

@@ -58,15 +58,15 @@ class ConcreteAsset(Asset):
 
 
 class SymbolInfo:
-    def __init__(self, trading_class, symbolName: str):
-        self.trading_class = trading_class
+    def __init__(self, algo_api, symbolName: str):
+        self.algo_api = algo_api
         self.name = symbolName
         self.bars_list: list[Bars] = []
 
         # Platform specific inits
         if (
-            Platform.Mt5Live == self.trading_class.bin_settings.platform
-            or Platform.Mt5Backtest == self.trading_class.bin_settings.platform
+            Platform.Mt5Live == self.algo_api.bin_settings.platform
+            or Platform.Mt5Backtest == self.algo_api.bin_settings.platform
         ):
             import MetaTrader5 as mt5
 
@@ -90,19 +90,19 @@ class SymbolInfo:
             from ..QuoteProviders.QuoteProviderMt5 import QuoteProvider
         pass
 
-        if Platform.MeFiles == self.trading_class.bin_settings.platform:
+        if Platform.MeFiles == self.algo_api.bin_settings.platform:
             try:
                 from ..QuoteProviders.QuoteProviderMeFiles import QuoteProvider
             except:
                 from QuoteProviders.QuoteProviderMeFiles import QuoteProvider
 
-        if Platform.Csv == self.trading_class.bin_settings.platform:
+        if Platform.Csv == self.algo_api.bin_settings.platform:
             try:
                 from ..QuoteProviders.QuoteProviderCsv import QuoteProvider
             except:
                 from QuoteProviders.QuoteProviderCsv import QuoteProvider
 
-        if Platform.Mt5Live == self.trading_class.bin_settings.platform:
+        if Platform.Mt5Live == self.algo_api.bin_settings.platform:
             mt5.symbol_select(symbolName, True)  # pylint: disable=no-member
             symbol_info = mt5.symbol_info(symbolName)  # pylint: disable=no-member
 
@@ -116,7 +116,7 @@ class SymbolInfo:
             self.volume_in_units_step = (
                 symbol_info.volume_step * symbol_info.trade_contract_size
             )
-            self.leverage = self.trading_class.Account.leverage
+            self.leverage = self.algo_api.Account.leverage
             self.lot_size = symbol_info.trade_contract_size
             self.tick_value = symbol_info.trade_tick_value
             self.swap_long = symbol_info.swap_long
@@ -157,7 +157,7 @@ class SymbolInfo:
             """
             self.swap_calculation_type = SymbolSwapCalculationType.Percentage
             if 1 == symbol_info.swap_mode:
-                self.swap_calculation_type = SymbolSwapCalculationType.Pips
+                self.swap_calculation_type = SymbolSwapCalculationType.pips
             """
             # custom =False
             # chart_mode =0
@@ -259,36 +259,36 @@ class SymbolInfo:
         pass
 
         if (
-            self.trading_class.bin_settings.platform == Platform.MeFiles
-            or self.trading_class.bin_settings.platform == Platform.Csv
-            or self.trading_class.bin_settings.platform == Platform.Mt5Backtest
+            self.algo_api.bin_settings.platform == Platform.MeFiles
+            or self.algo_api.bin_settings.platform == Platform.Csv
+            or self.algo_api.bin_settings.platform == Platform.Mt5Backtest
         ):
-            broker = self.trading_class.Account.broker_symbol_name + (
-                "_Live" if self.trading_class.Account.is_live else "_Demo"
+            broker = self.algo_api.Account.broker_symbol_name + (
+                "_Live" if self.algo_api.Account.is_live else "_Demo"
             )
             # assets_dir = os.path.join(os.getenv("APPDATA"), "_Assets")
             assets_path = os.path.join("Files", f"Assets_{broker}.csv")
-            self.trading_class.market_values = MarketValues()
+            self.algo_api.market_values = MarketValues()
             error = self.init_market_info(
-                assets_path, symbolName, self.trading_class.market_values
+                assets_path, symbolName, self.algo_api.market_values
             )
             if "" != error:
                 print(error)
                 exit()
 
-            self.tick_size = self.trading_class.market_values.point_size
-            self.volume_in_units_min = self.trading_class.market_values.min_lot
-            self.volume_in_units_max = self.trading_class.market_values.max_lot
+            self.tick_size = self.algo_api.market_values.point_size
+            self.volume_in_units_min = self.algo_api.market_values.min_lot
+            self.volume_in_units_max = self.algo_api.market_values.max_lot
             self.volume_in_units_step = self.volume_in_units_min
-            self.leverage = self.trading_class.market_values.symbol_leverage
-            self.lot_size = self.trading_class.market_values.lot_size
-            self.tick_value = self.trading_class.market_values.point_value
-            self.commission = self.trading_class.market_values.commission
-            self.swap_long = self.trading_class.market_values.swap_long
-            self.swap_short = self.trading_class.market_values.swap_short
+            self.leverage = self.algo_api.market_values.symbol_leverage
+            self.lot_size = self.algo_api.market_values.lot_size
+            self.tick_value = self.algo_api.market_values.point_value
+            self.commission = self.algo_api.market_values.commission
+            self.swap_long = self.algo_api.market_values.swap_long
+            self.swap_short = self.algo_api.market_values.swap_short
             self.swap3_days_rollover = 3
-            self.base_asset = self.trading_class.market_values.symbol_currency_base
-            self.QuoteAsset = self.trading_class.market_values.symbol_currency_quote
+            self.base_asset = self.algo_api.market_values.symbol_currency_base
+            self.QuoteAsset = self.algo_api.market_values.symbol_currency_quote
             self.swap_calculation_type: SymbolSwapCalculationType = (
                 SymbolSwapCalculationType.Pips
             )
@@ -297,11 +297,11 @@ class SymbolInfo:
 
             self.quote_provider = (
                 QuoteProvider(  # pylint: disable=possibly-used-before-assignment
-                    self.trading_class, self
+                    self.algo_api, self
                 )
             )
             error, quote = self.quote_provider.get_quote_at_date(
-                self.trading_class.bin_settings.start_dt
+                self.algo_api.bin_settings.start_dt
             )
             if None == quote:
                 print(error)
@@ -395,8 +395,8 @@ class SymbolInfo:
             bars.update_bar(quote)
 
         self.time = quote.time
-        self.bid = quote.open
-        self.ask = quote.open_ask
+        self.Bid = quote.open
+        self.Ask = quote.open_ask
 
     def on_tick(self) -> str:
         error, quote = self.quote_provider.get_next_quote()

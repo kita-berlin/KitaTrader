@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Tuple, Optional
+from typing import Tuple
 import json
 import commentjson
 from Settings import *
