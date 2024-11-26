@@ -3,7 +3,7 @@ import pandas as pd
 from math import sqrt
 from typing import List
 from datetime import timedelta
-from IIndicators import Indicators
+from IIndicator import Indicators
 from PyLogger import PyLogger
 from HedgePosition import HedgePosition
 from IRobot import IRobot

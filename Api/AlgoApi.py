@@ -381,21 +381,21 @@ class AlgoApi(MarketDataParent, TradingLoop, Quantrobot):
             return True
         return False
 
-    def sharpe_sortino(self, isSortino, vals):
+    def sharpe_sortino(self, is_sortino, vals):
         if len(vals) < 2:
             return float("nan")
 
         average = sum(vals) / len(vals)
         sd = math.sqrt(
-            sum((val - average) ** 2 for val in vals if not isSortino or val < average)
+            sum((val - average) ** 2 for val in vals if not is_sortino or val < average)
             / (len(vals) - 1)
         )
         return average / sd if sd != 0 else float("nan")
 
-    def standard_deviation(self, isSortino, vals):
+    def standard_deviation(self, is_sortino, vals):
         average = sum(vals) / len(vals)
         return math.sqrt(
-            sum((val - average) ** 2 for val in vals if not isSortino or val < average)
+            sum((val - average) ** 2 for val in vals if not is_sortino or val < average)
             / (len(vals) - 1)
         )
 

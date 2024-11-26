@@ -157,7 +157,7 @@ class SymbolInfo:
             """
             self.swap_calculation_type = SymbolSwapCalculationType.Percentage
             if 1 == symbol_info.swap_mode:
-                self.swap_calculation_type = SymbolSwapCalculationType.pips
+                self.swap_calculation_type = SymbolSwapCalculationType.Pips
             """
             # custom =False
             # chart_mode =0

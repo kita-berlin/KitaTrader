@@ -20,6 +20,8 @@ from Api.CoFu import *
 
 #############################################
 class MainWindow:
+    system_settings: SystemSettings
+
     def __init__(self):
         self.isSave = False
         self.algo_api = AlgoApi()
@@ -45,7 +47,7 @@ class MainWindow:
                     platform="MeFiles",
                     platform_parameter=folderInput.value,
                 )
-                self.CoFu.SaveSettings(
+                CoFu.SaveSettings(
                     os.path.join("Files", "System.json"), self.system_settings
                 )
             pass

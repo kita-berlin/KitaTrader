@@ -70,7 +70,6 @@
     <Compile Include="Api\TradingLoop.py" />
     <Compile Include="MainConsole.py" />
     <Compile Include="MainRl.py" />
-    <Compile Include="MainWindow.pyw" />
     <Compile Include="QuoteProviders\QuoteProviderCsv.py" />
     <Compile Include="QuoteProviders\QuoteProviderMeFiles.py" />
     <Compile Include="QuoteProviders\QuoteProviderMt5.py" />
