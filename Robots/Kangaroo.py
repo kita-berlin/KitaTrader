@@ -1,11 +1,5 @@
-﻿import numpy as np
-import pandas as pd
-from math import sqrt
+﻿from math import sqrt
 from typing import List
-from datetime import timedelta
-from IIndicator import Indicators
-from PyLogger import PyLogger
-from HedgePosition import HedgePosition
 from IRobot import IRobot
 from AlgoApiEnums import *
 from Api.CoFu import *
@@ -34,16 +28,17 @@ class Kangaroo(IRobot):
         self.rebuy_percent = 0.1
         self.take_profit_percent = 0.1
         self.volume = 1000
+        self.trade_direction = TradeDirection.Mode1
 
     # endregion
     pass
 
     ###################################
-    def on_start(self, is_long):
+    def on_start(self) -> None:
 
         # Members; We do declaration here so members will be reinized by 2nd++ on_start()
         # region
-        self.is_long = is_long
+        self.is_long = True
         self.current_volume = self.initial_volume = self.volume
         self.hedge_positions: List[HedgePosition] = []
         self.max_invest_count: List[int] = [0] * 1
@@ -119,8 +114,9 @@ class Kangaroo(IRobot):
         my_lower = self.bb_indi.Bottoself.Last(0)
         """
 
-        current_open = self.symbol.Ask if self.is_long else self.symbol.Bid
-        current_close = self.symbol.Bid if self.is_long else self.symbol.Ask
+        current_open = self.symbol.ask if self.is_long else self.symbol.bid
+        current_close = self.symbol.bid if self.is_long else self.symbol.ask
+        target_cash = current_repurchase_price = 0
 
         if 0 == self.invest_count:
             self.cluster_profit = 0
@@ -134,10 +130,13 @@ class Kangaroo(IRobot):
 
             for pos in self.hedge_positions:
                 self.cluster_profit += pos.profit
-                cluster_price_by_volume_sum += (
-                    pos.main_position.entry_price * pos.main_position.volume_in_units
-                )
-                self.current_volume += pos.main_position.volume_in_units
+                if pos.main_position is not None:  # type: ignore
+                    cluster_price_by_volume_sum += (
+                        pos.main_position.entry_price
+                        * pos.main_position.volume_in_units
+                    )
+                if pos.main_position is not None:  # type: ignore
+                    self.current_volume += pos.main_position.volume_in_units
 
             self.avg_price = (
                 cluster_price_by_volume_sum / self.current_volume
@@ -157,7 +156,7 @@ class Kangaroo(IRobot):
             )
 
             tp_value = current_close * self.take_profit_percent / 100
-            tp_price = self.add_long(self.is_long, self.avg_price, tp_value)
+            # tp_price = self.add_long(self.is_long, self.avg_price, tp_value)
             tp_points = self.i_price(tp_value, self.symbol.tick_size)
 
             # initial_target_cash = self.parent_bot.mBot.calc_points_and_volume_2money(self.parent_bot.bot_symbol, tp_points, self.parent_bot.initial_volume)
@@ -172,18 +171,16 @@ class Kangaroo(IRobot):
             if self.invest_count > 0:
                 # check profit instead of price because of swaps etc.
                 if self.cluster_profit > target_cash:
-                    invest_count = self.invest_count
-                    self.loaded_robot.close_all_open_positions(
-                        self
-                    )  # close all open trades
+                    # invest_count = self.invest_count
+                    self.close_all_open_positions()  # close all open trades
                     # "Time; Profit; max_equity_draw_down; cluster_count; invest_count; calmar; Rebuy1st%; Rebuy%; take_profit%"
                     if not self.is_train:
                         print(
                             self.time.strftime("%d-%m-%Y %H:%M:%S; ")
                             + ("Long" if self.is_long else "Short")
-                            + "; {:.2f}".format(
-                                self.Account.balance - self.initial_account_balance
-                            )
+                            # + "; {:.2f}".format(
+                            #     self.Account.balance - self.initial_account_balance
+                            # )
                             + "; {:.2f}".format(self.max_equity_drawdown_value[0])
                             + "; {}".format(self.cluster_count)
                             + "; {}".format(self.invest_count)
@@ -222,7 +219,7 @@ class Kangaroo(IRobot):
                     self,
                     self.symbol,
                     self.is_long,
-                    self.loaded_robot.get_label(self),
+                    self.get_label(),
                 )
                 h_pos.do_main_open(volume_to_add)
                 self.hedge_positions.append(h_pos)
@@ -262,13 +259,13 @@ class Kangaroo(IRobot):
         return (
             f"{self.version};"
             f"{self.cluster_count}_{self.invest_count};"
-            f"{int(0.5 + (self.symbol.Ask if self.is_long else self.symbol.Bid) / self.symbol.tick_size)};"
+            f"{int(0.5 + (self.symbol.ask if self.is_long else self.symbol.bid) / self.symbol.tick_size)};"
             f"{self.time};"
         )
 
     ###################################
     def close_all_open_positions(self):
-        is_cluster = len(self.hedge_positions) >= 2
+        # is_cluster = len(self.hedge_positions) >= 2
         # if isCluster:
         #     self.log_add_text("\n")
 
@@ -298,8 +295,9 @@ class Kangaroo(IRobot):
         self.cluster_count  # number of current cluster
         self.invest_count  # number of open trades within current cluster
         self.Account.margin  # sum of all open Position margins; equal to sum(x.margin for x in self.positions)
-        # self.max_equity_drawdown_value[0] holds biggest difference of self.Account.balance and self.Account.equity
-        self.max_equity_drawdown_value[0]
+        self.max_equity_drawdown_value[
+            0
+        ]  # holds biggest difference of self.Account.balance and self.Account.equity
 
         # composed values
         history_profit = self.Account.balance - self.initial_account_balance

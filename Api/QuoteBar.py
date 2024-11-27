@@ -1,16 +1,13 @@
-import os
-import struct
-from datetime import datetime, timedelta
-from xmlrpc.client import boolean
+from datetime import datetime
 
 
 ######################################
 class QuoteBar:
-    Time: datetime = datetime.min
+    time: datetime = datetime.min
     milli_seconds: int = 0
-    Open: float = 0
-    High: float = 0
-    Low: float = 0
-    Close: float = 0
-    Volume: int = 0
+    open: float = 0
+    high: float = 0
+    low: float = 0
+    close: float = 0
+    volume: int = 0
     open_ask: float = 0

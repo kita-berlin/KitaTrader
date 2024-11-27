@@ -23,7 +23,7 @@ class Asset(ABC):
         return 0
 
     @abstractmethod
-    def convert(self, to, value: float) -> float:
+    def convert(self, to: float, value: float):
         """
         Converts value to another Asset.
 
@@ -39,11 +39,11 @@ class Asset(ABC):
         """
         if isinstance(to, Asset):
             # Handle conversion to Asset
-            return 0
+            return None
 
         elif isinstance(to, str):
             # Handle conversion to string
-            return 0
+            return None
 
         else:
             raise ValueError("Unsupported conversion target")

@@ -62,11 +62,11 @@ def read_forex_data(filepath, tick_size, digits):
         if bar is None:
             break
         data.append(bar.to_dict())
-    return pd.data_frame(data)
+    return pd.DataFrame(data)
 
 
 def process_directory(directory, tick_size, digits):
-    all_data = pd.data_frame()
+    all_data = pd.DataFrame()
     for filename in os.listdir(directory):
         if filename.endswith(".mbars"):
             filepath = os.path.join(directory, filename)

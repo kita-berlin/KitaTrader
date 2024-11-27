@@ -1,0 +1,165 @@
+SymbolInfo:
+
+        # Platform specific inits
+        if Platforms.Csv == self.algo_api.bin_settings.platform:
+            try:
+                from ..QuoteProviders.QuoteProviderCsv import ProviderQuote
+            except:
+                from QuoteProviders.QuoteProviderCsv import ProviderQuote
+
+            """
+            symbol_info = mt5.symbol_info(symbol_name)  # pylint: disable=no-member
+
+            self.tick_size = symbol_info.trade_tick_size
+            self.min_lot = (
+                symbol_info.volume_min * symbol_info.trade_contract_size
+            )
+            self.max_lot = (
+                symbol_info.volume_max * symbol_info.trade_contract_size
+            )
+            self.lot_step = (
+                symbol_info.volume_step * symbol_info.trade_contract_size
+            )
+            self.leverage = self.algo_api.Account.leverage
+            self.lot_size = symbol_info.trade_contract_size
+            self.tick_value = symbol_info.trade_tick_value
+            self.swap_long = symbol_info.swap_long
+            self.swap_short = symbol_info.swap_short
+            self.swap3_days_rollover = symbol_info.swap_rollover3days
+            self.base_asset = symbol_info.currency_base
+            self.QuoteAsset = symbol_info.currency_profit
+
+            # On Mt5 commissions are in deal info
+            self.commission = 0
+            """
+            # ENUM_SYMBOL_TRADE_MODE
+            # SYMBOL_TRADE_MODE_DISABLED trade is disabled for the symbol
+            # SYMBOL_TRADE_MODE_LONGONLY Allowed only long positions
+            # SYMBOL_TRADE_MODE_SHORTONLY Allowed only short positions
+            # SYMBOL_TRADE_MODE_CLOSEONLY Allowed only Position close operations
+            # SYMBOL_TRADE_MODE_FULL No trade restrictions
+            """
+
+            self.is_trading_enabled = 4 == symbol_info.trade_mode
+
+            self.trading_mode = SymbolTradingMode.FullyDisabled
+            if 4 == symbol_info.trade_mode:
+                self.trading_mode = SymbolTradingMode.FullAccess
+            if 3 == symbol_info.trade_mode:
+                self.trading_mode = SymbolTradingMode.CloseOnly
+            """
+            # swap_mode =1
+            # ENUM_SYMBOL_SWAP_MODE:
+            # SYMBOL_SWAP_MODE_DISABLED Swaps disabled (no swaps)
+            # SYMBOL_SWAP_MODE_POINTS Swaps are charged in points
+            # SYMBOL_SWAP_MODE_CURRENCY_SYMBOL Swaps are charged in money in base currency of the symbol
+            # SYMBOL_SWAP_MODE_CURRENCY_MARGIN Swaps are charged in money in margin currency of the symbol
+            # SYMBOL_SWAP_MODE_CURRENCY_DEPOSIT Swaps are charged in money, in client deposit currency
+            # SYMBOL_SWAP_MODE_INTEREST_CURRENT Swaps are charged as the specified annual interest from the instrument price at calculation of swap (standard bank year is 360 days)
+            # SYMBOL_SWAP_MODE_INTEREST_OPEN Swaps are charged as the specified annual interest from the open price of Position (standard bank year is 360 days)
+            # SYMBOL_SWAP_MODE_REOPEN_CURRENT Swaps are charged by reopening positions. At the end of a trading day the Position is closed. Next day it is reopened by the close price +/- specified number of points (settings SYMBOL_SWAP_LONG and SYMBOL_SWAP_SHORT)
+            # SYMBOL_SWAP_MODE_REOPEN_bid Swaps are charged by reopening positions. At the end of a trading day the Position is closed. Next day it is reopened by the current bid price +/- specified number of points (settings SYMBOL_SWAP_LONG and SYMBOL_SWAP_SHORT)
+            """
+            self.swap_calculation_type = SymbolSwapCalculationType.Percentage
+            if 1 == symbol_info.swap_mode:
+                self.swap_calculation_type = SymbolSwapCalculationType.Pips
+            """
+            # custom =False
+            # chart_mode =0
+            # select =True
+            # visible =True
+            # session_deals =0
+            # session_buy_orders =0
+            # session_sell_orders =0
+            # volume =0
+            # volumehigh =0
+            # volumelow =0
+            # time =1585069682
+            # digits =3
+            # spread =17
+            # spread_float =True
+            # ticks_bookdepth =10
+            # trade_calc_mode =0
+            # trade_mode =4
+            # start_time =0
+            # expiration_time =0
+            # trade_stops_level =0
+            # trade_freeze_level =0
+            # trade_exemode =1
+            # swap_mode =1
+            # swap_rollover3days =3
+            # margin_hedged_use_leg =False
+            # expiration_mode =7
+            # filling_mode =1
+            # order_mode =127
+            # order_gtc_mode =0
+            # option_mode =0
+            # option_right =0
+            # bid =120.024
+            # bidhigh =120.506
+            # bidlow =118.798
+            # ask =120.041
+            # askhigh =120.526
+            # asklow =118.828
+            # last =0.0
+            # lasthigh =0.0
+            # lastlow =0.0
+            # volume_real =0.0
+            # volumehigh_real =0.0
+            # volumelow_real =0.0
+            # option_strike =0.0
+            # point =0.001
+            # trade_tick_value =0.8977708350166538
+            # trade_tick_value_profit =0.8977708350166538
+            # trade_tick_value_loss =0.8978272580355541
+            # trade_tick_size =0.001
+            # trade_contract_size =100000.0
+            # trade_accrued_interest =0.0
+            # trade_face_value =0.0
+            # trade_liquidity_rate =0.0
+            # volume_min =0.01
+            # volume_max =500.0
+            # volume_step =0.01
+            # volume_limit =0.0
+            # swap_long =-0.2
+            # swap_short =-1.2
+            # margin_initial =0.0
+            # margin_maintenance =0.0
+            # session_volume =0.0
+            # session_turnover =0.0
+            # session_interest =0.0
+            # session_buy_orders_volume =0.0
+            # session_sell_orders_volume =0.0
+            # session_open =0.0
+            # session_close =0.0
+            # session_aw =0.0
+            # session_price_settlement =0.0
+            # session_price_limit_min =0.0
+            # session_price_limit_max =0.0
+            # margin_hedged =100000.0
+            # price_change =0.0
+            # price_volatility =0.0
+            # price_theoretical =0.0
+            # price_greeks_delta =0.0
+            # price_greeks_theta =0.0
+            # price_greeks_gamma =0.0
+            # price_greeks_vega =0.0
+            # price_greeks_rho =0.0
+            # price_greeks_omega =0.0
+            # price_sensitivity =0.0
+            # basis =
+            # category =
+            # currency_base =EUR
+            # currency_profit =JPY
+            # currency_margin =EUR
+            # bank =
+            # description =Euro vs Japanese Yen
+            # exchange =
+            # formula =
+            # isin =
+            # name =EURJPY
+            # page =http://www.google.com/finance?q =EURJPY
+            # path =Forex\EURJPY
+            """
+        pass
+        """

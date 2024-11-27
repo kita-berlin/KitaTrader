@@ -1,0 +1,53 @@
+SymbolInfo:
+        if Platforms.MeFiles == self.algo_api.bin_settings.platform:
+            try:
+                from ..QuoteProviders.QuoteProviderMeFiles import ProviderQuote
+            except:
+                from QuoteProviders.QuoteProviderMeFiles import ProviderQuote
+
+        if (
+            self.algo_api.bin_settings.platform == Platforms.MeFiles
+            or self.algo_api.bin_settings.platform == Platforms.Csv
+            or self.algo_api.bin_settings.platform == Platforms.Mt5Backtest
+        ):
+            broker = self.algo_api.Account.broker_symbol_name + (
+                "_Live" if self.algo_api.Account.is_live else "_Demo"
+            )
+            # assets_dir = os.path.join(os.getenv("APPDATA"), "_Assets")
+            assets_path = os.path.join("Files", f"Assets_{broker}.csv")
+            self.algo_api.market_values = MarketValues()
+            error = self.init_market_info(
+                assets_path, symbol_name, self.algo_api.market_values
+            )
+            if "" != error:
+                print(error)
+                exit()
+
+            self.tick_size = self.algo_api.market_values.point_size
+            self.min_lot = self.algo_api.market_values.min_lot
+            self.max_lot = self.algo_api.market_values.max_lot
+            self.lot_step = self.min_lot
+            self.leverage = self.algo_api.market_values.symbol_leverage
+            self.lot_size = self.algo_api.market_values.lot_size
+            self.tick_value = self.algo_api.market_values.point_value
+            self.commission = self.algo_api.market_values.commission
+            self.swap_long = self.algo_api.market_values.swap_long
+            self.swap_short = self.algo_api.market_values.swap_short
+            self.swap3_days_rollover = 3
+            self.base_asset = self.algo_api.market_values.symbol_currency_base
+            self.QuoteAsset = self.algo_api.market_values.symbol_currency_quote
+            self.swap_calculation_type: SymbolSwapCalculationType = (
+                SymbolSwapCalculationType.Pips
+            )
+            self.is_trading_enabled = True
+            self.trading_mode = SymbolTradingMode.FullAccess
+
+            self.quote_provider = ProviderQuote(self.algo_api, self)
+            error, quote = self.quote_provider.get_quote_at_date(
+                self.algo_api.bin_settings.start_dt
+            )
+            if None == quote:
+                print(error)
+                quit()  # if there is an error getting 1st quote ==> fatal exit
+            self.update_bars(quote)
+            pass

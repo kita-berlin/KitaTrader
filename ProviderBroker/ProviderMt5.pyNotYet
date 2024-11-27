@@ -1,0 +1,189 @@
+SymbolInfo:
+        if (
+            Platforms.Mt5Live == self.algo_api.bin_settings.platform
+            or Platforms.Mt5Backtest == self.algo_api.bin_settings.platform
+        ):
+            import MetaTrader5 as mt5
+
+            is_mt5: bool = mt5.initialize(
+                login=62060378, server="pepperstone_uk-Demo", password="tFue0y*akr"
+            )
+
+            if not is_mt5:
+                print(
+                    "MT5 initialize() failed, error code =",
+                    mt5.last_error(),
+                )
+                quit()
+
+            # add MT5 specific symbol appendix
+            self.broker_symbol_name = mt5.symbols_get(self.name + "*")[0]  # .name
+
+            from ..QuoteProviders.QuoteProviderMt5 import ProviderQuote
+        pass
+
+
+Account:
+        if bin_settings.platform == Platforms.Mt5Live:
+            import MetaTrader5 as mt5
+            account_info = mt5.account_info()  # pylint: disable=no-member
+            self.account_type = AccountType.Hedged
+            self.balance = account_info.balance
+            self.equity = account_info.equity
+            self.margin = account_info.margin
+            self.free_margin = account_info.margin_free
+            self.margin_level = account_info.margin_level
+            # ACCOUNT_TRADE_MODE_DEMO, ACCOUNT_TRADE_MODE_CONTEST, ACCOUNT_TRADE_MODE_REAL
+            self.is_live = 2 == account_info.trade_mode
+            self.user_id = account_info.login
+            self.number = account_info.login
+            if "pepperstone" in account_info.company.lower():
+                self.broker_symbol_name = "Pepperstone"
+            if "raw" in account_info.company:
+                self.broker_symbol_name = "Raw Trading Ltd"
+
+            self.unrealized_net_profit = account_info.profit
+            self.leverage = self.precise_leverage = account_info.leverage
+            self.stop_out_level = account_info.margin_so_so
+            self.asset = account_info.currency
+            self.total_margin_calculation_type = account_info.margin_mode
+            self.credit = account_info.credit
+            self.user_nick_name = account_info.name
+
+
+
+
+
+execute_market_order:
+        if self.bin_settings.platform == Platforms.Mt5Live:
+            """
+            # order_filling_fok = 0      # Fill Or Kill order
+            # order_filling_ioc = 1      # Immediately Or Cancel
+            # order_filling_return = 2      # Return remaining volume to book
+            # order_filling_boc = 3      # Book Or Cancel order
+
+            struct mql_trade_request
+            {
+               ENUM_TRADE_REQUEST_ACTIONS    action;           // trade operation type
+               ulong                         magic;            // Expert Advisor ID (magic number)
+               ulong                         order;            // Order ticket
+               string                        symbol;           // trade symbol
+               double                        volume;           // Requested volume for a deal in lots
+               double                        price;            // Price
+               double                        stoplimit;        // stop_limit level of the order
+               double                        sl;               // stop Loss level of the order
+               double                        tp;               // Take Profit level of the order
+               ulong                         deviation;        // Maximal possible deviation from the requested price
+               ENUM_ORDER_TYPE               type;             // Order type
+               ENUM_ORDER_TYPE_FILLING       type_filling;     // Order execution type
+               ENUM_ORDER_TYPE_TIME          type_time;        // Order expiration type
+               datetime                      expiration;       // Order expiration time (for the orders of ORDER_TIME_SPECIFIED type)
+               string                        comment;          // Order comment
+               ulong                         Position;         // Position ticket
+               ulong                         position_by;      // The ticket of an opposite Position
+            };
+            """
+            import MetaTrader5 as mt5
+
+            order = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": symbol_name,
+                "volume": volume / pos.symbol.lot_size,
+                "type": (
+                    mt5.ORDER_TYPE_BUY
+                    if TradeType.Buy == trade_type
+                    else TradeType.Sell
+                ),
+                "price": pos.entry_price,
+                "deviation": 10,
+                "type_filling": mt5.ORDER_FILLING_IOC,  # ORDER_FILLING_IOC ist the only one that works
+            }
+
+            """
+            struct mql_trade_result
+            {
+               uint     retcode;          // Operation return code
+               ulong    deal;             // Deal ticket, if it is performed
+               ulong    order;            // Order ticket, if it is placed
+               double   volume;           // Deal volume, confirmed by broker
+               double   price;            // Deal price, confirmed by broker
+               double   bid;              // Current bid price
+               double   ask;              // Current ask price
+               string   comment;          // Broker comment to operation (by default it is filled by description of trade server return code)
+               uint     request_id;       // Request ID set by the terminal during the dispatch
+               int      retcode_external; // Return code of an external trading system
+            };
+            """
+            mql_trade_result = mt5.order_send(order)  # pylint: disable=no-member
+            lastError, description = mt5.last_error()  # pylint: disable=no-member
+            if 1 == lastError and "Request executed" in mql_trade_result.comment:
+                pos.id = mql_trade_result.order
+                mt5_pos = mt5.positions_get(ticket=pos.id)  # pylint: disable=no-member
+                pos.volume_in_units = mt5_pos[0].volume * pos.symbol.lot_size
+                pos.entry_time = datetime.fromtimestamp(mt5_pos[0].time)
+                pos.entry_price = mt5_pos[0].price_open
+                pos.margin = pos.volume_in_units * pos.entry_price / pos.symbol.leverage
+                pass
+            else:
+                is_append_position = False
+        pass
+
+                    if self.bin_settings.platform == Platforms.Mt5Live:
+                import MetaTrader5 as mt5
+
+                symbol = self.symbol_dictionary[pos.symbol_name]
+                mt5_tt = (
+                    mt5.ORDER_TYPE_BUY
+                    if TradeType.Sell == pos.trade_type
+                    else mt5.ORDER_TYPE_SELL
+                )
+                exit_price = (
+                    symbol.ask if TradeType.Buy == pos.trade_type else symbol.bid
+                )
+                order = {
+                    "action": mt5.TRADE_ACTION_DEAL,
+                    "symbol": pos.symbol_name,
+                    "volume": pos.Quantity,
+                    "type": mt5_tt,
+                    "price": exit_price,
+                    "deviation": 10,
+                    "type_filling": mt5.ORDER_FILLING_IOC,  # ORDER_FILLING_IOC ist the only one that works
+                }
+
+                mql_trade_result = mt5.order_send(order)  # pylint: disable=no-member
+                lastError, description = mt5.last_error()  # pylint: disable=no-member
+                if 1 == lastError and "Request executed" in mql_trade_result.comment:
+                    pass
+
+
+
+
+
+
+close_position(self, pos: Position):
+             if self.bin_settings.platform == Platforms.Mt5Live:
+                import MetaTrader5 as mt5
+
+                symbol = self.symbol_dictionary[pos.symbol_name]
+                mt5_tt = (
+                    mt5.ORDER_TYPE_BUY
+                    if TradeType.Sell == pos.trade_type
+                    else mt5.ORDER_TYPE_SELL
+                )
+                exit_price = (
+                    symbol.ask if TradeType.Buy == pos.trade_type else symbol.bid
+                )
+                order = {
+                    "action": mt5.TRADE_ACTION_DEAL,
+                    "symbol": pos.symbol_name,
+                    "volume": pos.Quantity,
+                    "type": mt5_tt,
+                    "price": exit_price,
+                    "deviation": 10,
+                    "type_filling": mt5.ORDER_FILLING_IOC,  # ORDER_FILLING_IOC ist the only one that works
+                }
+
+                mql_trade_result = mt5.order_send(order)  # pylint: disable=no-member
+                lastError, description = mt5.last_error()  # pylint: disable=no-member
+                if 1 == lastError and "Request executed" in mql_trade_result.comment:
+                    pass

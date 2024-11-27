@@ -15,7 +15,8 @@ class TradingSession:
 class MarketHours:
     @property
     def sessions(self) -> List[TradingSession]:
-        return List()
+        # create list
+        return list()
 
     # def is_opened(self) -> bool:
     #     pass
@@ -23,8 +24,8 @@ class MarketHours:
     # def is_opened(self, datetime: datetime) -> bool:
     #     pass
 
-    def is_opened(self, datetime=None) -> bool:
-        if datetime is not None:
+    def is_opened(self, datetime: datetime = None) -> bool:  # type:ignore
+        if datetime is not None:  # type:ignore
             # Logic for checking if trading session is active at a specific datetime
             return True
 

@@ -1,7 +1,4 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Optional
-from TradeResult import TradeResult
 from AlgoApiEnums import *
 
 
@@ -43,13 +40,13 @@ class PendingOrder(ABC):
 #         """
 #         pass
 
-#     @property
-#     @abstractmethod
-#     def id(self) -> int:
-#         """
-#         Unique order Id.
-#         """
-#         pass
+    @property
+    @abstractmethod
+    def id(self) -> int:
+        """
+        Unique order Id.
+        """
+        pass
 
 #     @property
 #     @abstractmethod
@@ -77,7 +74,7 @@ class PendingOrder(ABC):
 
 #     @property
 #     @abstractmethod
-#     def stop_loss(self) -> Optional[float]:
+#     def stop_loss(self) -> float:
 #         """
 #         The order stop loss in price
 #         """
@@ -85,7 +82,7 @@ class PendingOrder(ABC):
 
 #     @property
 #     @abstractmethod
-#     def stop_loss_pips(self) -> Optional[float]:
+#     def stop_loss_pips(self) -> float:
 #         """
 #         The order stop loss in Pips
 #         """
@@ -93,14 +90,14 @@ class PendingOrder(ABC):
 
 #     @property
 #     @abstractmethod
-#     def take_profit_percent(self) -> Optional[float]:
+#     def take_profit_percent(self) -> float:
 #         """
 #         The order take profit in price
 #         """
 
 #     @property
 #     @abstractmethod
-#     def take_profit_pips(self) -> Optional[float]:
+#     def take_profit_pips(self) -> float:
 #         """
 #         The order take profit in Pips
 #         """
@@ -139,7 +136,7 @@ class PendingOrder(ABC):
 
 #     @property
 #     @abstractmethod
-#     def stop_loss_trigger_method(self) -> Optional[stop_trigger_method]:
+#     def stop_loss_trigger_method(self) -> stop_trigger_method:
 #         """
 #         Trigger method for Position's stop_loss
 #         """
@@ -147,7 +144,7 @@ class PendingOrder(ABC):
 
 #     @property
 #     @abstractmethod
-#     def stop_order_trigger_method(self) -> Optional[stop_trigger_method]:
+#     def stop_order_trigger_method(self) -> stop_trigger_method:
 #         """
 #         Determines how pending order will be triggered in case it's a stop_order
 #         """
@@ -155,7 +152,7 @@ class PendingOrder(ABC):
 
 #     @property
 #     @abstractmethod
-#     def stop_limit_range_pips(self) -> Optional[float]:
+#     def stop_limit_range_pips(self) -> float:
 #         """
 #         Maximum limit from order target price, where order can be executed.
 #         """
@@ -171,14 +168,14 @@ class PendingOrder(ABC):
 #     #     pass
 
 #     @abstractmethod
-#     def modify_stop_loss_pips(self, stopLossPips: Optional[float]) -> trade_result:
+#     def modify_stop_loss_pips(self, stopLossPips: float]) -> trade_result:
 #         """
 #         Shortcut for Robot.modify_PendingOrder method to change stop Loss
 #         """
 #         pass
 
 #     @abstractmethod
-#     def modify_take_profit_pips(self, takeProfitPips: Optional[float]) -> trade_result:
+#     def modify_take_profit_pips(self, takeProfitPips: float]) -> trade_result:
 #         """
 #         Shortcut for Robot.modify_PendingOrder method to change Take Profit
 #         """
@@ -192,7 +189,7 @@ class PendingOrder(ABC):
 #         pass
 
 #     @abstractmethod
-#     def modify_expiration_time(self, expirationTime: Optional[datetime]) -> trade_result:
+#     def modify_expiration_time(self, expirationTime: datetime]) -> trade_result:
 #         """
 #         Shortcut for Robot.modify_PendingOrder method to change Expiration Time
 #         """

@@ -36,4 +36,5 @@
    •	Use descriptive variable names.
    •	Avoid mutable default arguments in functions.
    •	Using Black (Hotkey ^K^D) to beautify the code.
+   •	Type checking in Visual Studio must be set to "strict" (Options/Python/Analysis)
 

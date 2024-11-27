@@ -1,0 +1,26 @@
+Account:
+        if (
+            bin_settings.platform == Platforms.MeFiles
+            or bin_settings.platform == Platforms.Csv
+            or bin_settings.platform == Platforms.Mt5Backtest
+        ):
+            self.account_type = AccountType.Hedged
+            self.balance = bin_settings.init_balance
+            self.equity = bin_settings.init_balance
+            self.margin = 0
+            self.free_margin = bin_settings.init_balance
+            # ACCOUNT_TRADE_MODE_DEMO, ACCOUNT_TRADE_MODE_CONTEST, ACCOUNT_TRADE_MODE_REAL
+            self.is_live = 0
+            self.margin_level = 0
+            self.user_id = 2911
+            self.number = 2911
+            self.broker_symbol_name = "Pepperstone"
+
+            self.unrealized_net_profit = 0
+            self.leverage = self.precise_leverage = 500
+            self.stop_out_level = 20
+            self.asset = "EUR"
+            self.total_margin_calculation_type = 0
+            self.credit = 0
+            self.user_nick_name = "MeFiles"
+

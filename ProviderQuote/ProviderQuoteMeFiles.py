@@ -1,11 +1,9 @@
-# Imports
-# region
 import os
 import struct
 import pytz
 from datetime import datetime, timedelta
-from xmlrpc.client import boolean
-from typing import Tuple
+from AlgoApi import AlgoApi
+
 # the following weired imports are a suggsetion from copilot
 # to solve the problem of differences between visual studio editor
 # and script runtime. The proble is that the script runtime cannot
@@ -16,22 +14,23 @@ try:
 except:
     from QuoteBar import QuoteBar
     from SymbolInfo import SymbolInfo
-# endregion
+
 
 ######################################
-class QuoteProvider:
-    def __init__(self, TradingClass, symbol_info: SymbolInfo):
-        self.bin_settings = TradingClass.bin_settings
+class ProviderQuote:
+    def __init__(self, algo_api: AlgoApi, symbol_info: SymbolInfo):
+        self.bin_settings = algo_api.bin_settings
         self.symbol_info = symbol_info
         self.file_handle = None
 
     ######################################
     def __del__(self):
-        self.file_handle.close()
+        if self.file_handle is not None:
+            self.file_handle.close()
 
     ######################################
-    def get_quote_at_date(self, dt) -> Tuple[str, QuoteBar]:
-        start_filename = self.bars_filename = os.path.join(
+    def get_quote_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
+        self.bars_filename = os.path.join(
             self.bin_settings.platform_parameter,
             self.symbol_info.name,
             "m1",
@@ -65,7 +64,7 @@ class QuoteProvider:
         return "", quote
 
     ######################################
-    def get_next_quote(self) -> Tuple[str, QuoteBar]:
+    def get_next_quote(self) -> tuple[str, QuoteBar]:
         quote = self.read_bar()
         if None == quote:
             self.last_date_time += timedelta(days=1)
@@ -77,7 +76,7 @@ class QuoteProvider:
             return "", quote
 
     ######################################
-    def read_bar(self) -> Tuple[str, QuoteBar]:
+    def read_bar(self) -> tuple[str, QuoteBar]:
         quote = QuoteBar()
 
         dt_data = self.file_handle.read(8)
