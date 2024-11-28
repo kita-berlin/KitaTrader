@@ -2,8 +2,12 @@
 from typing import List
 from IRobot import IRobot
 from AlgoApiEnums import *
+from AlgoApi import HedgePosition
+from PyLogger import PyLogger
 from Api.CoFu import *
 from Constants import *
+from AlgoApi import Symbol
+from Account import Account
 
 # import talib
 # from talib import MA_Type
@@ -31,7 +35,6 @@ class Kangaroo(IRobot):
         self.trade_direction = TradeDirection.Mode1
 
     # endregion
-    pass
 
     ###################################
     def on_start(self) -> None:
@@ -47,12 +50,60 @@ class Kangaroo(IRobot):
         self.invest_count: int = 0
         self.current_volume: float = 0
         self.cluster_profit: float = 0
-        self.daily_revenue: List[float] = []
+        self.daily_revenue: list[float] = []
         self.prev_revenue: float = 0
         self.sharpe_ratio: float = 0
         self.sortino_ratio: float = 0
         self.calmar: float = 0
         self.is_train: bool = False
+        # endregion
+
+        # Logging
+        # region
+        header = (
+            "\nNumber"
+            + ",net_profit"
+            + ",Balance"
+            + ",Symbol"
+            + ",Mode"
+            + ",Volume"
+            # + ",Swap"
+            + ",OpenDate"
+            + ",OpenTime"
+            + ",CloseDate"
+            + ",CloseTime"
+            + ",OpenPrice"
+            + ",ClosePrice"
+            + ",TradeMargin"
+            # + ",MaxEquityDrawdown"
+        )
+
+        self.log_mode = PyLogger.SELF_MADE
+        self.open_logfile(self.version.split(" ")[0] + ".csv", self.log_mode, header)
+        self.log_flush()
+        # endregion
+
+        account = Account()
+        account.type = AccountType.Hedged
+        account.balance = account.equity = 1000
+        account.leverage = 500
+        account.asset = "EUR"
+
+        # from ProviderBroker.BrokerMt5 import BrokerMt5
+        # mt5_broker =  BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr")
+        from ProviderBroker.BrokerMe import BrokerMe
+
+        quote_provider = BrokerMe(
+            "G:\\Meine Ablage\\TickBars\\mbars", "Assets_Pepperstone_Demo.csv"
+        )
+
+        from ProviderBroker.BrokerPaper import BrokerPaper
+
+        trade_provider = BrokerPaper(account)  # Balance, Leverage
+
+        self.get_symbol("NZDCAD", quote_provider, trade_provider)
+
+        self.bars = self.get_bars(Constants.SEC_PER_MINUTE, self.symbol.name)
 
         """ example how to use indicators
         self.time_period = 14
@@ -86,7 +137,8 @@ class Kangaroo(IRobot):
             )
 
     ###################################
-    def on_tick(self):
+    def on_tick(self, symbol: Symbol):
+        self.symbol = symbol
         """example how to use own indicators and ta-lib
         ta_sma = talib.SMA(
             self.indi_bars.close_prices.data[-self.time_period :], timeperiod =self.time_period
@@ -114,7 +166,7 @@ class Kangaroo(IRobot):
         my_lower = self.bb_indi.Bottoself.Last(0)
         """
 
-        current_open = self.symbol.ask if self.is_long else self.symbol.bid
+        current_open = symbol.ask if self.is_long else self.symbol.bid
         current_close = self.symbol.bid if self.is_long else self.symbol.ask
         target_cash = current_repurchase_price = 0
 
@@ -167,7 +219,7 @@ class Kangaroo(IRobot):
 
         # Take Profit ?
         is_just_closed = False
-        if self.is_trading_allowed:
+        if self.symbol.is_trading_allowed:
             if self.invest_count > 0:
                 # check profit instead of price because of swaps etc.
                 if self.cluster_profit > target_cash:
@@ -193,7 +245,7 @@ class Kangaroo(IRobot):
         pass
 
         # buy ?
-        if self.is_trading_allowed and not is_just_closed:
+        if self.symbol.is_trading_allowed and not is_just_closed:
             is_reinvest = False
             volume_to_add = self.initial_volume
 
@@ -216,7 +268,6 @@ class Kangaroo(IRobot):
                 # Das volume_to_add beeinflusst den Mischpreis (self.avg_price)
                 # und zieht ihn näher zum aktuellen Preis hin
                 h_pos = HedgePosition(
-                    self,
                     self.symbol,
                     self.is_long,
                     self.get_label(),
@@ -251,8 +302,6 @@ class Kangaroo(IRobot):
     def on_stop(self):
         print("Done")
         pass
-
-        ###################################
 
     ###################################
     def get_label(self):

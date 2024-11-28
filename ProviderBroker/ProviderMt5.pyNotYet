@@ -27,7 +27,7 @@ Account:
         if bin_settings.platform == Platforms.Mt5Live:
             import MetaTrader5 as mt5
             account_info = mt5.account_info()  # pylint: disable=no-member
-            self.account_type = AccountType.Hedged
+            self.type = AccountType.Hedged
             self.balance = account_info.balance
             self.equity = account_info.equity
             self.margin = account_info.margin
@@ -187,3 +187,32 @@ close_position(self, pos: Position):
                 lastError, description = mt5.last_error()  # pylint: disable=no-member
                 if 1 == lastError and "Request executed" in mql_trade_result.comment:
                     pass
+
+
+
+Update account:
+        # Update Account
+        if len(self.positions) >= 1:
+            if Platforms.Mt5Live == self.bin_settings.platform:
+                import MetaTrader5 as mt5
+
+                account_info = mt5.account_info()
+                self.Account.balance = account_info.balance
+                self.Account.equity = account_info.equity
+                self.Account.margin = account_info.margin
+                self.Account.FreeMargin = account_info.margin_free
+                self.Account.MarginLevel = account_info.margin_level
+                self.Account.unrealized_net_profit = account_info.profit
+            else:
+                open_positions_profit = 0
+                for x in self.positions:
+                    open_positions_profit += (
+                        (x.current_price - x.entry_price)
+                        * (1 if x.trade_type == TradeType.Buy else -1)
+                        * x.volume_in_units
+                    )
+                    self.Account.unrealized_net_profit += open_positions_profit
+                    x.max_drawdown = min(x.max_drawdown, open_positions_profit)
+
+                self.Account.equity = self.Account.balance + open_positions_profit
+            pass

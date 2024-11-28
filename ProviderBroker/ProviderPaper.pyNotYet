@@ -4,7 +4,7 @@ Account:
             or bin_settings.platform == Platforms.Csv
             or bin_settings.platform == Platforms.Mt5Backtest
         ):
-            self.account_type = AccountType.Hedged
+            self.type = AccountType.Hedged
             self.balance = bin_settings.init_balance
             self.equity = bin_settings.init_balance
             self.margin = 0

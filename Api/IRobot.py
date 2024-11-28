@@ -5,7 +5,8 @@ from LogParams import LogParams
 from Account import Account
 from PyLogger import PyLogger
 from AlgoApiEnums import *
-from AlgoApi import Symbol, Position
+from AlgoApi import Symbol, Position, Bars
+from ProviderBroker.BrokerProvider import BrokerProvider
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
@@ -15,9 +16,7 @@ T = TypeVar("T", float, int)
 class IRobot(ABC):
     # Members
     # region
-    symbol: Symbol
     time: datetime
-    is_trading_allowed: bool
     Account: Account
     positions: list[Position]
     history: list[Position]
@@ -37,7 +36,7 @@ class IRobot(ABC):
     def on_start(self) -> None: ...
 
     @abstractmethod
-    def on_tick(self) -> None: ...
+    def on_tick(self, symbol: Symbol):...
 
     @abstractmethod
     def on_stop(self) -> None: ...
@@ -49,7 +48,13 @@ class IRobot(ABC):
 
     # Trading API
     # region
-    def get_symbol(self, symbol_name: str): ...
+    def get_symbol(
+        self,
+        symbol_name: str,
+        quote_provider: BrokerProvider,
+        trade_provider: BrokerProvider,
+    ) -> Symbol: ...
+    def get_bars(self, timeframe_seconds:int, symbol_name:str) -> Bars:...
     def close_trade(
         self,
         pos: Position,
@@ -125,7 +130,9 @@ class IRobot(ABC):
     def standard_deviation(self, is_sortino: bool, vals: list[float]) -> float: ...
 
     @abstractmethod
-    def is_new_bar(self, seconds: int, time: datetime, prevTime: datetime) -> bool: ...
+    def is_new_bar_get(
+        self, seconds: int, time: datetime, prevTime: datetime
+    ) -> bool: ...
 
     # endregion
 
@@ -136,7 +143,6 @@ class IRobot(ABC):
 
     def open_logfile(
         self,
-        logger: PyLogger,
         filename: str = "",
         mode: int = PyLogger.HEADER_AND_SEVERAL_LINES,
         header: str = "",

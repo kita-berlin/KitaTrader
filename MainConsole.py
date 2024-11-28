@@ -14,9 +14,6 @@ class MainConsole:
             if trading.tick():
                 break
 
-            # reward = trading.calculate_reward()
-        pass
-
         trading.stop()
 
 

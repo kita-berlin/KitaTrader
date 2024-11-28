@@ -6,6 +6,7 @@ class PyLogger:
     NO_HEADER: int = 1
     ONE_LINE: int = 2
     SELF_MADE: int = 4
+    mode: int
 
     def __init__(self):
         self.log_stream_writer = None

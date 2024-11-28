@@ -3,11 +3,12 @@ import math
 import importlib.util
 import importlib
 import numpy as np
+import csv
+import traceback
 from abc import ABC, abstractmethod
 from numpy.typing import NDArray
 from typing import TypeVar, Iterable, Iterator
 from datetime import datetime, timedelta, timezone
-
 from ConvertUtils import ConvertUtils
 from Account import Account
 from PyLogger import PyLogger
@@ -18,6 +19,7 @@ from QuoteBar import QuoteBar
 from LeverageTier import LeverageTier
 from MarketHours import MarketHours
 from LogParams import LogParams
+from ProviderBroker.BrokerProvider import BrokerProvider
 from AlgoApiEnums import *
 from CoFu import *
 
@@ -345,7 +347,7 @@ class Indicators:
         return indicator
 
     # Hide
-    # # region
+    # region
     # def exponential_moving_average(self, source: DataSeries, periods: int):
     #     # Exponential Moving Average indicator instance
     #     pass
@@ -365,14 +367,14 @@ class Indicators:
     # def high_minus_low(self, bars=None):
     #     # High Minus Low indicator instance with bars
     #     if None == bars:
-    #         bars = self.algo_api.bars
+    #         bars = self.bars
 
     #     pass
 
     # def true_range(self, bars):
     #     # True Range indicator instance with bars
     #     if None == bars:
-    #         bars = self.algo_api.bars
+    #         bars = self.bars
 
     #     pass
 
@@ -443,28 +445,28 @@ class Indicators:
     # def median_price(self, bars):
     #     # Median Price indicator instance with bars
     #     if None == bars:
-    #         bars = self.algo_api.bars
+    #         bars = self.bars
 
     #     pass
 
     # def williams_accumulation_distribution(self, bars):
     #     # Williams Accumulation Distribution indicator instance with bars
     #     if None == bars:
-    #         bars = self.algo_api.bars
+    #         bars = self.bars
 
     #     pass
 
     # def fractal_chaos_bands(self, bars):
     #     # Fractal Chaos Bands indicator instance with bars
     #     if None == bars:
-    #         bars = self.algo_api.bars
+    #         bars = self.bars
 
     #     pass
 
     # def typical_price(self, bars):
     #     # Typical Price indicator instance with bars
     #     if None == bars:
-    #         bars = self.algo_api.bars
+    #         bars = self.bars
 
     #     pass
 
@@ -527,7 +529,7 @@ class Indicators:
     # def weighted_close(self, bars):
     #     # Weighted Close indicator instance with bars
     #     if None == bars:
-    #         bars = self.algo_api.bars
+    #         bars = self.bars
 
     #     pass
 
@@ -537,7 +539,7 @@ class Indicators:
 
     # def ease_of_movement(self, periods: int, ma_type):
     #     # Ease Of Movement indicator instance
-    #     bars = self.algo_api.bars
+    #     bars = self.bars
 
     #     pass
 
@@ -588,7 +590,6 @@ class Bars:
     # bars are not indexed; only time and data series are indexed
     # No bars.Last().open_time; Use bars.open_times.Last() instead
     # So no: def __getitem__(self, index: int) -> Bar: # Returns a bar based on its index#
-
     # and no: @property
     # def last_bar(self) -> Bar: # Gets the last bar in the chart.#
 
@@ -610,6 +611,11 @@ class Bars:
     is_new_bar: bool = False
     chart_time_array = []
     # endregion
+
+    # forward declarations
+    def is_new_bar_get(
+        self, seconds: int, time: datetime, prevTime: datetime
+    ) -> bool: ...
 
     def __init__(self, timeframe_seconds: int, symbol_name: str):
         self.default_timeframe_seconds = timeframe_seconds
@@ -635,7 +641,7 @@ class Bars:
         # epoc_dt = quote.time.timestamp() // 60
         # tf_minutes = self.default_timeframe_seconds // 60
         # tf_modulo = epoc_dt % tf_minutes
-        if 0 == self.open_times.count or self.algo_api.is_new_bar(
+        if 0 == self.open_times.count or self.is_new_bar_get(
             self.default_timeframe_seconds, quote.time, self.open_times.data[-1]
         ):
             self.open_times.data = np.append(
@@ -733,10 +739,45 @@ class SymbolInfo:
     min_lot: float = 0.0
     max_lot: float = 0.0
     lot_size: float = 0.0
+    leverage: float = 0.0
+    is_trading_allowed: bool = False
     # endregion
 
-    def __init__(self, symbol_name: str):
+    def __init__(
+        self,
+        symbol_name: str,
+        quote_provider: BrokerProvider,
+        trade_provider: BrokerProvider,
+    ):
         self.name = symbol_name
+        self.quote_provider = quote_provider
+        self.trade_provider = trade_provider
+
+        assets_path = os.path.join("Files", quote_provider.assets_file_name)
+        self.market_values = MarketValues()
+        error = self.init_market_info(assets_path, symbol_name, self.market_values)
+        if "" != error:
+            print(error)
+            exit()
+
+        self.tick_size = self.market_values.point_size
+        self.min_lot = self.market_values.min_lot
+        self.max_lot = self.market_values.max_lot
+        self.lot_step = self.min_lot
+        self.leverage = self.market_values.symbol_leverage
+        self.lot_size = self.market_values.lot_size
+        self.tick_value = self.market_values.point_value
+        self.commission = self.market_values.commission
+        self.swap_long = self.market_values.swap_long
+        self.swap_short = self.market_values.swap_short
+        self.swap3_days_rollover = 3
+        self.base_asset = self.market_values.symbol_currency_base
+        self.QuoteAsset = self.market_values.symbol_currency_quote
+        self.swap_calculation_type: SymbolSwapCalculationType = (
+            SymbolSwapCalculationType.Pips
+        )
+        self.is_trading_enabled = True
+        self.trading_mode = SymbolTradingMode.FullAccess
 
     @property
     def tick_size(self) -> float:
@@ -770,7 +811,7 @@ class SymbolInfo:
     dynamic_leverage: list[LeverageTier] = []
 
     @property
-    def MarketHours(self) -> MarketHours:
+    def market_hours(self) -> MarketHours:
         return MarketHours()
 
     def init_market_info(
@@ -839,17 +880,22 @@ class SymbolInfo:
         self.bid = quote.open
         self.ask = quote.open_ask
 
-    # def on_tick(self) -> str:
-    #     error, quote = self.quote_provider.get_next_quote()
-    #     if None == quote:
-    #         return error
-    #     self.update_bars(quote)
-    #     return ""
+    def on_tick(self) -> str:
+        error, quote = self.quote_provider.get_next_quote()
+        if None == quote:  # type: ignore
+            return error
+        # self.update_bars(quote)
+        return ""
 
 
 class Symbol(SymbolInfo):
-    def __init__(self, symbol_name: str):
-        super().__init__(symbol_name)
+    def __init__(
+        self,
+        symbol_name: str,
+        quote_provider: BrokerProvider,
+        trade_provider: BrokerProvider,
+    ):
+        super().__init__(symbol_name, quote_provider, trade_provider)
 
     ######################################
     @property
@@ -1026,7 +1072,6 @@ class AlgoApi:
         self.max_equity_drawdown_value: list[float] = []
         self.time: datetime
         self.running_mode: RunningMode
-        self.logger: PyLogger = None  # type: ignore
         self.is_train: bool
         self.bin_settings = BinSettings(
             robot_name=self.system_settings.robot_name,
@@ -1057,7 +1102,7 @@ class AlgoApi:
         self.max_balance_drawdown_value = [0] * 1
         self.max_balance_drawdown_time = datetime.min
         self.max_balance_drawdown_count = 0
-        self.max_equity = [0] * 1
+        self.max_equity: list[float] = [0] * 1
         self.max_equity_drawdown_value = [0] * 1
         self.max_equity_drawdown_time = datetime.min
         self.max_equity_drawdown_count = 0
@@ -1067,7 +1112,6 @@ class AlgoApi:
         self.avg_open_duration_sum: list[timedelta] = [timedelta.min] * 1
         self.open_duration_count: list[int] = [0] * 1  # arrays because of by reference
         self.max_open_duration: list[timedelta] = [timedelta.min] * 1
-        self.is_trading_allowed: bool = False
 
         self.loaded_robot = self.load_class_from_file(
             os.path.join("robots", self.system_settings.robot_name + ".py"),
@@ -1080,14 +1124,43 @@ class AlgoApi:
 
     # Trading API
     # region
-    ###################################
-    def get_symbol(self, symbol_name: str):
-        ret_val = Symbol(symbol_name)
+    def get_symbol(
+        self,
+        symbol_name: str,
+        quote_provider: BrokerProvider,
+        trade_provider: BrokerProvider,
+    ):
+        ret_val = Symbol(symbol_name, quote_provider, trade_provider)
         self.symbol_dictionary[symbol_name] = ret_val
         self.symbol_list.append(ret_val)
         return ret_val
 
-    ###################################
+    def get_bars(self, timeframe_seconds: int, symbol_name: str) -> Bars:
+        new_bars = Bars(timeframe_seconds, symbol_name)
+        symbol = self.symbol_dictionary[symbol_name]
+        symbol.bars_list.append(new_bars)
+
+        # build bars
+        bars_start_dt = self.bin_settings.start_dt - timedelta(
+            seconds=1000 * timeframe_seconds
+        )
+        error, quote = symbol.quote_provider.get_quote_at_date(bars_start_dt)
+        new_bars.update_bar(quote)
+
+        while True:
+            error, quote = symbol.quote_provider.get_next_quote()
+            if "" != error:
+                break
+
+            new_bars.update_bar(quote)
+            if (
+                new_bars.open_times.count > 0
+                and quote.time >= self.bin_settings.start_dt
+            ):
+                break
+        pass
+        return new_bars
+
     def close_trade(
         self,
         pos: Position,
@@ -1129,7 +1202,6 @@ class AlgoApi:
             return True
         return False
 
-    ###################################
     def execute_market_order(
         self, trade_type: TradeType, symbol_name: str, volume: float, label: str = ""
     ) -> Position:
@@ -1170,7 +1242,6 @@ class AlgoApi:
 
         return pos  # pylint: disable=no-member # type: ignore
 
-    ###################################
     def close_position(self, pos: Position):
         trade_result = TradeResult()
         try:
@@ -1275,7 +1346,7 @@ class AlgoApi:
             / (len(vals) - 1)
         )
 
-    def is_new_bar(self, seconds: int, time: datetime, prevTime: datetime) -> bool:
+    def is_new_bar_get(self, seconds: int, time: datetime, prevTime: datetime) -> bool:
         if datetime.min == prevTime:
             return True
         return int(time.timestamp()) // seconds != int(prevTime.timestamp()) // seconds
@@ -1292,13 +1363,13 @@ class AlgoApi:
 
     def open_logfile(
         self,
-        logger: PyLogger,
         filename: str = "",
         mode: int = PyLogger.HEADER_AND_SEVERAL_LINES,
         header: str = "",
     ):
         if self.running_mode != RunningMode.Optimization:
-            if self.logger is not None:  # type: ignore
+            if logger is not None:  # type: ignore
+                self.logger = PyLogger()
                 self.logger.log_open(
                     self.logger.make_log_path(),
                     filename,
@@ -1561,7 +1632,8 @@ class AlgoApi:
 
         self.logger.close(header_line)
         self.log_stream_writer = None
-        # endregion
+
+    # endregion
 
     # Price and lot/volume calculation
     # region
@@ -1677,11 +1749,11 @@ class AlgoApi:
 
         def get_bars(self, timeframe_seconds: int, symbol_name: str) -> Bars:
             new_bars = Bars(self.algo_api, timeframe_seconds, symbol_name)
-            symbol = self.algo_api.symbol_dictionary[symbol_name]
+            symbol = self.symbol_dictionary[symbol_name]
             symbol.bars_list.append(new_bars)
 
             # build bars
-            # bars_start_dt = self.algo_api.bin_settings.start_dt - timedelta(
+            # bars_start_dt = self.bin_settings.start_dt - timedelta(
             #     seconds=1000 * timeframe_seconds
             # )
             # error, quote = symbol.quote_provider.get_quote_at_date(bars_start_dt)
@@ -1695,7 +1767,7 @@ class AlgoApi:
             #     new_bars.update_bar(quote)
             #     if (
             #         new_bars.open_times.count > 0
-            #         and quote.time >= self.algo_api.bin_settings.start_dt
+            #         and quote.time >= self.bin_settings.start_dt
             #     ):
             #         break
             pass
@@ -1755,22 +1827,13 @@ class AlgoApi:
             else RunningMode.SilentBacktesting
         )
         self.is_stop = False
-        self.bars = None
         # endregion
 
         # Init default symbol
-        self.symbol = self.get_symbol(self.bin_settings.default_symbol_name)
-
-        # Init default bars (needed for chart if visible)
-        if self.bin_settings.bars_in_chart > 0:
-            self.bars = self.market_data.get_bars(
-                self.bin_settings.default_timeframe_seconds, self.symbol.name
-            )
 
         # Höhere Entropiewerte bedeuten, dass die Datenquelle weniger vorhersehbar
         # und zufälliger ist. Umgekehrt bedeuten niedrigere Entropiewerte,
         # dass die Datenquelle vorhersehbarer und weniger zufällig ist.
-
         """
         # Generate a random price series
         price_series = np.randoself.normal(1, 0.2, 100000)
@@ -1797,94 +1860,39 @@ class AlgoApi:
         #     self.bars,
         #     self.bin_settings,
         # )
-
-        self.time = self.initial_time = self.symbol.time
         pass
 
     def start(self):
-        self.logger = PyLogger(self)
-        header = (
-            "\nNumber"
-            + ",net_profit"
-            + ",Balance"
-            + ",Symbol"
-            + ",Mode"
-            + ",Volume"
-            # + ",Swap"
-            + ",OpenDate"
-            + ",OpenTime"
-            + ",CloseDate"
-            + ",CloseTime"
-            + ",OpenPrice"
-            + ",ClosePrice"
-            + ",TradeMargin"
-            # + ",MaxEquityDrawdown"
-        )
-
-        self.log_mode = self.logger.SELF_MADE
-        self.open_logfile(
-            self.logger, self.version.split(" ")[0] + ".csv", self.log_mode, header
-        )
-        self.log_flush()
-
         self.max_equity[0] = self.Account.balance
         self.max_equity_drawdown_value[0] = 0
 
-        self.loaded_robot.on_start(
-            self, self.trade_direction in [TradeDirection.Mode1, TradeDirection.Long]
-        )
-
-        self.on_start()
+        self.loaded_robot.on_start()  # type: ignore
 
     def tick(self):
         # update quote, bars, Indicators
-        # of 1st tick must update all bars and Indicators which have been inized in on_start()
+        # 1st tick must update all bars and Indicators which have been inized in on_start()
         for symbol in self.symbol_list:
             error = symbol.on_tick()
             if "" != error or self.symbol_list[0].time > self.bin_settings.end_dt:
                 return True
 
-        self.time = self.symbol_list[0].time
+            ########################################
+            # Update Account
+            if len(self.positions) >= 1:
+                symbol.trade_provider.update_account()
 
-        ########################################
-        # Update Account
-        if len(self.positions) >= 1:
-            if Platforms.Mt5Live == self.bin_settings.platform:
-                import MetaTrader5 as mt5
+            # check spread
+            is_spread = True
+            if (
+                symbol.spread < 0
+                or symbol.spread
+                > 2 * symbol.market_values.avg_spread * symbol.tick_size
+            ):
+                is_spread = False
+            symbol.is_trading_allowed = is_spread
 
-                account_info = mt5.account_info()
-                self.Account.balance = account_info.balance
-                self.Account.equity = account_info.equity
-                self.Account.margin = account_info.margin
-                self.Account.FreeMargin = account_info.margin_free
-                self.Account.MarginLevel = account_info.margin_level
-                self.Account.unrealized_net_profit = account_info.profit
-            else:
-                open_positions_profit = 0
-                for x in self.positions:
-                    open_positions_profit += (
-                        (x.current_price - x.entry_price)
-                        * (1 if x.trade_type == TradeType.Buy else -1)
-                        * x.volume_in_units
-                    )
-                    self.Account.unrealized_net_profit += open_positions_profit
-                    x.max_drawdown = min(x.max_drawdown, open_positions_profit)
-
-                self.Account.equity = self.Account.balance + open_positions_profit
-            pass
-
-        # check spread
-        is_spread = True
-        if (
-            self.symbol.spread < 0
-            or self.symbol.spread
-            > 2 * self.market_values.avg_spread * self.symbol.tick_size
-        ):
-            is_spread = False
-        self.is_trading_allowed = is_spread
-
-        # call bot's on_tick
-        self.loaded_robot.on_tick(self)
+            # call bot's on_tick
+            self.loaded_robot.on_tick(symbol)  # type: ignore
 
         # do max/min calcs
         self.max(self.max_margin, self.Account.margin)
@@ -1910,20 +1918,19 @@ class AlgoApi:
 
     def stop(self):
         # call bot
-        self.on_stop()
+        self.loaded_robot.on_stop()  # type: ignore
 
         # calc performance numbers
         min_duration = timedelta.max
-        avg_duration_sum = 0
         max_duration = timedelta.min
         duration_count = 0
         max_invest_counter = [0] * 1
         # invest_count_histo = None
-        avg_duration_sum += self.avg_open_duration_sum[0]
         duration_count += self.open_duration_count[0]
         min_duration = min(self.min_open_duration[0], min_duration)
         max_duration = max(self.max_open_duration[0], max_duration)
-        self.loaded_robot.on_stop(self)
+        self.loaded_robot.on_stop(self)  # type:ignore
+
         # self.max(self.max_invest_count[0], self.max_invest_count)
 
         # if direction == TradeDirection.Long == self.loaded_robot.longShorts[0].is_long:
@@ -2115,7 +2122,7 @@ class AlgoApi:
         self.log_close()
 
     def calculate_reward(self) -> float:
-        return self.loaded_robot.get_tick_fitness(algo_api)
+        return self.loaded_robot.get_tick_fitness()  # type:ignore
 
     # endregion
 
@@ -2190,14 +2197,16 @@ class HedgePosition:
 
             if self.main_position is not None:  # type: ignore
                 pass
-                self.main_margin_after_open = self.bot.Account.margin
+                self.main_margin_after_open = self.symbol.trade_provider.account.margin
                 self.freeze_price_offset = inherited_freeze_price_offset
-                self.freeze_corrected_entry_price = self.main_position.entry_price
+                self.freeze_corrected_entry_price = (
+                    self.main_position.entry_price  # type:ignore
+                )
 
         return self.main_position is not None  # type: ignore
 
     def do_modify_volume(self, volume: float, current_open_price: float) -> bool:
-        self.last_modified_time = self.bot.time
+        self.last_modified_time = self.symbol.time
         self.freeze_corrected_entry_price = current_open_price
         if self.main_position is not None:  # type: ignore
             return self.main_position.modify_volume(volume).is_successful
@@ -2215,7 +2224,7 @@ class HedgePosition:
         open_duration_count: list[int],
         max_open_duration: list[timedelta],
         is_utc: bool = True,
-    ):
+    ) -> bool:
         result = False
         if self.main_position is not None:  # type: ignore
             result = self.bot.close_trade(

@@ -2,7 +2,7 @@ from AlgoApiEnums import *
 
 
 class Account:
-    account_type: AccountType
+    type: AccountType
     balance: float
     equity: float
     margin: float
