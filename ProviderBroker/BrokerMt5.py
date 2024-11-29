@@ -1,14 +1,13 @@
 import MetaTrader5 as mt5
 from BrokerProvider import BrokerProvider
-
+from AlgoApi import Symbol, Account
 
 class BrokerMt5(BrokerProvider):
-    # login=62060378, server="pepperstone_uk-Demo", password="tFue0y*akr"
-    def __init__(self, parameter: str):
-        self.parameter = parameter
+    def __init__(self, account: Account, parameter: str):
+        super().__init__(account, parameter)
         pass
 
-    def init(self, symbol_name: str):
+    def init(self, symbol: Symbol):
         para_split = self.parameter.split(",")
         is_mt5: bool = mt5.initialize(int(para_split[0]), para_split[1], para_split[2])
 
@@ -20,4 +19,4 @@ class BrokerMt5(BrokerProvider):
             quit()
 
         # add MT5 specific symbol appendix
-        self.broker_symbol_name = mt5.symbols_get(symbol_name + "*")[0]
+        self.broker_symbol_name = mt5.symbols_get(symbol.name + "*")[0]

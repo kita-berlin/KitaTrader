@@ -2,15 +2,13 @@ import os
 import struct
 import pytz
 from datetime import datetime, timedelta
-from QuoteBar import QuoteBar
 from BrokerProvider import BrokerProvider
-from AlgoApi import Symbol
+from AlgoApi import Symbol, QuoteBar, Account
 
 
 class BrokerMe(BrokerProvider):
-    def __init__(self, path: str, assets_file_name: str):
-        self.path = path
-        self.assets_file_name = assets_file_name
+    def __init__(self, account: Account, parameter: str):
+        super().__init__(account, parameter)
         self.file_handle = None
 
     def __del__(self):
@@ -19,7 +17,7 @@ class BrokerMe(BrokerProvider):
 
     def init(self, symbol: Symbol):
         self.symbol = symbol
-        self.symbol_path = os.path.join(self.path, symbol.name)
+        self.symbol_path = os.path.join(self.parameter, symbol.name)
         if not os.path.isdir(self.symbol_path):
             print("Not found: " + self.symbol_path)
             quit()

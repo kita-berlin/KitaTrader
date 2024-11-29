@@ -5,20 +5,12 @@ import importlib
 import numpy as np
 import csv
 import traceback
+import locale
 from abc import ABC, abstractmethod
 from numpy.typing import NDArray
 from typing import TypeVar, Iterable, Iterator
 from datetime import datetime, timedelta, timezone
-from ConvertUtils import ConvertUtils
-from Account import Account
-from PyLogger import PyLogger
-from TradeResult import TradeResult
-from Settings import BinSettings
-from Asset import Asset
-from QuoteBar import QuoteBar
-from LeverageTier import LeverageTier
-from MarketHours import MarketHours
-from LogParams import LogParams
+from AlgoApi import Account, Asset
 from ProviderBroker.BrokerProvider import BrokerProvider
 from AlgoApiEnums import *
 from CoFu import *
@@ -29,6 +21,535 @@ T = TypeVar("T", float, int)
 
 
 # Due to circular import problmes with separated classe, we define them here
+############# Some classes needed for AlgoApi ########################
+class StrSettings:
+    def __init__(
+        self,
+        robot_name: str,
+        default_symbol_name: str,  # for json must be exact same names as the member vars
+        default_timeframe_value: str,
+        default_timeframe_unit: str,
+        trade_direction: str,
+        init_balance: str,
+        start_dt: str,
+        end_dt: str,
+        is_visual_mode: str,
+        speed: str,
+        chart_bars: str,
+        data_rate: str,
+        platform: str,
+        platform_parameter: str,
+    ):
+        self.robot_name: str = robot_name
+        self.default_symbol_name: str = default_symbol_name
+        self.default_timeframe_value: str = default_timeframe_value
+        self.default_timeframe_unit: str = default_timeframe_unit
+        self.trade_direction: str = trade_direction
+        self.init_balance: str = init_balance
+        self.start_dt: str = start_dt
+        self.end_dt: str = end_dt
+        self.is_visual_mode: str = is_visual_mode
+        self.speed: str = speed
+        self.chart_bars: str = chart_bars
+        self.data_rate: str = data_rate
+        self.platform: str = platform
+        self.platform_parameter: str = platform_parameter
+
+
+class BinSettings:
+    def __init__(
+        self,
+        robot_name: str,
+        default_symbol_name: str,
+        trade_direction: TradeDirection,
+        init_balance: float,
+        start_dt: datetime,
+        end_dt: datetime,
+        is_visual_mode: bool,
+        speed: int,
+        bars_in_chart: int,
+        default_timeframe_seconds: int,
+        data_rate: DataRates,
+        platform: Platforms,
+        platform_parameter: str,
+    ):
+        self.robot_name: str = robot_name
+        self.default_symbol_name: str = default_symbol_name
+        self.default_timeframe_seconds: int = default_timeframe_seconds
+        self.trade_direction: TradeDirection = trade_direction
+        self.init_balance: float = init_balance
+        self.start_dt: datetime = start_dt
+        self.end_dt: datetime = end_dt
+        self.is_visual_mode: bool = is_visual_mode
+        self.speed: int = speed
+        self.bars_in_chart: int = bars_in_chart
+        self.data_rate: DataRates = data_rate
+        self.platform: Platforms = platform
+        self.platform_parameter: str = platform_parameter
+
+
+class TradeResult:
+    def __init__(self, is_successful: bool = True, error: str = None):  # type: ignore
+        self.is_successful = is_successful
+        self.error = error
+
+
+class Bar:
+    def __init__(
+        self,
+        open_time: datetime,
+        open: float,
+        high: float,
+        low: float,
+        close: float,
+        tick_volume: int,
+        open_ask: float,
+    ):
+        self.open_time = open_time
+        self.open_price = open
+        self.high_price = high
+        self.low_price = low
+        self.close_price = close
+        self.tick_volume = tick_volume
+        self.open_ask = open_ask
+
+
+class QuoteBar:
+    time: datetime = datetime.min
+    milli_seconds: int = 0
+    open: float = 0
+    high: float = 0
+    low: float = 0
+    close: float = 0
+    volume: int = 0
+    open_ask: float = 0
+
+
+class PyLogger:
+    HEADER_AND_SEVERAL_LINES: int = 0
+    NO_HEADER: int = 1
+    ONE_LINE: int = 2
+    SELF_MADE: int = 4
+    mode: int
+
+    def __init__(self):
+        self.log_stream_writer = None
+        self.mode: int = self.HEADER_AND_SEVERAL_LINES
+        self.write_header = None
+
+    @property
+    def is_open(self):
+        return self.log_stream_writer is not None
+
+    def log_open(self, pathName: str, filename: str, append: bool, mode: int):
+        self.mode = mode
+        dir_path = os.path.join(os.path.dirname(pathName), os.path.dirname(filename))
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+
+        new_file = self.make_unique_logfile_name(
+            os.path.join(dir_path, os.path.basename(filename))
+        )
+        ret_val = os.path.exists(new_file)
+        try:
+            self.log_stream_writer = open(new_file, "a" if append else "w")
+        except Exception:
+            pass
+        return ret_val
+
+    def make_log_path(self):
+        # terminal_common_data_path = os.path.join(os.environ.get("CALGO_SOURCES"), "..", "LogFiles")
+        return os.path.join("Files", "Algo.csv")
+
+    def add_text(self, text: str):
+        if not self.is_open:
+            return
+        self.log_stream_writer.write(text)  # type: ignore
+
+    def flush(self):
+        if not self.is_open:
+            return
+        self.log_stream_writer.flush()  # type: ignore
+
+    def close(self, header_line: str = ""):
+        if not self.is_open:
+            return
+        # to_do: Insert headerline at the beginning of the file
+        self.log_stream_writer.close()  # type: ignore
+
+    def make_unique_logfile_name(self, path_name: str) -> str:
+        """
+        while os.path.exists(path_name):
+            fn_ex = path_name.split('.')
+            split_ex_size = len(fn_ex)
+            if split_ex_size < 2:
+                return ""
+
+            name = '_'.join(fn_ex[:-1])
+            ext = fn_ex[-1]
+
+            fn_num = name.split('_')
+            path_name = f"{fn_num[0]}_{int(fn_num[1]) + 1}.{ext}" if len(fn_num) > 1 else f"{name}_1.{ext}"
+        """
+        return path_name
+
+
+class PendingOrder(ABC):
+    """
+    Provides access to properties of pending orders
+    """
+
+    @property
+    @abstractmethod
+    def symbol_code(self) -> str:
+        """
+        symbol code of the order
+        """
+        return ""
+
+    #     @property
+    #     @abstractmethod
+    #     def trade_type(self) -> trade_type:
+    #         """
+    #         Specifies whether this order is to buy or sell.
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def volume(self) -> int:
+    #         """
+    #         Volume of this order.
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def initial_volume(self) -> float:
+    #         """
+    #         Volume of this order.
+    #         """
+    #         pass
+
+    @property
+    @abstractmethod
+    def id(self) -> int:
+        """
+        Unique order Id.
+        """
+        pass
+
+    # Pending order out commentet
+    # region
+    #     @property
+    #     @abstractmethod
+    #     def order_type(self) -> PendingOrder_type:
+    #         """
+    #         Specifies whether this order is stop or Limit.
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def target_price(self) -> float:
+    #         """
+    #         The order target price.
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def expiration_time(self) -> datetime:
+    #         """
+    #         The order Expiration time
+    #         """
+    #         return datetime.min
+
+    #     @property
+    #     @abstractmethod
+    #     def stop_loss(self) -> float:
+    #         """
+    #         The order stop loss in price
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def stop_loss_pips(self) -> float:
+    #         """
+    #         The order stop loss in Pips
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def take_profit_percent(self) -> float:
+    #         """
+    #         The order take profit in price
+    #         """
+
+    #     @property
+    #     @abstractmethod
+    #     def take_profit_pips(self) -> float:
+    #         """
+    #         The order take profit in Pips
+    #         """
+
+    #     @property
+    #     @abstractmethod
+    #     def label(self) -> str:
+    #         """
+    #         User assigned identifier for the order.
+    #         """
+    #         return ""
+
+    #     @property
+    #     @abstractmethod
+    #     def comment(self) -> str:
+    #         """
+    #         User assigned Order Comment
+    #         """
+    #         return ""
+
+    #     @property
+    #     @abstractmethod
+    #     def quantity(self) -> float:
+    #         """
+    #         Quantity (lots) of this order
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def has_trailing_stop(self) -> bool:
+    #         """
+    #         When has_trailing_stop set to true, server updates stop Loss every time Position moves in your favor.
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def stop_loss_trigger_method(self) -> stop_trigger_method:
+    #         """
+    #         Trigger method for Position's stop_loss
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def stop_order_trigger_method(self) -> stop_trigger_method:
+    #         """
+    #         Determines how pending order will be triggered in case it's a stop_order
+    #         """
+    #         pass
+
+    #     @property
+    #     @abstractmethod
+    #     def stop_limit_range_pips(self) -> float:
+    #         """
+    #         Maximum limit from order target price, where order can be executed.
+    #         """
+    #         pass
+
+    #     # Obsolete. Use symbol.name instead
+    #     # @property
+    #     # @abstractmethod
+    #     # def symbol_name(self) -> str:
+    #     #     """
+    #     #     Gets the symbol name.
+    #     #     """
+    #     #     pass
+
+    #     @abstractmethod
+    #     def modify_stop_loss_pips(self, stopLossPips: float]) -> trade_result:
+    #         """
+    #         Shortcut for Robot.modify_PendingOrder method to change stop Loss
+    #         """
+    #         pass
+
+    #     @abstractmethod
+    #     def modify_take_profit_pips(self, takeProfitPips: float]) -> trade_result:
+    #         """
+    #         Shortcut for Robot.modify_PendingOrder method to change Take Profit
+    #         """
+    #         pass
+
+    #     @abstractmethod
+    #     def modify_stop_limit_range(self, stopLimitRangePips: float) -> trade_result:
+    #         """
+    #         Shortcut for Robot.modify_PendingOrder method to change stop Limit Range
+    #         """
+    #         pass
+
+    #     @abstractmethod
+    #     def modify_expiration_time(self, expirationTime: datetime]) -> trade_result:
+    #         """
+    #         Shortcut for Robot.modify_PendingOrder method to change Expiration Time
+    #         """
+    #         pass
+
+    #     @abstractmethod
+    #     def modify_volume(self, volume: float) -> trade_result:
+    #         """
+    #         Shortcut for Robot.modify_PendingOrder method to change initial_volume
+    #         """
+    #         pass
+
+    #     @abstractmethod
+    #     def modify_target_price(self, targetPrice: float) -> trade_result:
+    #         """
+    #         Shortcut for Robot.modify_PendingOrder method to change Target Price
+    #         """
+    #         pass
+
+    #     @abstractmethod
+    #     def cancel(self) -> trade_result:
+    #         """
+    #         Shortcut for Robot.cancel_PendingOrder method
+    #         """
+    #         pass
+    # endregion
+
+
+class TradingSession:
+    @property
+    def start_time(self) -> datetime:
+        return datetime.min
+
+    @property
+    def end_time(self) -> datetime:
+        return datetime.min
+
+
+class MarketHours:
+    @property
+    def sessions(self) -> list[TradingSession]:
+        # create list
+        return list()
+
+    # def is_opened(self) -> bool:
+    #     pass
+
+    # def is_opened(self, datetime: datetime) -> bool:
+    #     pass
+
+    def is_opened(self, datetime: datetime = None) -> bool:  # type:ignore
+        if datetime is not None:  # type:ignore
+            # Logic for checking if trading session is active at a specific datetime
+            return True
+
+        else:
+            # Logic for checking if trading session is active at current time
+            return True
+
+    def time_till_close(self) -> timedelta:
+        return timedelta.min
+
+    def time_till_open(self) -> timedelta:
+        return timedelta.min
+
+
+class LogParams:
+    def __init__(self):
+        self.symbol: Symbol
+        self.lots: float
+        self.volume_in_units: float
+        self.balance: float
+        self.minlots: float
+        self.trade_margin: float
+        self.account_margin: float
+        self.trade_type: TradeType
+        self.entry_time: datetime
+        self.closing_time: datetime
+        self.entry_price: float
+        self.closing_price: float
+        self.comment: str
+        self.commissions: float
+        self.swap: float
+        self.net_profit: float
+        self.max_equity_drawdown: float
+        self.max_trade_equity_drawdown_value: float
+
+
+class LeverageTier:
+    """leverage Steps"""
+
+    @property
+    def volume(self) -> float:
+        return 0
+
+    @property
+    def leverage(self) -> float:
+        return 0
+
+
+class Asset(ABC):
+    """
+    The Asset represents a currency.
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """
+        The Asset Name
+        """
+        return ""
+
+    @property
+    @abstractmethod
+    def digits(self) -> int:
+        """
+        Number of Asset digits
+        """
+        return 0
+
+    @abstractmethod
+    def convert(self, to: float, value: float):
+        """
+        Converts value to another Asset.
+
+        gui_parameters:
+          to:
+            Target Asset
+
+          value:
+            The value you want to convert from current Asset
+
+        Returns:
+            Value in to / target Asset
+        """
+        if isinstance(to, Asset):
+            # Handle conversion to Asset
+            return None
+
+        elif isinstance(to, str):
+            # Handle conversion to string
+            return None
+
+        else:
+            raise ValueError("Unsupported conversion target")
+
+
+class Account:
+    type: AccountType
+    balance: float
+    equity: float
+    margin: float
+    free_margin: float
+    margin_level: float
+    unrealized_net_profit: float
+    leverage: float
+    stop_out_level: float
+    asset: str
+    # total_margin_calculation_type:MarginMode
+    # credit = account_info.credit
+    # user_nick_name = account_info.name
+
+    def __init__(self):
+        pass
+
+
 class MarketValues:
     def __init__(self):
         self.swap_long = 0.0
@@ -1036,6 +1557,7 @@ class Position:
             return 0
 
 
+############# AlgoApi ########################
 class AlgoApi:
     # Members
     # region
@@ -1043,7 +1565,6 @@ class AlgoApi:
 
     def __init__(self):
         system_settings: StrSettings = None  # type: ignore
-
         settings_path = os.path.join("Files", "System.json")
         error, self.system_settings = CoFu.load_settings(settings_path)
         if "" != error:
@@ -1064,7 +1585,6 @@ class AlgoApi:
                 "13",
                 "14",
             )
-
         self.symbol_dictionary: dict[str, Symbol] = {}  # type: ignore
         self.symbol_list: list[Symbol] = []
         self.positions: list[Position] = []
@@ -1433,10 +1953,10 @@ class AlgoApi:
             if len(bid_asks) >= 2:
                 bid_asks = bid_asks[1].split(",")
                 if len(bid_asks) == 2:
-                    i_ask = ConvertUtils.string_to_integer(bid_asks[0])
+                    i_ask = AlgoApi.string_to_integer(bid_asks[0])
                     open_ask = lp.symbol.tick_size * i_ask
                     # open_bid = lp.symbol.tick_size * (
-                    #     i_ask - ConvertUtils.string_to_integer(bid_asks[1])
+                    #     i_ask - AlgoApi.string_to_integer(bid_asks[1])
                     # )
 
         price_diff = (1 if lp.trade_type == TradeType.Buy else -1) * (
@@ -1463,38 +1983,36 @@ class AlgoApi:
                 self.logger.add_text(lp.symbol.name)
                 continue
             elif change_part == "Lots":
-                self.logger.add_text(ConvertUtils.double_to_string(lp.lots, lot_digits))
+                self.logger.add_text(AlgoApi.double_to_string(lp.lots, lot_digits))
                 continue
             elif change_part == "OpenPrice":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.entry_price, lp.symbol.digits)
+                    AlgoApi.double_to_string(lp.entry_price, lp.symbol.digits)
                 )
                 continue
             elif change_part == "Swap":
-                self.logger.add_text(ConvertUtils.double_to_string(lp.swap, 2))
+                self.logger.add_text(AlgoApi.double_to_string(lp.swap, 2))
                 continue
             elif change_part == "Swap/Lot":
-                self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.swap / lp.lots, 2)
-                )
+                self.logger.add_text(AlgoApi.double_to_string(lp.swap / lp.lots, 2))
                 continue
             elif change_part == "OpenAsks":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(open_ask, lp.symbol.digits)
+                    AlgoApi.double_to_string(open_ask, lp.symbol.digits)
                     if lp.trade_type == TradeType.Buy
                     else ""
                 )
                 continue
             elif change_part == "OpenBid":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(openBid, lp.symbol.digits)
+                    AlgoApi.double_to_string(openBid, lp.symbol.digits)
                     if lp.trade_type == TradeType.Sell
                     else ""
                 )
                 continue
             elif change_part == "OpenSpreadPoints":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(
+                    AlgoApi.double_to_string(
                         self.i_price((open_ask - openBid), lp.symbol.tick_size), 0
                     )
                 )
@@ -1512,22 +2030,22 @@ class AlgoApi:
                 continue
             elif change_part == "PointValue":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(
+                    AlgoApi.double_to_string(
                         self.calc_1point_and_1lot_2money(lp.symbol), 5
                     )
                 )
                 continue
             elif change_part == "ClosingPrice":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.closing_price, lp.symbol.digits)
+                    AlgoApi.double_to_string(lp.closing_price, lp.symbol.digits)
                 )
                 continue
             elif change_part == "Commission":
-                self.logger.add_text(ConvertUtils.double_to_string(lp.commissions, 2))
+                self.logger.add_text(AlgoApi.double_to_string(lp.commissions, 2))
                 continue
             elif change_part == "Comm/Lot":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.commissions / lp.lots, 2)
+                    AlgoApi.double_to_string(lp.commissions / lp.lots, 2)
                 )
                 continue
             elif change_part == "CloseAsk":
@@ -1541,7 +2059,7 @@ class AlgoApi:
                 continue
             elif change_part == "CloseBid":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(
+                    AlgoApi.double_to_string(
                         self.get_bid_ask_price(lp.symbol, BidAsk.Bid), lp.symbol.digits
                     )
                     if lp.trade_type == TradeType.Buy
@@ -1550,7 +2068,7 @@ class AlgoApi:
                 continue
             elif change_part == "CloseSpreadPoints":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(
+                    AlgoApi.double_to_string(
                         self.i_price(
                             self.get_bid_ask_price(lp.symbol, BidAsk.Ask)
                             - self.get_bid_ask_price(lp.symbol, BidAsk.Bid),
@@ -1561,7 +2079,7 @@ class AlgoApi:
                 )
                 continue
             elif change_part == "Balance":
-                self.logger.add_text(ConvertUtils.double_to_string(lp.balance, 2))
+                self.logger.add_text(AlgoApi.double_to_string(lp.balance, 2))
                 continue
             elif change_part == "Dur. d.h.self.s":
                 self.logger.add_text(
@@ -1571,49 +2089,45 @@ class AlgoApi:
             elif change_part == "Number":
                 self.logging_trade_count += 1
                 self.logger.add_text(
-                    ConvertUtils.integer_to_string(self.logging_trade_count)
+                    AlgoApi.integer_to_string(self.logging_trade_count)
                 )
                 continue
             elif change_part == "Volume":
-                self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.volume_in_units, 1)
-                )
+                self.logger.add_text(AlgoApi.double_to_string(lp.volume_in_units, 1))
                 continue
             elif change_part == "DiffPoints":
-                self.logger.add_text(ConvertUtils.double_to_string(point_diff, 0))
+                self.logger.add_text(AlgoApi.double_to_string(point_diff, 0))
                 continue
             elif change_part == "DiffGross":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(
+                    AlgoApi.double_to_string(
                         self.calc_points_and_lot_2money(lp.symbol, point_diff, lp.lots),
                         2,
                     )
                 )
                 continue
             elif change_part == "net_profit":
-                self.logger.add_text(ConvertUtils.double_to_string(lp.net_profit, 2))
+                self.logger.add_text(AlgoApi.double_to_string(lp.net_profit, 2))
                 continue
             elif change_part == "NetProf/Lot":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.net_profit / lp.lots, 2)
+                    AlgoApi.double_to_string(lp.net_profit / lp.lots, 2)
                 )
                 continue
             elif change_part == "AccountMargin":
-                self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.account_margin, 2)
-                )
+                self.logger.add_text(AlgoApi.double_to_string(lp.account_margin, 2))
                 continue
             elif change_part == "TradeMargin":
-                self.logger.add_text(ConvertUtils.double_to_string(lp.trade_margin, 2))
+                self.logger.add_text(AlgoApi.double_to_string(lp.trade_margin, 2))
                 continue
             elif change_part == "MaxEquityDrawdown":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.max_equity_drawdown, 2)
+                    AlgoApi.double_to_string(lp.max_equity_drawdown, 2)
                 )
                 continue
             elif change_part == "MaxTradeEquityDrawdownValue":
                 self.logger.add_text(
-                    ConvertUtils.double_to_string(lp.max_trade_equity_drawdown_value, 2)
+                    AlgoApi.double_to_string(lp.max_trade_equity_drawdown_value, 2)
                 )
                 continue
             else:
@@ -2004,16 +2518,16 @@ class AlgoApi:
         self.log_add_text_line("")
         self.log_add_text_line(
             "Net Profit,"
-            + ConvertUtils.double_to_string(profit + loss, 2)
+            + AlgoApi.double_to_string(profit + loss, 2)
             + ",,,,Long: "
-            + ConvertUtils.double_to_string(
+            + AlgoApi.double_to_string(
                 sum(
                     x.net_profit for x in self.history if x.trade_type == TradeType.Buy
                 ),
                 2,
             )
             + ",,,,Short:,"
-            + ConvertUtils.double_to_string(
+            + AlgoApi.double_to_string(
                 sum(
                     x.net_profit for x in self.history if x.trade_type == TradeType.Sell
                 ),
@@ -2021,7 +2535,7 @@ class AlgoApi:
             )
         )
 
-        # self.log_add_text_line("max_margin: " + self.Account.asset + " " + ConvertUtils.double_to_string(mMaxMargin, 2))
+        # self.log_add_text_line("max_margin: " + self.Account.asset + " " + AlgoApi.double_to_string(mMaxMargin, 2))
         # self.log_add_text_line("max_same_time_open: " + str(mSameTimeOpen)
         # + ", @ " + mSameTimeOpenDateTime.strftime("%d.%m.%Y %H:%M:%S")
         # + ", Count# " + str(mSameTimeOpenCount))
@@ -2029,7 +2543,7 @@ class AlgoApi:
             "Max Balance Drawdown Value: "
             + self.Account.asset
             + " "
-            + ConvertUtils.double_to_string(self.max_balance_drawdown_value[0], 2)
+            + AlgoApi.double_to_string(self.max_balance_drawdown_value[0], 2)
             + "; @ "
             + self.max_balance_drawdown_time.strftime("%d.%m.%Y %H:%M:%S")
             + "; Count# "
@@ -2041,7 +2555,7 @@ class AlgoApi:
             + (
                 "NaN"
                 if self.max_balance[0] == 0
-                else ConvertUtils.double_to_string(
+                else AlgoApi.double_to_string(
                     100 * self.max_balance_drawdown_value[0] / self.max_balance[0], 2
                 )
             )
@@ -2051,7 +2565,7 @@ class AlgoApi:
             "Max Equity Drawdown Value: "
             + self.Account.asset
             + " "
-            + ConvertUtils.double_to_string(self.max_equity_drawdown_value[0], 2)
+            + AlgoApi.double_to_string(self.max_equity_drawdown_value[0], 2)
             + "; @ "
             + self.max_equity_drawdown_time.strftime("%d.%m.%Y %H:%M:%S")
             + "; Count# "
@@ -2060,12 +2574,12 @@ class AlgoApi:
 
         self.log_add_text_line(
             "Max Current Equity Drawdown %: "
-            + ConvertUtils.double_to_string(max_current_equity_dd_percent, 2)
+            + AlgoApi.double_to_string(max_current_equity_dd_percent, 2)
         )
 
         self.log_add_text_line(
             "Max start Equity Drawdown %: "
-            + ConvertUtils.double_to_string(max_start_equity_dd_percent, 2)
+            + AlgoApi.double_to_string(max_start_equity_dd_percent, 2)
         )
 
         self.log_add_text_line(
@@ -2073,31 +2587,29 @@ class AlgoApi:
             + (
                 "-"
                 if loosing_trades == 0
-                else ConvertUtils.double_to_string(profit_factor, 2)
+                else AlgoApi.double_to_string(profit_factor, 2)
             )
         )
 
         self.log_add_text_line(
-            "Sharpe Ratio: " + ConvertUtils.double_to_string(sharpe_ratio, 2)
+            "Sharpe Ratio: " + AlgoApi.double_to_string(sharpe_ratio, 2)
         )
         self.log_add_text_line(
-            "Sortino Ratio: " + ConvertUtils.double_to_string(sortino_ratio, 2)
+            "Sortino Ratio: " + AlgoApi.double_to_string(sortino_ratio, 2)
+        )
+
+        self.log_add_text_line("Calmar Ratio: " + AlgoApi.double_to_string(calmar, 2))
+        self.log_add_text_line(
+            "Winning Ratio: " + AlgoApi.double_to_string(winning_ratio_percent, 2)
         )
 
         self.log_add_text_line(
-            "Calmar Ratio: " + ConvertUtils.double_to_string(calmar, 2)
-        )
-        self.log_add_text_line(
-            "Winning Ratio: " + ConvertUtils.double_to_string(winning_ratio_percent, 2)
-        )
-
-        self.log_add_text_line(
-            "Trades Per Month: " + ConvertUtils.double_to_string(trades_per_month, 2)
+            "Trades Per Month: " + AlgoApi.double_to_string(trades_per_month, 2)
         )
 
         self.log_add_text_line(
             "Average Annual Profit Percent: "
-            + ConvertUtils.double_to_string(annual_profit_percent, 2)
+            + AlgoApi.double_to_string(annual_profit_percent, 2)
         )
 
         # if avg_open_duration_sum != 0:
@@ -2118,7 +2630,7 @@ class AlgoApi:
         #             if i > 1:
         #                 histoRestSum += investCountHisto[i]
         #     if histoRestSum != 0:
-        #         self.log_add_text_line("histo_rest_quotient: " + ConvertUtils.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
+        #         self.log_add_text_line("histo_rest_quotient: " + AlgoApi.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
         self.log_close()
 
     def calculate_reward(self) -> float:
@@ -2126,7 +2638,34 @@ class AlgoApi:
 
     # endregion
 
+    #
+    @staticmethod
+    def double_to_string(value: float, digits: int) -> str:
+        if value == float("inf") or value != value:
+            return "NaN"
+        format_str = "{:." + str(digits) + "f}"
+        return format_str.format(value)
 
+    @staticmethod
+    def integer_to_string(n: int) -> str:
+        return str(n)
+
+    @staticmethod
+    def string_to_double(s: str) -> float:
+        try:
+            return locale.atof(s)
+        except ValueError:
+            return 0
+
+    @staticmethod
+    def string_to_integer(s: str) -> int:
+        try:
+            return int(s)
+        except ValueError:
+            return 0
+
+
+############# Classes using AlgoApi ########################
 class HedgePosition:
     # Member variables
     # region
@@ -2144,6 +2683,7 @@ class HedgePosition:
     freeze_profit_offset: float = 0
     freeze_price_offset: float = 0
     last_modified_time: datetime = datetime.min
+    bot: AlgoApi
 
     @property
     def profit(self) -> float:
@@ -2170,7 +2710,8 @@ class HedgePosition:
 
     # endregion
 
-    def __init__(self, symbol: Symbol, is_long: bool, label: str):
+    def __init__(self, algoApi: AlgoApi, symbol: Symbol, is_long: bool, label: str):
+        self.bot = algoApi
         self.symbol = symbol
         self.is_long = is_long
         self.label = label
@@ -2188,7 +2729,7 @@ class HedgePosition:
         label_ext: str = main_id,
     ) -> bool:
         if self.main_position is None:  # type: ignore
-            self.main_position = self.bot.execute_market_order(  # type: ignore
+            self.main_position = self.bot.execute_market_order(
                 TradeType.Buy if self.is_long else TradeType.Sell,
                 self.symbol.name,
                 self.symbol.normalize_volume_in_units(volume),
@@ -2204,18 +2745,6 @@ class HedgePosition:
                 )
 
         return self.main_position is not None  # type: ignore
-
-    def do_modify_volume(self, volume: float, current_open_price: float) -> bool:
-        self.last_modified_time = self.symbol.time
-        self.freeze_corrected_entry_price = current_open_price
-        if self.main_position is not None:  # type: ignore
-            return self.main_position.modify_volume(volume).is_successful
-        return False
-
-        self.open_duration_count = [0] * 1  # arrays because of by reference
-        self.min_open_duration = [timedelta.max] * 1
-        self.avg_open_duration_sum = [timedelta.min] * 1
-        self.max_open_duration = [timedelta.min] * 1
 
     def do_main_close(
         self,
@@ -2238,6 +2767,18 @@ class HedgePosition:
             )
             self.main_position = None  # type: ignore
         return result
+
+    def do_modify_volume(self, volume: float, current_open_price: float) -> bool:
+        self.last_modified_time = self.symbol.time
+        self.freeze_corrected_entry_price = current_open_price
+        if self.main_position is not None:  # type: ignore
+            return self.main_position.modify_volume(volume).is_successful
+        return False
+
+        self.open_duration_count = [0] * 1  # arrays because of by reference
+        self.min_open_duration = [timedelta.max] * 1
+        self.avg_open_duration_sum = [timedelta.min] * 1
+        self.max_open_duration = [timedelta.min] * 1
 
     def do_freeze_close(
         self,

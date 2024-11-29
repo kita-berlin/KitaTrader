@@ -1,28 +1,27 @@
 ﻿from abc import ABC, abstractmethod
 from typing import TypeVar
 from datetime import datetime, timedelta
-from LogParams import LogParams
-from Account import Account
-from PyLogger import PyLogger
 from AlgoApiEnums import *
-from AlgoApi import Symbol, Position, Bars
+from AlgoApi import Symbol, Position, Bars, LogParams, PyLogger
 from ProviderBroker.BrokerProvider import BrokerProvider
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
 
 
-###################################
+############### Interface needed for robots ####################
+# The complete api which can be used by robots must be declarated here
+# Varibales must be declared with their types
+# Methods must be declared with their prototypes
 class IRobot(ABC):
-    # Members
+
+    # Trading api variable members
     # region
-    time: datetime
-    Account: Account
     positions: list[Position]
     history: list[Position]
-    max_equity_drawdown_value: list[float]
-    nitial_time: datetime
+    initial_time: datetime
     initial_account_balance: float
+    max_equity_drawdown_value: list[float]
     # the duration vars must be arrays because of by reference in max_duration() and min_duration()
     min_open_duration: list[timedelta] = [timedelta.max] * 1
     avg_open_duration_sum: list[timedelta] = [timedelta.min] * 1
@@ -30,13 +29,13 @@ class IRobot(ABC):
     max_open_duration: list[timedelta] = [timedelta.min] * 1
     # endregion
 
-    # Methods to be overridden
+    # Methods to be overridden in the robot
     # region
     @abstractmethod
     def on_start(self) -> None: ...
 
     @abstractmethod
-    def on_tick(self, symbol: Symbol):...
+    def on_tick(self, symbol: Symbol): ...
 
     @abstractmethod
     def on_stop(self) -> None: ...
@@ -46,7 +45,7 @@ class IRobot(ABC):
 
     # endregion
 
-    # Trading API
+    # Trading API methods
     # region
     def get_symbol(
         self,
@@ -54,7 +53,7 @@ class IRobot(ABC):
         quote_provider: BrokerProvider,
         trade_provider: BrokerProvider,
     ) -> Symbol: ...
-    def get_bars(self, timeframe_seconds:int, symbol_name:str) -> Bars:...
+    def get_bars(self, timeframe_seconds: int, symbol_name: str) -> Bars: ...
     def close_trade(
         self,
         pos: Position,

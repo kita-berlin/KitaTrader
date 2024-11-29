@@ -3,11 +3,9 @@ from typing import List
 from IRobot import IRobot
 from AlgoApiEnums import *
 from AlgoApi import HedgePosition
-from PyLogger import PyLogger
 from Api.CoFu import *
 from Constants import *
-from AlgoApi import Symbol
-from Account import Account
+from AlgoApi import Symbol, Account, PyLogger
 
 # import talib
 # from talib import MA_Type
@@ -94,15 +92,15 @@ class Kangaroo(IRobot):
         from ProviderBroker.BrokerMe import BrokerMe
 
         quote_provider = BrokerMe(
-            "G:\\Meine Ablage\\TickBars\\mbars", "Assets_Pepperstone_Demo.csv"
+            account, "G:\\Meine Ablage\\TickBars\\mbars,Assets_Pepperstone_Demo.csv"
         )
 
         from ProviderBroker.BrokerPaper import BrokerPaper
 
-        trade_provider = BrokerPaper(account)  # Balance, Leverage
+        trade_provider = BrokerPaper(account, "")  # Balance, Leverage
 
-        self.get_symbol("NZDCAD", quote_provider, trade_provider)
-
+        symbol = self.get_symbol("NZDCAD", quote_provider, trade_provider)
+        quote_provider.init(symbol)
         self.bars = self.get_bars(Constants.SEC_PER_MINUTE, self.symbol.name)
 
         """ example how to use indicators

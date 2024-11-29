@@ -41,31 +41,19 @@
     <Folder Include="Files\" />
     <Folder Include="ProviderBroker\" />
     <Folder Include="ProviderQuote\" />
-    <Folder Include="ProviderTrade\" />
     <Folder Include="Robots\" />
     <Folder Include="typings\" />
     <Folder Include="typings\MetaTrader5\" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Api\Account.py" />
     <Compile Include="Api\AlgoApi.py" />
     <Compile Include="Api\AlgoApiEnums.py" />
-    <Compile Include="Api\Asset.py" />
-    <Compile Include="Api\Bar.py" />
     <Compile Include="Api\Constants.py" />
-    <Compile Include="Api\ConvertUtils.py" />
     <Compile Include="Api\CoFu.py" />
-    <Compile Include="Api\LeverageTier.py" />
-    <Compile Include="Api\LogParams.py" />
-    <Compile Include="Api\MarketHours.py" />
-    <Compile Include="Api\Settings.py" />
-    <Compile Include="Api\PendingOrder.py" />
-    <Compile Include="Api\PyLogger.py" />
-    <Compile Include="Api\QuoteBar.py" />
-    <Compile Include="Api\TradeResult.py" />
     <Compile Include="Api\IRobot.py" />
     <Compile Include="MainConsole.py" />
     <Compile Include="MainRl.py" />
+    <Compile Include="ProviderBroker\BrokerPaperCsv.py" />
     <Compile Include="ProviderBroker\BrokerPaper.py" />
     <Compile Include="ProviderBroker\BrokerMe.py" />
     <Compile Include="ProviderBroker\BrokerProvider.py" />

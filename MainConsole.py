@@ -1,5 +1,4 @@
 from Api.AlgoApi import AlgoApi
-from Api.Settings import *
 from Api.CoFu import *
 
 

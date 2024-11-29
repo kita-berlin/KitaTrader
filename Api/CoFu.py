@@ -3,7 +3,7 @@ import commentjson  # type: ignore
 import pytz
 from tzlocal import get_localzone  # type: ignore
 from datetime import datetime
-from Settings import StrSettings
+from AlgoApi import StrSettings
 
 
 ################## Common Functions #################

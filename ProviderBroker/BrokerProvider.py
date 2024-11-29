@@ -1,15 +1,15 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from Account import Account
-from QuoteBar import QuoteBar
-from AlgoApi import Symbol
+from AlgoApi import Symbol, Account, QuoteBar
 
 
 class BrokerProvider(ABC):
     assets_file_name: str
     account: Account
 
-    def __init__(self):
+    def __init__(self, account: Account, parameter: str):
+        self.account = account
+        self.parameter = parameter
         pass
 
     @abstractmethod
