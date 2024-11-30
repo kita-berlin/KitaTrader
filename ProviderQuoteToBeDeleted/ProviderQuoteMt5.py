@@ -76,7 +76,7 @@ class ProviderQuote:
         return utc.astimezone(self.broker_tz_info)
 
     ######################################
-    # def get_quote_at_date(self, dt) -> tuple[str, QuoteBar]:
+    # def get_quote_bar_at_date(self, dt) -> tuple[str, QuoteBar]:
     def get1st_quote(self):  # -> str, QuoteBar:
         lenRates: int = 0
 
@@ -128,7 +128,7 @@ class ProviderQuote:
         return "", self.get_current_quote()
 
     ######################################
-    def get_next_quote(self):  # -> str, QuoteBar:
+    def get_next_quote_bar(self):  # -> str, QuoteBar:
         if Platforms.Mt5Backtest == self.trading_platform.bin_settings.platform:
             self.current_index += 1
             self.current_index = min(self.current_index, len(self.Rates) - 1)
@@ -159,7 +159,7 @@ class ProviderQuote:
             qb.volume = self.Rates[self.current_index][5]
             qb.open_ask = (
                 self.Rates[self.current_index][1]
-                + self.Rates[self.current_index][6] * self.symbol_info.tick_size
+                + self.Rates[self.current_index][6] * self.symbol_info.point_size
             )
             real_volume = self.Rates[self.current_index][7]
             qb.is_new_bar = True

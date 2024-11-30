@@ -1,19 +1,30 @@
-from Api.AlgoApi import AlgoApi
+from datetime import datetime
+from Api.AlgoApi import AlgoApi, RunningMode, Account
 from Api.CoFu import *
 
 
 #############################################
 class MainConsole:
     def __init__(self):
-        trading = AlgoApi()
-        trading.pre_start()
-        trading.start()
+        account = Account()
+        account.balance = account.equity = 10000
+        account.leverage = 500
+        account.asset = "EUR"
+
+        algo_api = AlgoApi()
+        algo_api.account = account
+        algo_api.start_dt = datetime.strptime("2024-01-01", "%Y-%m-%d")
+        algo_api.end_dt = datetime.strptime("2030-01-01", "%Y-%m-%d")
+        algo_api.running_mode = RunningMode.SilentBacktesting
+        algo_api.robot_name = "Kangaroo"
+
+        algo_api.start()
 
         while True:
-            if trading.tick():
+            if algo_api.tick():
                 break
 
-        trading.stop()
+        algo_api.stop()
 
 
 #############################################

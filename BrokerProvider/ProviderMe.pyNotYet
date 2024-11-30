@@ -23,7 +23,7 @@ SymbolInfo:
                 print(error)
                 exit()
 
-            self.tick_size = self.algo_api.market_values.point_size
+            self.point_size = self.algo_api.market_values.point_size
             self.min_lot = self.algo_api.market_values.min_lot
             self.max_lot = self.algo_api.market_values.max_lot
             self.lot_step = self.min_lot
@@ -43,7 +43,7 @@ SymbolInfo:
             self.trading_mode = SymbolTradingMode.FullAccess
 
             self.quote_provider = ProviderQuote(self.algo_api, self)
-            error, quote = self.quote_provider.get_quote_at_date(
+            error, quote = self.quote_provider.get_quote_bar_at_date(
                 self.algo_api.bin_settings.start_dt
             )
             if None == quote:

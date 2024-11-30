@@ -6,7 +6,7 @@
     <ProjectGuid>{636cf776-2a26-42ce-b92c-ad2db37c2232}</ProjectGuid>
     <ProjectHome />
     <StartupFile>MainConsole.py</StartupFile>
-    <SearchPath>Robots;Api</SearchPath>
+    <SearchPath>Robots;Api;BrokerProvider</SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
@@ -29,18 +29,18 @@
     <Content Include="Files\Assets_Dukascopy_Live.csv" />
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
     <Content Include="Files\System.json" />
-    <Content Include="ProviderBroker\ProviderCsv.pyNotYet" />
-    <Content Include="ProviderBroker\ProviderMe.pyNotYet" />
-    <Content Include="ProviderBroker\BrokerMt5.py" />
-    <Content Include="ProviderBroker\ProviderPaper.pyNotYet" />
+    <Content Include="BrokerProvider\ProviderCsv.pyNotYet" />
+    <Content Include="BrokerProvider\ProviderMe.pyNotYet" />
+    <Content Include="BrokerProvider\BrokerMt5.py" />
+    <Content Include="BrokerProvider\ProviderPaper.pyNotYet" />
     <Content Include="requirements.txt" />
     <Content Include="typings\MetaTrader5\__init__.pyi" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Api\" />
     <Folder Include="Files\" />
-    <Folder Include="ProviderBroker\" />
-    <Folder Include="ProviderQuote\" />
+    <Folder Include="BrokerProvider\" />
+    <Folder Include="ProviderQuoteToBeDeleted\" />
     <Folder Include="Robots\" />
     <Folder Include="typings\" />
     <Folder Include="typings\MetaTrader5\" />
@@ -53,14 +53,13 @@
     <Compile Include="Api\IRobot.py" />
     <Compile Include="MainConsole.py" />
     <Compile Include="MainRl.py" />
-    <Compile Include="ProviderBroker\BrokerPaperCsv.py" />
-    <Compile Include="ProviderBroker\BrokerPaper.py" />
-    <Compile Include="ProviderBroker\BrokerMe.py" />
-    <Compile Include="ProviderBroker\BrokerProvider.py" />
-    <Compile Include="ProviderBroker\ProviderMt5.pyNotYet" />
-    <Compile Include="ProviderQuote\ProviderQuoteCsv.py" />
-    <Compile Include="ProviderQuote\ProviderQuoteMeFiles.py" />
-    <Compile Include="ProviderQuote\ProviderQuoteMt5.py" />
+    <Compile Include="BrokerProvider\BrokerCsv.py" />
+    <Compile Include="BrokerProvider\BrokerPaper.py" />
+    <Compile Include="BrokerProvider\BrokerMe.py" />
+    <Compile Include="BrokerProvider\ProviderMt5.pyNotYet" />
+    <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteCsv.py" />
+    <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteMeFiles.py" />
+    <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteMt5.py" />
     <Compile Include="ReadData.py" />
     <Compile Include="Robots\Kangaroo.py" />
     <Compile Include="Robots\Ultron.py" />

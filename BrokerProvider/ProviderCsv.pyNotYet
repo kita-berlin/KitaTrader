@@ -10,7 +10,7 @@ SymbolInfo:
             """
             symbol_info = mt5.symbol_info(symbol_name)  # pylint: disable=no-member
 
-            self.tick_size = symbol_info.trade_tick_size
+            self.point_size = symbol_info.trade_tick_size
             self.min_lot = (
                 symbol_info.volume_min * symbol_info.trade_contract_size
             )

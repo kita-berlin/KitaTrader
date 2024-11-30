@@ -2,8 +2,7 @@
 from typing import TypeVar
 from datetime import datetime, timedelta
 from AlgoApiEnums import *
-from AlgoApi import Symbol, Position, Bars, LogParams, PyLogger
-from ProviderBroker.BrokerProvider import BrokerProvider
+from AlgoApi import Account, Symbol, Position, Bars, LogParams, PyLogger, AlgoApi, BrokerProvider
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
@@ -17,6 +16,8 @@ class IRobot(ABC):
 
     # Trading api variable members
     # region
+    algo_api: AlgoApi
+    account: Account
     positions: list[Position]
     history: list[Position]
     initial_time: datetime
@@ -47,9 +48,10 @@ class IRobot(ABC):
 
     # Trading API methods
     # region
-    def get_symbol(
+    def init_symbol(
         self,
         symbol_name: str,
+        asset_file: str,
         quote_provider: BrokerProvider,
         trade_provider: BrokerProvider,
     ) -> Symbol: ...

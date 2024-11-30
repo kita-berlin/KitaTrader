@@ -29,13 +29,13 @@ class QuoteBar:
 
 
 class market_file:
-    def __init__(self, file_path, tick_size, digits):
+    def __init__(self, file_path, point_size, digits):
         self.file_handle = open(file_path, "rb")
-        self.tick_size = tick_size
+        self.point_size = point_size
         self.digits = digits
         self.last_date_time = None
 
-    def read_bar(self):
+    def read_quote_bar(self):
         quote = QuoteBar()
         dt_data = self.file_handle.read(8)
         if dt_data == b"":
@@ -48,40 +48,40 @@ class market_file:
 
         for attribute in ["Open", "High", "Low", "Close", "open_ask"]:
             value = struct.unpack("<L", self.file_handle.read(4))[0]
-            setattr(quote, attribute, round(value * self.tick_size, self.digits))
+            setattr(quote, attribute, round(value * self.point_size, self.digits))
 
         quote.volume = struct.unpack("<L", self.file_handle.read(4))[0]
         return quote
 
 
-def read_forex_data(filepath, tick_size, digits):
-    market_file = market_file(filepath, tick_size, digits)
+def read_forex_data(filepath, point_size, digits):
+    market_file = market_file(filepath, point_size, digits)
     data = []
     while True:
-        bar = market_file.read_bar()
+        bar = market_file.read_quote_bar()
         if bar is None:
             break
         data.append(bar.to_dict())
     return pd.DataFrame(data)
 
 
-def process_directory(directory, tick_size, digits):
+def process_directory(directory, point_size, digits):
     all_data = pd.DataFrame()
     for filename in os.listdir(directory):
         if filename.endswith(".mbars"):
             filepath = os.path.join(directory, filename)
-            df = read_forex_data(filepath, tick_size, digits)
+            df = read_forex_data(filepath, point_size, digits)
             all_data = pd.concat([all_data, df], ignore_index=True)
     return all_data
 
 
 # Specify the directory containing the .mbars Files
 directory = "symbol_data/NZDCAD/m1"  # Update this with the actual directory path
-tick_size = 0.00001  # Update as per your data specifics
+point_size = 0.00001  # Update as per your data specifics
 digits = 5  # Update as per your data specifics
 
 # Process all Files in the directory
-df = process_directory(directory, tick_size, digits)
+df = process_directory(directory, point_size, digits)
 df.set_index("Time", inplace=True)
 df.sort_index(inplace=True)
 

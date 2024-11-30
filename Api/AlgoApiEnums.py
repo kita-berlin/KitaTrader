@@ -102,12 +102,6 @@ class MovingAverageType(Enum):
     Hull = 8
 
 
-class DataRates(Enum):
-    Ticks = 0
-    M1 = 1
-    Timeframe = 2
-
-
 class ChartIconType(Enum):
     #
     # Summary:
@@ -171,18 +165,6 @@ class TradeType(Enum):
     # Summary:
     #     Represents a Sell order.
     Sell = 1
-
-
-class AccountType(Enum):
-    """
-    Returns current Account type.
-    """
-
-    # Account type that allows Hedged Positions
-    Hedged = 0
-
-    # Account type that allows only single net Position per symbol
-    Netted = 1
 
 
 class TotalMarginCalculationType(Enum):

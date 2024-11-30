@@ -5,10 +5,12 @@ from AlgoApiEnums import *
 from AlgoApi import HedgePosition
 from Api.CoFu import *
 from Constants import *
-from AlgoApi import Symbol, Account, PyLogger
-
-# import talib
-# from talib import MA_Type
+from AlgoApi import Symbol, PyLogger
+from BrokerMe import BrokerMe
+from BrokerPaper import BrokerPaper
+from BrokerMt5 import BrokerMt5  # type: ignore
+from BrokerCsv import BrokerCsv  # type: ignore
+from talib import MA_Type  # type: ignore
 
 
 class Kangaroo(IRobot):
@@ -81,27 +83,24 @@ class Kangaroo(IRobot):
         self.log_flush()
         # endregion
 
-        account = Account()
-        account.type = AccountType.Hedged
-        account.balance = account.equity = 1000
-        account.leverage = 500
-        account.asset = "EUR"
-
-        # from ProviderBroker.BrokerMt5 import BrokerMt5
-        # mt5_broker =  BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr")
-        from ProviderBroker.BrokerMe import BrokerMe
-
+        # mt5_broker =  BrokerMt5(account, "62060378, pepperstone_uk-Demo, tFue0y*akr")
         quote_provider = BrokerMe(
-            account, "G:\\Meine Ablage\\TickBars\\mbars,Assets_Pepperstone_Demo.csv"
+            # path to mbar files, data rate (-1 means quote provider, account for trading not used)
+            "G:\\Meine Ablage\\TickBars\\mbars",
+            -1,
+            self.account,  # Data rate
         )
 
-        from ProviderBroker.BrokerPaper import BrokerPaper
+        # no parameter, data rate ( 0 means fastest possible, account for trading)
+        trade_provider = BrokerPaper("", 0, self.account)
 
-        trade_provider = BrokerPaper(account, "")  # Balance, Leverage
+        # symbol, asset filename in files directory, quote_provider, trade_provider
+        self.init_symbol(
+            "NZDCAD", "Assets_Pepperstone_Demo.csv", quote_provider, trade_provider
+        )
 
-        symbol = self.get_symbol("NZDCAD", quote_provider, trade_provider)
-        quote_provider.init(symbol)
-        self.bars = self.get_bars(Constants.SEC_PER_MINUTE, self.symbol.name)
+        # example how to use bars
+        # self.bars = self.get_bars(Constants.SEC_PER_MINUTE, self.symbol.name)
 
         """ example how to use indicators
         self.time_period = 14
@@ -207,7 +206,7 @@ class Kangaroo(IRobot):
 
             tp_value = current_close * self.take_profit_percent / 100
             # tp_price = self.add_long(self.is_long, self.avg_price, tp_value)
-            tp_points = self.i_price(tp_value, self.symbol.tick_size)
+            tp_points = self.i_price(tp_value, self.symbol.point_size)
 
             # initial_target_cash = self.parent_bot.mBot.calc_points_and_volume_2money(self.parent_bot.bot_symbol, tp_points, self.parent_bot.initial_volume)
             target_cash = self.calc_points_and_volume_2money(
@@ -226,7 +225,7 @@ class Kangaroo(IRobot):
                     # "Time; Profit; max_equity_draw_down; cluster_count; invest_count; calmar; Rebuy1st%; Rebuy%; take_profit%"
                     if not self.is_train:
                         print(
-                            self.time.strftime("%d-%m-%Y %H:%M:%S; ")
+                            self.symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
                             + ("Long" if self.is_long else "Short")
                             # + "; {:.2f}".format(
                             #     self.Account.balance - self.initial_account_balance
@@ -266,9 +265,7 @@ class Kangaroo(IRobot):
                 # Das volume_to_add beeinflusst den Mischpreis (self.avg_price)
                 # und zieht ihn näher zum aktuellen Preis hin
                 h_pos = HedgePosition(
-                    self.symbol,
-                    self.is_long,
-                    self.get_label(),
+                    self.algo_api, symbol, self.is_long, self.get_label()
                 )
                 h_pos.do_main_open(volume_to_add)
                 self.hedge_positions.append(h_pos)
@@ -276,18 +273,19 @@ class Kangaroo(IRobot):
                 self.max(self.max_invest_count, self.invest_count)
                 if not self.is_train:
                     print(
-                        self.time.strftime("%d-%m-%Y %H:%M:%S; ")
+                        self.symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
                         + ("Long" if self.is_long else "Short")
                         + "; {:.2f}".format(
-                            self.Account.balance - self.initial_account_balance
+                            self.symbol.trade_provider.account.balance
+                            - self.initial_account_balance
                         )
-                        + "; {:.2f}".format(self.max_equity_drawdown_value[0])
-                        + "; {}".format(self.cluster_count)
-                        + "; {}".format(self.invest_count)
-                        + "; {:.2f}".format(self.calmar)
-                        + "; {:.2f}".format(self.rebuy_1st_percent)
-                        + "; {:.2f}".format(self.rebuy_percent)
-                        + "; {:.2f}".format(self.take_profit_percent)
+                        # + "; {:.2f}".format(self.max_equity_drawdown_value[0])
+                        # + "; {}".format(self.cluster_count)
+                        # + "; {}".format(self.invest_count)
+                        # + "; {:.2f}".format(self.calmar)
+                        # + "; {:.2f}".format(self.rebuy_1st_percent)
+                        # + "; {:.2f}".format(self.rebuy_percent)
+                        # + "; {:.2f}".format(self.take_profit_percent)
                     )
                     pass
             else:
@@ -306,8 +304,8 @@ class Kangaroo(IRobot):
         return (
             f"{self.version};"
             f"{self.cluster_count}_{self.invest_count};"
-            f"{int(0.5 + (self.symbol.ask if self.is_long else self.symbol.bid) / self.symbol.tick_size)};"
-            f"{self.time};"
+            f"{int(0.5 + (self.symbol.ask if self.is_long else self.symbol.bid) / self.symbol.point_size)};"
+            f"{self.symbol.time};"
         )
 
     ###################################
@@ -337,17 +335,19 @@ class Kangaroo(IRobot):
         self.history  # list of closed positions
         self.positions  # list of current open positions; Count matches self.invest_count
         self.initial_account_balance  # start balance
-        self.Account.balance  # start balance plus profit sum of all CLOSED positions (sum of REALIZED profit)
-        self.Account.equity  # self.Account.balance plus profit sum of all OPEN positions (sum of UNREALIZED profit)
+        self.symbol.trade_provider.account.balance  # start balance plus profit sum of all CLOSED positions (sum of REALIZED profit)
+        self.symbol.trade_provider.account.equity  # self.Account.balance plus profit sum of all OPEN positions (sum of UNREALIZED profit)
         self.cluster_count  # number of current cluster
         self.invest_count  # number of open trades within current cluster
-        self.Account.margin  # sum of all open Position margins; equal to sum(x.margin for x in self.positions)
+        self.symbol.trade_provider.account.margin  # sum of all open Position margins; equal to sum(x.margin for x in self.positions)
         self.max_equity_drawdown_value[
             0
         ]  # holds biggest difference of self.Account.balance and self.Account.equity
 
         # composed values
-        history_profit = self.Account.balance - self.initial_account_balance
+        history_profit = (
+            self.symbol.trade_provider.account.balance - self.initial_account_balance
+        )
         # history_profit is equal to sum(x.net_profit for x in self.history)
 
         revenue = history_profit + self.cluster_profit

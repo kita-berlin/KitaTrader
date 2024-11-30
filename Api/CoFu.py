@@ -1,14 +1,13 @@
-import json
-import commentjson  # type: ignore
+#import json
+#import commentjson  # type: ignore
 import pytz
 from tzlocal import get_localzone  # type: ignore
 from datetime import datetime
-from AlgoApi import StrSettings
 
 
 ################## Common Functions #################
 class CoFu:
-    ###################################
+    """
     @staticmethod
     def load_settings(path: str) -> tuple[str, StrSettings]:
         try:
@@ -25,7 +24,6 @@ class CoFu:
         except Exception as e:
             return "Fehler" + str(e), None  # type: ignore
 
-    ###################################
     @staticmethod
     def save_settings(path: str, settings: StrSettings):
         try:
@@ -34,6 +32,7 @@ class CoFu:
 
         except Exception:
             pass
+    """
 
     @staticmethod
     def get_utc_time_from_local_time(localTime: datetime) -> datetime:

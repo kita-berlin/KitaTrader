@@ -2,27 +2,25 @@ import os
 import struct
 import pytz
 from datetime import datetime, timedelta
-from BrokerProvider import BrokerProvider
-from AlgoApi import Symbol, QuoteBar, Account
+from AlgoApi import QuoteBar, Account, BrokerProvider
 
 
 class BrokerMe(BrokerProvider):
-    def __init__(self, account: Account, parameter: str):
-        super().__init__(account, parameter)
+    def __init__(self, parameter: str, data_rate: int, account: Account):
+        super().__init__(parameter, data_rate, account)
         self.file_handle = None
 
     def __del__(self):
         if self.file_handle is not None:
             self.file_handle.close()
 
-    def init(self, symbol: Symbol):
-        self.symbol = symbol
-        self.symbol_path = os.path.join(self.parameter, symbol.name)
-        if not os.path.isdir(self.symbol_path):
-            print("Not found: " + self.symbol_path)
-            quit()
+    def initialize(self, symbol_name: str):
+        self.symbol_name = symbol_name
+        # parameter: path to me files, assets file name in files directory
+        para_split = self.parameter.split(",")
+        self.symbol_path = os.path.join(para_split[0], self.symbol_name)
 
-    def get_quote_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
+    def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
         self.bars_filename = os.path.join(
             self.symbol_path,
             "m1",
@@ -50,22 +48,26 @@ class BrokerMe(BrokerProvider):
             self.file_handle.close()
 
         self.file_handle = open(self.bars_filename, "rb")
-        quote = self.read_bar()
+        quote = self.read_quote_bar()
 
         return "", quote  # type: ignore
 
-    def get_next_quote(self) -> tuple[str, QuoteBar]:
-        quote = self.read_bar()
+    def get_first_quote_bar(self) -> tuple[str, QuoteBar]:
+        return None  # type: ignore
+        pass
+
+    def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
+        quote = self.read_quote_bar()
         if None == quote:  # type: ignore
             self.last_date_time += timedelta(days=1)
             if self.last_date_time > datetime.now().astimezone(pytz.utc):
                 return "No more data", None  # type: ignore
 
-            return self.get_quote_at_date(self.last_date_time)
+            return self.get_quote_bar_at_date(self.last_date_time)
         else:
             return "", quote  # type: ignore
 
-    def read_bar(self) -> tuple[str, QuoteBar]:
+    def read_quote_bar(self) -> tuple[str, QuoteBar]:
         quote = QuoteBar()
 
         dt_data = self.file_handle.read(8)  # type: ignore
@@ -81,29 +83,29 @@ class BrokerMe(BrokerProvider):
         quote.milli_seconds = unpacked_dt % 1000
         quote.open = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
-            * self.symbol.tick_size,
-            self.symbol.digits,
+            * self.market_values.point_size,
+            self.market_values.digits,
         )
         quote.high = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
-            * self.symbol.tick_size,
-            self.symbol.digits,
+            * self.market_values.point_size,
+            self.market_values.digits,
         )
         quote.low = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
-            * self.symbol.tick_size,
-            self.symbol.digits,
+            * self.market_values.point_size,
+            self.market_values.digits,
         )
         quote.close = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
-            * self.symbol.tick_size,
-            self.symbol.digits,
+            * self.market_values.point_size,
+            self.market_values.digits,
         )
         quote.volume = struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
         quote.open_ask = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
-            * self.symbol.tick_size,
-            self.symbol.digits,
+            * self.market_values.point_size,
+            self.market_values.digits,
         )
         return quote  # type: ignore
 

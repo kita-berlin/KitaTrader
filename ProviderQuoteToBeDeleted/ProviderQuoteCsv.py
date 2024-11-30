@@ -18,7 +18,7 @@ class ProviderQuote:
         del self.df_start
 
     ######################################
-    def get_quote_at_date(self, dt) -> tuple[str, QuoteBar]:
+    def get_quote_bar_at_date(self, dt) -> tuple[str, QuoteBar]:
         filename = self.bars_filename = os.path.join(
             self.bin_settings.platform_parameter,
             self.symbol_info.name,
@@ -54,17 +54,17 @@ class ProviderQuote:
         del df
 
         self.current_index = 0
-        error, quote = self.read_bar()
+        error, quote = self.read_quote_bar()
 
         return error, quote
 
     ######################################
-    def get_next_quote(self) -> tuple[str, QuoteBar]:
-        error, quote = self.read_bar()
+    def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
+        error, quote = self.read_quote_bar()
         return error, quote
 
     ######################################
-    def read_bar(self) -> tuple[str, QuoteBar]:
+    def read_quote_bar(self) -> tuple[str, QuoteBar]:
         quote = None
         error = "No more data"
         if self.current_index < len(self.df_start):

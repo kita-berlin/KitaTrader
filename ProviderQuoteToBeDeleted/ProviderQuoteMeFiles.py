@@ -29,7 +29,7 @@ class ProviderQuote:
             self.file_handle.close()
 
     ######################################
-    def get_quote_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
+    def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
         self.bars_filename = os.path.join(
             self.bin_settings.platform_parameter,
             self.symbol_info.name,
@@ -59,24 +59,24 @@ class ProviderQuote:
             self.file_handle.close()
 
         self.file_handle = open(self.bars_filename, "rb")
-        quote = self.read_bar()
+        quote = self.read_quote_bar()
 
         return "", quote
 
     ######################################
-    def get_next_quote(self) -> tuple[str, QuoteBar]:
-        quote = self.read_bar()
+    def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
+        quote = self.read_quote_bar()
         if None == quote:
             self.last_date_time += timedelta(days=1)
             if self.last_date_time > datetime.utcnow().astimezone(pytz.utc):
                 return "No more data", None
 
-            return self.get_quote_at_date(self.last_date_time)
+            return self.get_quote_bar_at_date(self.last_date_time)
         else:
             return "", quote
 
     ######################################
-    def read_bar(self) -> tuple[str, QuoteBar]:
+    def read_quote_bar(self) -> tuple[str, QuoteBar]:
         quote = QuoteBar()
 
         dt_data = self.file_handle.read(8)
@@ -92,28 +92,28 @@ class ProviderQuote:
         quote.milli_seconds = unpacked_dt % 1000
         quote.open = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
-            * self.symbol_info.tick_size,
+            * self.symbol_info.point_size,
             self.symbol_info.digits,
         )
         quote.high = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
-            * self.symbol_info.tick_size,
+            * self.symbol_info.point_size,
             self.symbol_info.digits,
         )
         quote.low = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
-            * self.symbol_info.tick_size,
+            * self.symbol_info.point_size,
             self.symbol_info.digits,
         )
         quote.close = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
-            * self.symbol_info.tick_size,
+            * self.symbol_info.point_size,
             self.symbol_info.digits,
         )
         quote.volume = struct.unpack("<L", self.file_handle.read(4))[0]
         quote.open_ask = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
-            * self.symbol_info.tick_size,
+            * self.symbol_info.point_size,
             self.symbol_info.digits,
         )
         return quote
