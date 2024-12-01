@@ -102,11 +102,12 @@ class BrokerMe(BrokerProvider):
             self.market_values.digits,
         )
         quote.volume = struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
-        quote.open_ask = round(
+        quote.open_spread = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
             * self.market_values.point_size,
             self.market_values.digits,
         )
+        quote.open_spread -= quote.open
         return quote  # type: ignore
 
     def update_account(self):

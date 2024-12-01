@@ -111,7 +111,7 @@ class ProviderQuote:
             self.symbol_info.digits,
         )
         quote.volume = struct.unpack("<L", self.file_handle.read(4))[0]
-        quote.open_ask = round(
+        quote.open_spread = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
             * self.symbol_info.point_size,
             self.symbol_info.digits,

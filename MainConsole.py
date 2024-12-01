@@ -13,23 +13,25 @@ class MainConsole:
         account.asset = "EUR"
 
         algo_api = AlgoApi()
-        algo_api.account = account
         algo_api.start_dt = datetime.strptime("2024-01-01", "%Y-%m-%d")
         algo_api.end_dt = datetime.strptime("2030-01-01", "%Y-%m-%d")
         algo_api.running_mode = RunningMode.SilentBacktesting
         algo_api.robot_name = "Martingale"
+
         # These parameters must also be declarated in the bot
         algo_api.robot_parameter = {
             "Rebuy1stPercent": 1.1,
             "RebuyPercent": 0.1,
             "TakeProfitPercent": 0.1,
             "Volume": 1000,
-            "TradeDirection": TradeDirection.Mode1,
+            "Direction": TradeDirection.Mode1,
         }
 
+        algo_api.account = account
         algo_api.start()
 
         while True:
+            pass
             if algo_api.tick():
                 break
 

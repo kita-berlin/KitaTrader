@@ -13,7 +13,7 @@ class QuoteBar:
         self.low = 0
         self.close = 0
         self.volume = 0
-        self.open_ask = 0
+        self.open_spread = 0
 
     def to_dict(self):
         return {
@@ -24,7 +24,7 @@ class QuoteBar:
             "Low": self.Low,
             "Close": self.close,
             "Volume": self.Volume,
-            "open_ask": self.open_ask,
+            "open_spread": self.open_spread,
         }
 
 
@@ -46,7 +46,7 @@ class market_file:
         self.last_date_time = quote.time = datetime.utcfromtimestamp(timestamp)
         quote.milli_seconds = unpacked_dt % 1000
 
-        for attribute in ["Open", "High", "Low", "Close", "open_ask"]:
+        for attribute in ["Open", "High", "Low", "Close", "open_spread"]:
             value = struct.unpack("<L", self.file_handle.read(4))[0]
             setattr(quote, attribute, round(value * self.point_size, self.digits))
 

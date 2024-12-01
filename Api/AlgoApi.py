@@ -1,4 +1,3 @@
-import sys
 import os
 import math
 import importlib.util
@@ -9,8 +8,8 @@ import traceback
 import locale
 from abc import ABC, abstractmethod
 from numpy.typing import NDArray
-from typing import TypeVar, Iterable, Iterator,Union
-from datetime import datetime, timedelta
+from typing import TypeVar, Iterable, Iterator, Union, Type, cast
+from datetime import datetime, timedelta, tzinfo
 from AlgoApiEnums import *
 from CoFu import *
 
@@ -36,7 +35,7 @@ class Bar:
         low: float,
         close: float,
         tick_volume: int,
-        open_ask: float,
+        open_spread: float,
     ):
         self.open_time = open_time
         self.open_price = open
@@ -44,7 +43,7 @@ class Bar:
         self.low_price = low
         self.close_price = close
         self.tick_volume = tick_volume
-        self.open_ask = open_ask
+        self.open_spread = open_spread
 
 
 class QuoteBar:
@@ -55,7 +54,7 @@ class QuoteBar:
     low: float = 0
     close: float = 0
     volume: int = 0
-    open_ask: float = 0
+    open_spread: float = 0
 
 
 class PyLogger:
@@ -465,15 +464,15 @@ class Asset(ABC):
 
 
 class Account:
-    balance: float
-    equity: float
-    margin: float
-    free_margin: float
-    margin_level: float
-    unrealized_net_profit: float
-    leverage: float
-    stop_out_level: float
-    asset: str
+    balance: float = 0
+    equity: float = 0
+    margin: float = 0
+    free_margin: float = 0
+    margin_level: float = 0
+    unrealized_net_profit: float = 0
+    leverage: float = 0
+    stop_out_level: float = 0
+    asset: str = ""
     # total_margin_calculation_type:MarginMode
     # credit = account_info.credit
     # user_nick_name = account_info.name
@@ -1083,7 +1082,7 @@ class Bars:
             self.low_prices.data = np.append(self.low_prices.data, quote.open)
             self.close_prices.data = np.append(self.close_prices.data, quote.open)
             self.tick_volumes.data = np.append(self.tick_volumes.data, 0)
-            self.open_asks.data = np.append(self.open_asks.data, quote.open_ask)
+            self.open_asks.data = np.append(self.open_asks.data, quote.open_spread)
             self.line_colors = np.append(self.line_colors, "green")
             self.is_new_bar = True
         else:
@@ -1222,6 +1221,7 @@ class SymbolInfo:
     lot_size: float = 0.0
     leverage: float = 0.0
     is_trading_allowed: bool = False
+    time_zone: tzinfo = tzinfo()
     # endregion
 
     def __init__(
@@ -1230,10 +1230,12 @@ class SymbolInfo:
         assets_file_name: str,
         quote_provider: BrokerProvider,
         trade_provider: BrokerProvider,
+        str_time_zone: str,
     ):
         self.name = symbol_name
         self.quote_provider = quote_provider
         self.trade_provider = trade_provider
+        self.time_zone = pytz.timezone(str_time_zone)
 
         assets_path = os.path.join("Files", assets_file_name)
         self.market_values = self.quote_provider.market_values = (
@@ -1365,15 +1367,15 @@ class SymbolInfo:
         for bars in self.bars_list:
             bars.update_bar(quote)
 
-        self.time = quote.time
+        self.time = quote.time.astimezone(self.time_zone)
         self.bid = quote.open
-        self.ask = quote.open_ask
+        self.ask = quote.open + quote.open_spread
 
     def on_tick(self) -> str:
         error, quote = self.quote_provider.get_next_quote_bar()
         if None == quote:  # type: ignore
             return error
-        # self.update_bars(quote)
+        self.update_bars(quote)
         return ""
 
 
@@ -1384,8 +1386,11 @@ class Symbol(SymbolInfo):
         assets_file_name: str,
         quote_provider: BrokerProvider,
         trade_provider: BrokerProvider,
+        str_time_zone: str,
     ):
-        super().__init__(symbol_name, assets_file_name, quote_provider, trade_provider)
+        super().__init__(
+            symbol_name, assets_file_name, quote_provider, trade_provider, str_time_zone
+        )
 
     ######################################
     @property
@@ -1528,6 +1533,7 @@ class Position:
 
 ############# AlgoApi ########################
 class AlgoApi:
+
     # Members
     # region
     # The following vars must be init from "above"
@@ -1550,10 +1556,24 @@ class AlgoApi:
         assets_file_name: str,
         quote_provider: BrokerProvider,
         trade_provider: BrokerProvider,
+        str_time_zone: str = "utc",
     ):
-        symbol = Symbol(symbol_name, assets_file_name, quote_provider, trade_provider)
+        symbol = Symbol(
+            symbol_name, assets_file_name, quote_provider, trade_provider, str_time_zone
+        )
         self.symbol_dictionary[symbol_name] = symbol
         quote_provider.initialize(symbol_name)
+
+        self.start_dt = self.start_dt.astimezone(symbol.time_zone)
+        self.end_dt = self.end_dt.astimezone(symbol.time_zone)
+
+        error, quote = quote_provider.get_quote_bar_at_date(self.start_dt)
+
+        if "" == error:
+            self.time = quote.time.astimezone(symbol.time_zone)
+            self.bid = quote.open
+            self.ask = quote.open + quote.open_spread
+
         trade_provider.initialize(symbol_name)
 
     def get_bars(
@@ -1843,14 +1863,14 @@ class AlgoApi:
 
         # orgComment;123456,aaa,+-ppp     meaning:
         # openAskInPts,openSpreadInPts
-        openBid, open_ask = 0, 0
+        openBid, open_spread = 0, 0
         if lp.comment is not None:  # type: ignore
             bid_asks = lp.comment.split(";")
             if len(bid_asks) >= 2:
                 bid_asks = bid_asks[1].split(",")
                 if len(bid_asks) == 2:
                     i_ask = AlgoApi.string_to_integer(bid_asks[0])
-                    open_ask = lp.symbol.point_size * i_ask
+                    open_spread = lp.symbol.point_size * i_ask
                     # open_bid = lp.symbol.point_size * (
                     #     i_ask - AlgoApi.string_to_integer(bid_asks[1])
                     # )
@@ -1894,7 +1914,7 @@ class AlgoApi:
                 continue
             elif change_part == "OpenAsks":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(open_ask, lp.symbol.digits)
+                    AlgoApi.double_to_string(open_spread, lp.symbol.digits)
                     if lp.trade_type == TradeType.Buy
                     else ""
                 )
@@ -1909,7 +1929,7 @@ class AlgoApi:
             elif change_part == "OpenSpreadPoints":
                 self.logger.add_text(
                     AlgoApi.double_to_string(
-                        self.i_price((open_ask - openBid), lp.symbol.point_size), 0
+                        self.i_price((open_spread - openBid), lp.symbol.point_size), 0
                     )
                 )
                 continue
@@ -2135,20 +2155,24 @@ class AlgoApi:
             module = importlib.util.module_from_spec(spec)  # type: ignore
             if spec.loader is not None:  # type: ignore
                 # Ensure the module is in sys.modules for reference
-                sys.modules[module_name] = module
+                # sys.modules[module_name] = module
 
                 # Execute the module
                 spec.loader.exec_module(module)  # type: ignore
 
                 # Retrieve the class from the module
                 if hasattr(module, class_name):  # type: ignore
-                    ret_val = getattr(module, class_name)
+                    loaded_class = getattr(module, class_name)
 
+                    # Instantiate the class and pass the loader's self by calling __init__
+                    instance = loaded_class(api=self)
+                    
                     # Set the parameters
                     for key, value in self.robot_parameter.items():
-                        setattr(module, key, value)
+                        #if hasattr(module, key):  # Ensure the attribute exists
+                        setattr(instance, key, value)
 
-                    return ret_val
+                    return instance
                 else:
                     raise AttributeError(f"Class {class_name} not found in {file_path}")
 
@@ -2226,8 +2250,7 @@ class AlgoApi:
             self.robot_name,
         )
 
-        self.loaded_robot.__init__(self)  # type: ignore
-        self.loaded_robot.on_start(self)  # type: ignore
+        self.loaded_robot.on_start()  # type: ignore
 
     def tick(self):
         # update quote, bars, Indicators
@@ -2275,7 +2298,6 @@ class AlgoApi:
             ):
                 self.max_equity_drawdown_time = symbol.time
                 self.max_equity_drawdown_count = len(self.history)
-            self.time = symbol.time
 
         return False
 

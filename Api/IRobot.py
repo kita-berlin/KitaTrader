@@ -2,7 +2,16 @@
 from typing import TypeVar
 from datetime import datetime, timedelta
 from AlgoApiEnums import *
-from AlgoApi import Account, Symbol, Position, Bars, LogParams, PyLogger, AlgoApi, BrokerProvider
+from AlgoApi import (
+    Account,
+    Symbol,
+    Position,
+    Bars,
+    LogParams,
+    PyLogger,
+    AlgoApi,
+    BrokerProvider,
+)
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
@@ -54,6 +63,7 @@ class IRobot(ABC):
         asset_file: str,
         quote_provider: BrokerProvider,
         trade_provider: BrokerProvider,
+        str_time_zone: str = "utc",
     ) -> Symbol: ...
     def get_bars(self, timeframe_seconds: int, symbol_name: str) -> Bars: ...
     def close_trade(
@@ -75,25 +85,20 @@ class IRobot(ABC):
 
     # Long/Short and other arithmetic
     # region
-    @abstractmethod
     def is_greater_or_equal_long(
         self, long_not_short: bool, val1: float, val2: float
     ) -> bool: ...
 
-    @abstractmethod
     def is_less_or_equal_long(
         self, long_not_short: bool, val1: float, val2: float
     ) -> bool: ...
 
-    @abstractmethod
     def is_greater_long(
         self, long_not_short: bool, val1: float, val2: float
     ) -> bool: ...
 
-    @abstractmethod
     def is_less_long(self, long_not_short: bool, val1: float, val2: float) -> bool: ...
 
-    @abstractmethod
     def is_crossing(
         self,
         long_not_short: bool,
@@ -103,34 +108,24 @@ class IRobot(ABC):
         b_prev: float,
     ) -> bool: ...
 
-    @abstractmethod
     def add_long(self, long_not_short: bool, val1: float, val2: float) -> float: ...
 
-    @abstractmethod
     def sub_long(self, long_not_short: bool, val1: float, val2: float) -> float: ...
 
-    @abstractmethod
     def diff_long(self, long_not_short: bool, val1: float, val2: float) -> float: ...
 
-    @abstractmethod
     def i_price(self, dPrice: float, tickSize: float) -> int: ...
 
-    @abstractmethod
     def d_price(self, price: float, tickSize: float) -> float: ...
 
-    @abstractmethod
     def max(self, ref_value: list[T], compare: T) -> bool: ...
 
-    @abstractmethod
     def min(self, ref_value: list[T], compare: T) -> bool: ...
 
-    @abstractmethod
     def sharpe_sortino(self, is_sortino: bool, vals: list[float]) -> float: ...
 
-    @abstractmethod
     def standard_deviation(self, is_sortino: bool, vals: list[float]) -> float: ...
 
-    @abstractmethod
     def is_new_bar_get(
         self, seconds: int, time: datetime, prevTime: datetime
     ) -> bool: ...

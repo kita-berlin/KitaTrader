@@ -1,5 +1,4 @@
 ﻿from math import sqrt
-from typing import List
 from IRobot import IRobot
 from AlgoApiEnums import *
 from AlgoApi import HedgePosition
@@ -14,21 +13,22 @@ from talib import MA_Type  # type: ignore
 
 
 class Martingale(IRobot):
-
-    # Parameter
-    # region
-    # These parameters will be set by the values from the robot_parameter dictionary
-    Rebuy1stPercent: float
-    RebuyPercent: float
-    TakeProfitPercent: float
-    Volume: int
-    TradeDirection: TradeDirection
-    # endregion
-
+        
     # History
     # region
     version: str = "Martingale V1.0"
     # V1.0     14.02.23    HMz created
+    # endregion
+
+    # Parameter
+    # region
+    # These parameters will be set by the values from the robot_parameter dictionary
+    # If not defined there, the default values will be used
+    Rebuy1stPercent = 1.5
+    RebuyPercent = 0.2
+    TakeProfitPercent = 0.2
+    Volume = 2000
+    Direction = TradeDirection.Mode1
     # endregion
 
     # Members
@@ -36,7 +36,9 @@ class Martingale(IRobot):
     sqrt252: float = sqrt(252)
     # endregion
 
-    def __init__(self):
+    def __init__(self, api:IRobot):  # type: ignore
+        # Store the loader's self for shared context
+        self.api = api
         pass
 
     ###################################
@@ -46,8 +48,8 @@ class Martingale(IRobot):
         # region
         self.is_long = True
         self.current_volume = self.initial_volume = self.Volume
-        self.hedge_positions: List[HedgePosition] = []
-        self.max_invest_count: List[int] = [0] * 1
+        self.hedge_positions: list[HedgePosition] = []
+        self.max_invest_count: list[int] = [0] * 1
         self.cluster_count: int = 0
         self.avg_price: float = 0
         self.invest_count: int = 0
@@ -88,18 +90,26 @@ class Martingale(IRobot):
 
         # mt5_broker =  BrokerMt5(account, "62060378, pepperstone_uk-Demo, tFue0y*akr")
         quote_provider = BrokerMe(
-            # path to mbar files, data rate (-1 means quote provider, account for trading not used)
+            # path to mbar files, data rate, account for trading not used)
             "G:\\Meine Ablage\\TickBars\\mbars",
-            -1,
-            self.account,  # Data rate
+            0,  # Data rate in seconds (0 means fastest possible)
+            self.api.account,
         )
 
-        # no parameter, data rate ( 0 means fastest possible, account for trading)
-        trade_provider = BrokerPaper("", 0, self.account)
+        # BrokerPaper has no 1st parameter,
+        # data rate in seconds (-1 means not a qote provider but a trade provider),
+        # account for trading
+        trade_provider = BrokerPaper("", -1, self.api.account)
 
         # symbol, asset filename in files directory, quote_provider, trade_provider
-        self.init_symbol(
-            "NZDCAD", "Assets_Pepperstone_Demo.csv", quote_provider, trade_provider
+        self.api.init_symbol(
+            "NZDCAD",
+            "Assets_Pepperstone_Demo.csv",
+            quote_provider,
+            trade_provider,
+            # if K of New_YorK is versal, 7 hours are added
+            # what gives NY 17:00 = midnight (we call this NY normalized time)
+            # str_time_zone="America/New_YorK",
         )
 
         # example how to use bars
@@ -235,7 +245,7 @@ class Martingale(IRobot):
                             + "; {:.2f}".format(self.calmar)
                         )
 
-                    if self.TradeDirection == TradeDirection.Mode1:
+                    if self.Direction == TradeDirection.Mode1:
                         self.is_long = not self.is_long  # flip direction
                     is_just_closed = True
         pass
@@ -264,7 +274,7 @@ class Martingale(IRobot):
                 # Das volume_to_add beeinflusst den Mischpreis (self.avg_price)
                 # und zieht ihn näher zum aktuellen Preis hin
                 h_pos = HedgePosition(
-                    self.algo_api, symbol, self.is_long, self.get_label()
+                    self.api, symbol, self.is_long, self.get_label()  # type: ignore
                 )
                 h_pos.do_main_open(volume_to_add)
                 self.hedge_positions.append(h_pos)

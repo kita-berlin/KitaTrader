@@ -75,7 +75,7 @@ class ProviderQuote:
             quote.low = self.df_start.iloc[self.current_index].Low
             quote.close = self.df_start.iloc[self.current_index].close
             quote.volume = self.df_start.iloc[self.current_index].Volume
-            quote.open_ask = quote.open + 12 * 1e-5  # set spread to 12 toints
+            quote.open_spread = quote.open + 12 * 1e-5  # set spread to 12 toints
             self.current_index += 1
             error = ""
 

@@ -145,7 +145,7 @@ class ProviderQuote:
                 datetime.fromtimestamp(current_tick.time)
             )
             qb.open = qb.high = qb.low = qb.close = current_tick.bid
-            qb.open_ask = current_tick.ask
+            qb.open_spread = current_tick.ask
             qb.milli_seconds = current_tick.time % 1000
             time.sleep(0.1)
         else:
@@ -157,7 +157,7 @@ class ProviderQuote:
             qb.low = self.Rates[self.current_index][3]
             qb.close = self.Rates[self.current_index][4]
             qb.volume = self.Rates[self.current_index][5]
-            qb.open_ask = (
+            qb.open_spread = (
                 self.Rates[self.current_index][1]
                 + self.Rates[self.current_index][6] * self.symbol_info.point_size
             )
