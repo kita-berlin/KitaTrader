@@ -28,8 +28,8 @@ class trading_env(gym.Env):
         self.open_trades_count = 0
 
         self.floats_rebuy1st_percent = [round(x * 0.1, 1) for x in range(1, 21)]
-        self.floats_rebuy_percent = [round(x * 0.01, 10) for x in range(1, 21)]
-        self.floats_take_profit_percent = [round(x * 0.01, 10) for x in range(1, 21)]
+        self.floats_RebuyPercent = [round(x * 0.01, 10) for x in range(1, 21)]
+        self.floats_TakeProfitPercent = [round(x * 0.01, 10) for x in range(1, 21)]
 
         self.action_space = spaces.multi_discrete(  # pylint: disable=not-callable
             [20, 20, 20]
@@ -129,9 +129,9 @@ class trading_env(gym.Env):
         return obs, {}
 
     def step(self, action):
-        self.algo_api.rebuy_1st_percent = self.floats_rebuy1st_percent[action[0]]
-        self.algo_api.rebuy_percent = self.floats_rebuy_percent[action[1]]
-        self.algo_api.take_profit_percent = self.floats_take_profit_percent[action[2]]
+        self.algo_api.Rebuy1stPercent = self.floats_rebuy1st_percent[action[0]]
+        self.algo_api.RebuyPercent = self.floats_RebuyPercent[action[1]]
+        self.algo_api.TakeProfitPercent = self.floats_TakeProfitPercent[action[2]]
 
         if self.current_step >= len(self.df):
             terminated = True
@@ -146,9 +146,9 @@ class trading_env(gym.Env):
 
         self.past_actions.append(
             [
-                self.algo_api.rebuy_1st_percent,
-                self.algo_api.rebuy_percent,
-                self.algo_api.take_profit_percent,
+                self.algo_api.Rebuy1stPercent,
+                self.algo_api.RebuyPercent,
+                self.algo_api.TakeProfitPercent,
             ]
         )
         self.past_rewards.append(reward)
@@ -230,8 +230,8 @@ def main():
                     env.algo_api.cluster_count,
                     env.algo_api.invest_count,
                     env.algo_api.bin_settings.Rebuy1stPercent,
-                    env.algo_api.bin_settings.rebuy_percent,
-                    env.algo_api.bin_settings.take_profit_percent,
+                    env.algo_api.bin_settings.RebuyPercent,
+                    env.algo_api.bin_settings.TakeProfitPercent,
                 ]
             )
 

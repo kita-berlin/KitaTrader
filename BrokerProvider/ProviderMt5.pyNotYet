@@ -197,12 +197,12 @@ Update account:
                 import MetaTrader5 as mt5
 
                 account_info = mt5.account_info()
-                self.Account.balance = account_info.balance
-                self.Account.equity = account_info.equity
-                self.Account.margin = account_info.margin
-                self.Account.FreeMargin = account_info.margin_free
-                self.Account.MarginLevel = account_info.margin_level
-                self.Account.unrealized_net_profit = account_info.profit
+                self.account.balance = account_info.balance
+                self.account.equity = account_info.equity
+                self.account.margin = account_info.margin
+                self.account.FreeMargin = account_info.margin_free
+                self.account.MarginLevel = account_info.margin_level
+                self.account.unrealized_net_profit = account_info.profit
             else:
                 open_positions_profit = 0
                 for x in self.positions:
@@ -211,8 +211,8 @@ Update account:
                         * (1 if x.trade_type == TradeType.Buy else -1)
                         * x.volume_in_units
                     )
-                    self.Account.unrealized_net_profit += open_positions_profit
+                    self.account.unrealized_net_profit += open_positions_profit
                     x.max_drawdown = min(x.max_drawdown, open_positions_profit)
 
-                self.Account.equity = self.Account.balance + open_positions_profit
+                self.account.equity = self.account.balance + open_positions_profit
             pass

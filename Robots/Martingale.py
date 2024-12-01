@@ -13,28 +13,31 @@ from BrokerCsv import BrokerCsv  # type: ignore
 from talib import MA_Type  # type: ignore
 
 
-class Kangaroo(IRobot):
+class Martingale(IRobot):
+
+    # Parameter
+    # region
+    # These parameters will be set by the values from the robot_parameter dictionary
+    Rebuy1stPercent: float
+    RebuyPercent: float
+    TakeProfitPercent: float
+    Volume: int
+    TradeDirection: TradeDirection
+    # endregion
+
+    # History
+    # region
+    version: str = "Martingale V1.0"
+    # V1.0     14.02.23    HMz created
+    # endregion
+
     # Members
     # region
     sqrt252: float = sqrt(252)
     # endregion
 
     def __init__(self):
-        # History
-        # region
-        self.version = "Kangaroo V1.0"
-        # V1.0     14.02.23    HMz created
-        # endregion
-
-        # Parameter
-        # region
-        self.rebuy_1st_percent = 1.0
-        self.rebuy_percent = 0.1
-        self.take_profit_percent = 0.1
-        self.volume = 1000
-        self.trade_direction = TradeDirection.Mode1
-
-    # endregion
+        pass
 
     ###################################
     def on_start(self) -> None:
@@ -42,7 +45,7 @@ class Kangaroo(IRobot):
         # Members; We do declaration here so members will be reinized by 2nd++ on_start()
         # region
         self.is_long = True
-        self.current_volume = self.initial_volume = self.volume
+        self.current_volume = self.initial_volume = self.Volume
         self.hedge_positions: List[HedgePosition] = []
         self.max_invest_count: List[int] = [0] * 1
         self.cluster_count: int = 0
@@ -196,15 +199,11 @@ class Kangaroo(IRobot):
                 self.is_long,
                 last_position.freeze_corrected_entry_price,
                 last_position.freeze_corrected_entry_price
-                * (
-                    self.rebuy_1st_percent
-                    if self.invest_count < 2
-                    else self.rebuy_percent
-                )
+                * (self.Rebuy1stPercent if self.invest_count < 2 else self.RebuyPercent)
                 / 100,
             )
 
-            tp_value = current_close * self.take_profit_percent / 100
+            tp_value = current_close * self.TakeProfitPercent / 100
             # tp_price = self.add_long(self.is_long, self.avg_price, tp_value)
             tp_points = self.i_price(tp_value, self.symbol.point_size)
 
@@ -228,7 +227,7 @@ class Kangaroo(IRobot):
                             self.symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
                             + ("Long" if self.is_long else "Short")
                             # + "; {:.2f}".format(
-                            #     self.Account.balance - self.initial_account_balance
+                            #     self.account.balance - self.initial_account_balance
                             # )
                             + "; {:.2f}".format(self.max_equity_drawdown_value[0])
                             + "; {}".format(self.cluster_count)
@@ -236,7 +235,7 @@ class Kangaroo(IRobot):
                             + "; {:.2f}".format(self.calmar)
                         )
 
-                    if self.trade_direction == TradeDirection.Mode1:
+                    if self.TradeDirection == TradeDirection.Mode1:
                         self.is_long = not self.is_long  # flip direction
                     is_just_closed = True
         pass
@@ -260,8 +259,8 @@ class Kangaroo(IRobot):
             if is_reinvest:
                 # Hier sollte der Regler oder die KI greifen:
                 # Mit wie viel volume_to_add soll (nach)gekauft werden und
-                # wie sollen die Parameter Rebuy1stPercent, rebuy_percent
-                # und take_profit_percent aussehen?
+                # wie sollen die Parameter Rebuy1stPercent, RebuyPercent
+                # und TakeProfitPercent aussehen?
                 # Das volume_to_add beeinflusst den Mischpreis (self.avg_price)
                 # und zieht ihn näher zum aktuellen Preis hin
                 h_pos = HedgePosition(
@@ -283,9 +282,9 @@ class Kangaroo(IRobot):
                         # + "; {}".format(self.cluster_count)
                         # + "; {}".format(self.invest_count)
                         # + "; {:.2f}".format(self.calmar)
-                        # + "; {:.2f}".format(self.rebuy_1st_percent)
-                        # + "; {:.2f}".format(self.rebuy_percent)
-                        # + "; {:.2f}".format(self.take_profit_percent)
+                        # + "; {:.2f}".format(self.Rebuy1stPercent)
+                        # + "; {:.2f}".format(self.RebuyPercent)
+                        # + "; {:.2f}".format(self.TakeProfitPercent)
                     )
                     pass
             else:
@@ -336,13 +335,13 @@ class Kangaroo(IRobot):
         self.positions  # list of current open positions; Count matches self.invest_count
         self.initial_account_balance  # start balance
         self.symbol.trade_provider.account.balance  # start balance plus profit sum of all CLOSED positions (sum of REALIZED profit)
-        self.symbol.trade_provider.account.equity  # self.Account.balance plus profit sum of all OPEN positions (sum of UNREALIZED profit)
+        self.symbol.trade_provider.account.equity  # self.account.balance plus profit sum of all OPEN positions (sum of UNREALIZED profit)
         self.cluster_count  # number of current cluster
         self.invest_count  # number of open trades within current cluster
         self.symbol.trade_provider.account.margin  # sum of all open Position margins; equal to sum(x.margin for x in self.positions)
         self.max_equity_drawdown_value[
             0
-        ]  # holds biggest difference of self.Account.balance and self.Account.equity
+        ]  # holds biggest difference of self.account.balance and self.account.equity
 
         # composed values
         history_profit = (

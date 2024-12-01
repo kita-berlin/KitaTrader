@@ -28,7 +28,6 @@
     <Content Include="241124 Python Coding Conventions.txt" />
     <Content Include="Files\Assets_Dukascopy_Live.csv" />
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
-    <Content Include="Files\System.json" />
     <Content Include="BrokerProvider\ProviderCsv.pyNotYet" />
     <Content Include="BrokerProvider\ProviderMe.pyNotYet" />
     <Content Include="BrokerProvider\BrokerMt5.py" />
@@ -61,7 +60,7 @@
     <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteMeFiles.py" />
     <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteMt5.py" />
     <Compile Include="ReadData.py" />
-    <Compile Include="Robots\Kangaroo.py" />
+    <Compile Include="Robots\Martingale.py" />
     <Compile Include="Robots\Ultron.py" />
   </ItemGroup>
   <ItemGroup>

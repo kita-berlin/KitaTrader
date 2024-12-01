@@ -1,3 +1,4 @@
+import sys
 import os
 import math
 import importlib.util
@@ -8,7 +9,7 @@ import traceback
 import locale
 from abc import ABC, abstractmethod
 from numpy.typing import NDArray
-from typing import TypeVar, Iterable, Iterator
+from typing import TypeVar, Iterable, Iterator,Union
 from datetime import datetime, timedelta
 from AlgoApiEnums import *
 from CoFu import *
@@ -215,7 +216,7 @@ class PendingOrder(ABC):
 
     #     @property
     #     @abstractmethod
-    #     def take_profit_percent(self) -> float:
+    #     def TakeProfitPercent(self) -> float:
     #         """
     #         The order take profit in price
     #         """
@@ -1534,6 +1535,7 @@ class AlgoApi:
     end_dt: datetime
     running_mode: RunningMode
     robot_name: str
+    robot_parameter: dict[str, Union[str, int, bool, float, TradeDirection]]
     account: Account
     # endregion
 
@@ -1600,7 +1602,7 @@ class AlgoApi:
             log.closing_time = last_hist.closing_time
             log.net_profit = last_hist.net_profit
             log.comment = ""
-            log.balance = self.Account.balance
+            log.balance = self.account.balance
             log.trade_margin = last_hist.margin
             log.max_equity_drawdown = self.max_equity_drawdown_value[0]
             # log.max_trade_equity_drawdown_value = self.max_trade_equity_drawdown_value[0]
@@ -1634,7 +1636,7 @@ class AlgoApi:
         )
         pos.label = label
         pos.margin = volume * pos.entry_price / pos.symbol.leverage
-        self.Account.margin += pos.margin
+        self.account.margin += pos.margin
 
         if is_append_position:
             self.positions.append(pos)
@@ -1660,12 +1662,12 @@ class AlgoApi:
     def close_position(self, pos: Position):
         trade_result = TradeResult()
         try:
-            self.Account.margin -= pos.margin
+            self.account.margin -= pos.margin
             pos.closing_price = pos.current_price
             pos.closing_time = pos.symbol.time
             self.history.append(pos)
             self.positions.remove(pos)
-            self.Account.balance += pos.net_profit
+            self.account.balance += pos.net_profit
             trade_result.is_successful = True
         except:
             pass
@@ -2068,20 +2070,20 @@ class AlgoApi:
         if ProfitMode == ProfitMode.lots:
             desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lot_siz =value)
         elif ProfitMode == ProfitMode.lots_pro10k:
-            lot_siz = (self.Account.balance - self.Account.margin) / 10000 * value
+            lot_siz = (self.account.balance - self.account.margin) / 10000 * value
             desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lot_size)
         elif ProfitMode == ProfitMode.profit_percent:
-            desi_mon = (self.Account.balance - self.Account.margin) * value / 100
+            desi_mon = (self.account.balance - self.account.margin) * value / 100
             lot_siz = self.calc_money_and_points_2lots(symbol: Symbol, desired_money, tpPts, self.commission_per_lot(symbol: Symbol))
         elif ProfitMode == ProfitMode.profit_ammount:
             lot_siz = self.calc_money_and_points_2lots(symbol: Symbol, desi_mon =value, tp_pts =tpPts, x_pro_lot =self.commission_per_lot(symbol: Symbol))
         elif profitMode in [ProfitMode.risk_constant, ProfitMode.risk_reinvest]:
-            balance = self.Account.balance if ProfitMode == ProfitMode.risk_reinvest else self.initial_account_balance
-            money_to_risk = (balance - self.Account.margin) * value / 100
+            balance = self.account.balance if ProfitMode == ProfitMode.risk_reinvest else self.initial_account_balance
+            money_to_risk = (balance - self.account.margin) * value / 100
             lot_siz = self.calc_money_and_points_2lots(symbol: Symbol, moneyToRisk, riskPoints, self.commission_per_lot(symbol: Symbol))
             desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lot_size)
         elif profitMode in [ProfitMode.constant_invest, ProfitMode.Reinvest]:
-            invest_money = (self.initial_account_balance if ProfitMode == ProfitMode.constant_invest else self.Account.balance) * value / 100
+            invest_money = (self.initial_account_balance if ProfitMode == ProfitMode.constant_invest else self.account.balance) * value / 100
             units = investMoney * symbol.point_size / symbol.tick_value / symbol.bid
             lot_siz = symbol.volume_in_units_to_quantity(units)
             desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lot_size)
@@ -2126,25 +2128,36 @@ class AlgoApi:
     # Methods
     # region
     def load_class_from_file(self, file_path: str, class_name: str):
-        # Load the module dynamically
+        # Load the module dynamically and init
         module_name = os.path.splitext(os.path.basename(file_path))[0]
         spec = importlib.util.spec_from_file_location(module_name, file_path)  # type: ignore
         if spec is not None:
             module = importlib.util.module_from_spec(spec)  # type: ignore
             if spec.loader is not None:  # type: ignore
+                # Ensure the module is in sys.modules for reference
+                sys.modules[module_name] = module
+
+                # Execute the module
                 spec.loader.exec_module(module)  # type: ignore
 
                 # Retrieve the class from the module
                 if hasattr(module, class_name):  # type: ignore
-                    return getattr(module, class_name)  # type: ignore
+                    ret_val = getattr(module, class_name)
+
+                    # Set the parameters
+                    for key, value in self.robot_parameter.items():
+                        setattr(module, key, value)
+
+                    return ret_val
                 else:
                     raise AttributeError(f"Class {class_name} not found in {file_path}")
+
         return None  # type: ignore
 
     # def update_chart_text_and_bars(self):
     """
-        self.BalanceValue.text = "{:.2f}".format(self.Account.balance)
-        self.EquityValue.text = "{:.2f}".format(self.Account.equity)
+        self.BalanceValue.text = "{:.2f}".format(self.account.balance)
+        self.EquityValue.text = "{:.2f}".format(self.account.equity)
         self.DatetimeValue.text = self.time.strftime("%d-%m-%Y %H:%M:%S")
         self.MaxEqDdValue.text = "{:.2f}".format(self.MaxEquityDrawdownValue[0])
 
@@ -2212,8 +2225,8 @@ class AlgoApi:
             os.path.join("robots", self.robot_name + ".py"),
             self.robot_name,
         )
-        self.loaded_robot.__init__(self)  # type: ignore
 
+        self.loaded_robot.__init__(self)  # type: ignore
         self.loaded_robot.on_start(self)  # type: ignore
 
     def tick(self):
@@ -2243,22 +2256,22 @@ class AlgoApi:
             self.loaded_robot.on_tick(symbol)  # type: ignore
 
             # do max/min calcs
-            self.max(self.max_margin, self.Account.margin)
+            self.max(self.max_margin, self.account.margin)
             if self.max(self.same_time_open, len(self.positions)):
                 self.same_time_open_date_time = symbol.time
                 self.same_time_open_count = len(self.history)
 
-            self.max(self.max_balance, self.Account.balance)
+            self.max(self.max_balance, self.account.balance)
             if self.max(
                 self.max_balance_drawdown_value,
-                self.max_balance[0] - self.Account.balance,
+                self.max_balance[0] - self.account.balance,
             ):
                 self.max_balance_drawdown_time = symbol.time
                 self.max_balance_drawdown_count = len(self.history)
 
-            self.max(self.max_equity, self.Account.equity)
+            self.max(self.max_equity, self.account.equity)
             if self.max(
-                self.max_equity_drawdown_value, self.max_equity[0] - self.Account.equity
+                self.max_equity_drawdown_value, self.max_equity[0] - self.account.equity
             ):
                 self.max_equity_drawdown_time = symbol.time
                 self.max_equity_drawdown_count = len(self.history)
@@ -2371,13 +2384,13 @@ class AlgoApi:
             )
         )
 
-        # self.log_add_text_line("max_margin: " + self.Account.asset + " " + AlgoApi.double_to_string(mMaxMargin, 2))
+        # self.log_add_text_line("max_margin: " + self.account.asset + " " + AlgoApi.double_to_string(mMaxMargin, 2))
         # self.log_add_text_line("max_same_time_open: " + str(mSameTimeOpen)
         # + ", @ " + mSameTimeOpenDateTime.strftime("%d.%m.%Y %H:%M:%S")
         # + ", Count# " + str(mSameTimeOpenCount))
         self.log_add_text_line(
             "Max Balance Drawdown Value: "
-            + self.Account.asset
+            + self.account.asset
             + " "
             + AlgoApi.double_to_string(self.max_balance_drawdown_value[0], 2)
             + "; @ "
@@ -2399,7 +2412,7 @@ class AlgoApi:
 
         self.log_add_text_line(
             "Max Equity Drawdown Value: "
-            + self.Account.asset
+            + self.account.asset
             + " "
             + AlgoApi.double_to_string(self.max_equity_drawdown_value[0], 2)
             + "; @ "
@@ -2822,7 +2835,7 @@ class HedgePosition:
 
             if result is not None:  # type: ignore
                 self.freeze_position = result
-                self.freeze_margin_after_open = self.bot.Account.margin
+                self.freeze_margin_after_open = self.bot.account.margin
         return self.freeze_position is not None  # type: ignore
 
 
