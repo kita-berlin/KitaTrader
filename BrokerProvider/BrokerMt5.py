@@ -1,18 +1,18 @@
 # import MetaTrader5 as mt5
 from datetime import datetime
-from KitaApi import Account, QuoteProvider, TradeProvider, QuoteBar
+from KitaApi import QuoteProvider, TradeProvider, QuoteBar
 
 
 class BrokerMt5(QuoteProvider, TradeProvider):
-    def __init__(self, parameter: str, data_rate: int, account: Account):
+    def __init__(self, parameter: str, data_rate: int):
         QuoteProvider.__init__(self, parameter, data_rate)
-        TradeProvider.__init__(self, parameter, account)
+        TradeProvider.__init__(self, parameter)
 
     def __del__(self):
         pass
 
-    def initialize(self, parameter: str, account: Account):
-        #self.symbol_name = symbol_name
+    def initialize(self, parameter: str):
+        # self.symbol_name = symbol_name
         pass
 
     def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:

@@ -116,9 +116,9 @@ Number,net_profit,Balance,Symbol,Mode,Volume,OpenDate,OpenTime,CloseDate,CloseTi
 Net Profit,28.32,,,,Long: 12.05,,,,Short:,16.27
 Max Balance Drawdown Value: EUR 3.87; @ 05.01.2024 10:03:00; Count# 1
 Max Balance Drawdown%: 0.04
-Max Equity Drawdown Value: EUR 0.00; @ 01.01.0001 00:00:00; Count# 0
-Max Current Equity Drawdown %: 0.00
-Max start Equity Drawdown %: 0.00
+Max Equity Drawdown Value: EUR 63.07; @ 25.02.2024 17:01:00; Count# 47
+Max Current Equity Drawdown %: 0.63
+Max start Equity Drawdown %: 0.63
 Profit Factor: 2.14
 Sharpe Ratio: 0.21
 Sortino Ratio: 0.24

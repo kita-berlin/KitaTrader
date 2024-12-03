@@ -93,7 +93,7 @@ class Martingale(KitaApi):
         )
 
         # account for trading
-        trade_provider = BrokerPaper("", self.account)
+        trade_provider = BrokerPaper("")
 
         # symbol, asset filename in files directory, quote_provider, trade_provider
         self.init_symbol(
@@ -175,11 +175,22 @@ class Martingale(KitaApi):
         current_close = self.symbol.bid if self.is_long else self.symbol.ask
         target_cash = current_repurchase_price = 0
 
+        # Check spread
+        is_spread = True
+        if (
+            symbol.spread < 0
+            or symbol.spread > 2 * symbol.market_values.avg_spread * symbol.point_size
+        ):
+            is_spread = False
+        is_trading_allowed = is_spread
+
+        # Init some vars if 0 positions open
         if 0 == self.invest_count:
             self.cluster_profit = 0
             self.current_volume = self.initial_volume
         pass
 
+        # Calc some vars if some positions are open
         if self.invest_count >= 1:
             last_position = self.positions[-1]
             self.cluster_profit = self.current_volume = 0
@@ -211,7 +222,7 @@ class Martingale(KitaApi):
 
         # Take Profit ?
         is_just_closed = False
-        if self.symbol.is_trading_allowed:
+        if is_trading_allowed:
             if self.invest_count > 0:
                 # check profit instead of price because of swaps etc.
                 if self.cluster_profit > target_cash:
@@ -237,7 +248,7 @@ class Martingale(KitaApi):
         pass
 
         # Open ?
-        if self.symbol.is_trading_allowed and not is_just_closed:
+        if is_trading_allowed and not is_just_closed:
             is_reinvest = False
             volume_to_add = self.initial_volume
 
@@ -268,15 +279,14 @@ class Martingale(KitaApi):
 
                 self.invest_count += 1
                 self.max(self.max_invest_count, self.invest_count)
-                self.margin_after_open = self.symbol.trade_provider.account.margin
+                self.margin_after_open = self.account.margin
 
                 if not self.is_train:
                     print(
                         self.symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
                         + ("Long" if self.is_long else "Short")
                         + "; {:.2f}".format(
-                            self.symbol.trade_provider.account.balance
-                            - self.initial_account_balance
+                            self.account.balance - self.initial_account_balance
                         )
                         # + "; {:.2f}".format(self.max_equity_drawdown_value[0])
                         # + "; {}".format(self.cluster_count)
@@ -336,19 +346,17 @@ class Martingale(KitaApi):
         self.history  # list of closed positions
         self.positions  # list of current open positions; Count matches self.invest_count
         self.initial_account_balance  # start balance
-        self.symbol.trade_provider.account.balance  # start balance plus profit sum of all CLOSED positions (sum of REALIZED profit)
-        self.symbol.trade_provider.account.equity  # self.account.balance plus profit sum of all OPEN positions (sum of UNREALIZED profit)
+        self.account.balance  # start balance plus profit sum of all CLOSED positions (sum of REALIZED profit)
+        self.account.equity  # self.account.balance plus profit sum of all OPEN positions (sum of UNREALIZED profit)
         self.cluster_count  # number of current cluster
         self.invest_count  # number of open trades within current cluster
-        self.symbol.trade_provider.account.margin  # sum of all open Position margins; equal to sum(x.margin for x in self.positions)
+        self.account.margin  # sum of all open Position margins; equal to sum(x.margin for x in self.positions)
         self.max_equity_drawdown_value[
             0
         ]  # holds biggest difference of self.account.balance and self.account.equity
 
         # composed values
-        history_profit = (
-            self.symbol.trade_provider.account.balance - self.initial_account_balance
-        )
+        history_profit = self.account.balance - self.initial_account_balance
         # history_profit is equal to sum(x.net_profit for x in self.history)
 
         revenue = history_profit + self.cluster_profit

@@ -10,7 +10,7 @@ class MainConsole:
         # 1. Set the parameters of the platform
         # region
         self.robot = Martingale()
-        self.robot.loaded_robot = self.robot  # type:ignore
+        self.robot.robot = self.robot  # type:ignore
         self.robot.StartUtc = datetime.strptime("2024-01-01", "%Y-%m-%d")
         self.robot.EndUtc = datetime.strptime("2030-01-01", "%Y-%m-%d")
         self.robot.RunningMode = RunMode.SilentBacktesting

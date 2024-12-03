@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import math
 import numpy as np
@@ -458,24 +459,6 @@ class Asset(ABC):
 
         else:
             raise ValueError("Unsupported conversion target")
-
-
-class Account:
-    balance: float = 0
-    equity: float = 0
-    margin: float = 0
-    free_margin: float = 0
-    margin_level: float = 0
-    unrealized_net_profit: float = 0
-    leverage: float = 0
-    stop_out_level: float = 0
-    asset: str = ""
-    # total_margin_calculation_type:MarginMode
-    # credit = account_info.credit
-    # user_nick_name = account_info.name
-
-    def __init__(self):
-        pass
 
 
 class ConcreteAsset(Asset):
@@ -1201,12 +1184,10 @@ class QuoteProvider(ABC):
 
 class TradeProvider(ABC):
     symbol_name: str
-    account: Account
     market_values: MarketValues
 
-    def __init__(self, parameter: str, account: Account):
+    def __init__(self, parameter: str):
         self.parameter = parameter
-        self.account = account
         pass
 
     @abstractmethod
@@ -1214,6 +1195,9 @@ class TradeProvider(ABC):
 
     @abstractmethod
     def update_account(self): ...
+
+    @abstractmethod
+    def add_profit(self, profit: float): ...
 
 
 class SymbolInfo:
@@ -1229,7 +1213,6 @@ class SymbolInfo:
     max_volume: float = 0.0
     lot_size: float = 0.0
     leverage: float = 0.0
-    is_trading_allowed: bool = False
     time_zone: tzinfo = tzinfo()
     # endregion
 
@@ -1511,7 +1494,7 @@ class Position:
         pass
 
     @property
-    def current_price(self):
+    def current_price(self) -> float:
         return self.symbol.bid if self.trade_type == TradeType.Buy else self.symbol.ask
 
     @property
@@ -1540,6 +1523,31 @@ class Position:
             return 0
 
 
+class Account:
+    balance: float = 0
+    margin: float = 0
+    free_margin: float = 0
+    margin_level: float = 0
+    unrealized_net_profit: float = 0
+    leverage: float = 0
+    stop_out_level: float = 0
+    currency: str = ""
+    # total_margin_calculation_type:MarginMode
+    # credit = account_info.credit
+    # user_nick_name = account_info.name
+
+    @property
+    def equity(self) -> float:
+        profit: float = 0
+        for pos in self.kita_Api.positions:
+            profit += pos.net_profit
+        return self.kita_Api.account.balance + profit
+
+    def __init__(self, kita_Api: KitaApi):
+        self.kita_Api = kita_Api
+        pass
+
+
 ############# KitaApi ########################
 class KitaApi:
 
@@ -1550,7 +1558,7 @@ class KitaApi:
     StartUtc = datetime.strptime("1900-01-01", "%Y-%m-%d")
     EndUtc = datetime.strptime("2100-01-01", "%Y-%m-%d")
     RunningMode: RunMode = RunMode.SilentBacktesting
-    AccountInitialBalance: float = 10000
+    AccountInitialBalance: float = 10000.0
     AccountLeverage: int = 500
     AccountCurrency: str = "EUR"
     # endregion
@@ -1574,7 +1582,9 @@ class KitaApi:
         self.symbol_dictionary[symbol_name] = symbol
         quote_provider.initialize(symbol_name)
 
-        self.initial_local_dt= self.start_local_dt = self.StartUtc.astimezone(symbol.time_zone)
+        self.initial_local_dt = self.start_local_dt = self.StartUtc.astimezone(
+            symbol.time_zone
+        )
         self.end_local_dt = self.EndUtc.astimezone(symbol.time_zone)
 
         error, quote = quote_provider.get_quote_bar_at_date(self.start_local_dt)
@@ -1584,7 +1594,7 @@ class KitaApi:
             self.bid = quote.open
             self.ask = quote.open + quote.open_spread
 
-        trade_provider.initialize(symbol_name, self.account)
+        trade_provider.initialize(symbol_name, self)
 
     def get_bars(
         self, start_local_dt: datetime, timeframe_seconds: int, symbol_name: str
@@ -1697,7 +1707,7 @@ class KitaApi:
             pos.closing_time = pos.symbol.time
             self.history.append(pos)
             self.positions.remove(pos)
-            self.account.balance += pos.net_profit
+            pos.symbol.trade_provider.add_profit(pos.net_profit)
             trade_result.is_successful = True
         except:
             pass
@@ -2027,7 +2037,9 @@ class KitaApi:
             elif change_part == "DiffGross":
                 self.logger.add_text(
                     KitaApi.double_to_string(
-                        self.get_money_from_points_and_lot(lp.symbol, point_diff, lp.lots),
+                        self.get_money_from_points_and_lot(
+                            lp.symbol, point_diff, lp.lots
+                        ),
                         2,
                     )
                 )
@@ -2198,10 +2210,10 @@ class KitaApi:
     """
 
     def start(self):
-        self.account: Account = Account()
-        self.account.balance = self.account.equity = self.AccountInitialBalance
+        self.account: Account = Account(self)
+        self.account.balance = self.AccountInitialBalance
         self.account.leverage = self.AccountLeverage
-        self.account.asset = self.AccountCurrency
+        self.account.currency = self.AccountCurrency
 
         self.initial_account_balance: float = self.AccountInitialBalance
         self.symbol_dictionary: dict[str, Symbol] = {}  # type: ignore
@@ -2228,33 +2240,24 @@ class KitaApi:
         self.open_duration_count: list[int] = [0] * 1  # arrays because of by reference
         self.max_open_duration: list[timedelta] = [timedelta.min] * 1
 
-        self.loaded_robot.on_start()  # type: ignore
+        self.robot.on_start()  # type: ignore
 
     def tick(self):
-        # update quote, bars, Indicators
+        # Update quote, bars, indicators, account, bot
         # 1st tick must update all bars and Indicators which have been inized in on_start()
         for symbol in self.symbol_dictionary.values():
+
+            # Update quote, bars, indicators which are bound to this symbol
             error = symbol.on_tick()
             if "" != error or symbol.time > self.end_local_dt:
-                return True
+                return True  # end reached
 
-            ########################################
             # Update Account
             if len(self.positions) >= 1:
                 symbol.trade_provider.update_account()
 
-            # check spread
-            is_spread = True
-            if (
-                symbol.spread < 0
-                or symbol.spread
-                > 2 * symbol.market_values.avg_spread * symbol.point_size
-            ):
-                is_spread = False
-            symbol.is_trading_allowed = is_spread
-
-            # call bot's on_tick
-            self.loaded_robot.on_tick(symbol)  # type: ignore
+            # Update robot
+            self.robot.on_tick(symbol)  # type: ignore
 
             # do max/min calcs
             self.max(self.max_margin, self.account.margin)
@@ -2281,7 +2284,7 @@ class KitaApi:
 
     def stop(self):
         # call bot
-        self.loaded_robot.on_stop()  # type: ignore
+        self.robot.on_stop()  # type: ignore
 
         # calc performance numbers
         min_duration = timedelta.max
@@ -2295,12 +2298,12 @@ class KitaApi:
 
         # self.max(self.max_invest_count[0], self.max_invest_count)
 
-        # if direction == TradeDirection.Long == self.loaded_robot.longShorts[0].is_long:
-        #     invest_count_histo = self.loaded_robot.longShorts[0].investCountHisto
+        # if direction == TradeDirection.Long == self.robot.longShorts[0].is_long:
+        #     invest_count_histo = self.robot.longShorts[0].investCountHisto
 
-        # if len(self.loaded_robot.longShorts) >= 2:
-        #     if direction == TradeDirection.Long == self.loaded_robot.longShorts[1].is_long:
-        #         invest_count_histo = self.loaded_robot.longShorts[1].investCountHisto
+        # if len(self.robot.longShorts) >= 2:
+        #     if direction == TradeDirection.Long == self.robot.longShorts[1].is_long:
+        #         invest_count_histo = self.robot.longShorts[1].investCountHisto
 
         winning_trades = len([x for x in self.history if x.net_profit >= 0])
         loosing_trades = len([x for x in self.history if x.net_profit < 0])
@@ -2389,7 +2392,7 @@ class KitaApi:
         # + ", Count# " + str(mSameTimeOpenCount))
         self.log_add_text_line(
             "Max Balance Drawdown Value: "
-            + self.account.asset
+            + self.account.currency
             + " "
             + KitaApi.double_to_string(self.max_balance_drawdown_value[0], 2)
             + "; @ "
@@ -2411,7 +2414,7 @@ class KitaApi:
 
         self.log_add_text_line(
             "Max Equity Drawdown Value: "
-            + self.account.asset
+            + self.account.currency
             + " "
             + KitaApi.double_to_string(self.max_equity_drawdown_value[0], 2)
             + "; @ "
@@ -2482,11 +2485,8 @@ class KitaApi:
         self.log_close()
 
     def calculate_reward(self) -> float:
-        return self.loaded_robot.get_tick_fitness()  # type:ignore
+        return self.robot.get_tick_fitness()  # type:ignore
 
-    # endregion
-
-    #
     @staticmethod
     def double_to_string(value: float, digits: int) -> str:
         if value == float("inf") or value != value:
@@ -2511,6 +2511,8 @@ class KitaApi:
             return int(s)
         except ValueError:
             return 0
+
+    # endregion
 
 
 ############# Classes using KitaApi ########################
