@@ -1,25 +1,22 @@
 import os
 import math
-import importlib.util
-import importlib
 import numpy as np
 import csv
 import traceback
 import locale
 from abc import ABC, abstractmethod
 from numpy.typing import NDArray
-from typing import TypeVar, Iterable, Iterator, Union, Type, cast
+from typing import TypeVar, Iterable, Iterator, Any
 from datetime import datetime, timedelta, tzinfo
-from AlgoApiEnums import *
+from KitaApiEnums import *
 from CoFu import *
-
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
 
 
 # Due to circular import problmes with separated classe, we define them here
-############# Some classes needed for AlgoApi ########################
+############# Some classes needed for KitaApi ########################
 class TradeResult:
     def __init__(self, is_successful: bool = True, error: str = None):  # type: ignore
         self.is_successful = is_successful
@@ -1180,19 +1177,17 @@ class MarketValues:
         self.symbol_currency_quote = ""
 
 
-class BrokerProvider(ABC):
+class QuoteProvider(ABC):
     symbol_name: str
-    account: Account
     market_values: MarketValues
 
-    def __init__(self, parameter: str, data_rate: int, account: Account):
+    def __init__(self, parameter: str, data_rate: int):
         self.parameter = parameter
         self.data_rate = data_rate
-        self.account = account
         pass
 
     @abstractmethod
-    def initialize(self, symbol_name: str): ...
+    def initialize(self, *args: Any, **kwargs: Any): ...
 
     @abstractmethod
     def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]: ...
@@ -1202,6 +1197,20 @@ class BrokerProvider(ABC):
 
     @abstractmethod
     def get_next_quote_bar(self) -> tuple[str, QuoteBar]: ...
+
+
+class TradeProvider(ABC):
+    symbol_name: str
+    account: Account
+    market_values: MarketValues
+
+    def __init__(self, parameter: str, account: Account):
+        self.parameter = parameter
+        self.account = account
+        pass
+
+    @abstractmethod
+    def initialize(self, *args: Any, **kwargs: Any): ...
 
     @abstractmethod
     def update_account(self): ...
@@ -1228,8 +1237,8 @@ class SymbolInfo:
         self,
         symbol_name: str,
         assets_file_name: str,
-        quote_provider: BrokerProvider,
-        trade_provider: BrokerProvider,
+        quote_provider: QuoteProvider,
+        trade_provider: TradeProvider,
         str_time_zone: str,
     ):
         self.name = symbol_name
@@ -1384,8 +1393,8 @@ class Symbol(SymbolInfo):
         self,
         symbol_name: str,
         assets_file_name: str,
-        quote_provider: BrokerProvider,
-        trade_provider: BrokerProvider,
+        quote_provider: QuoteProvider,
+        trade_provider: TradeProvider,
         str_time_zone: str,
     ):
         super().__init__(
@@ -1531,18 +1540,19 @@ class Position:
             return 0
 
 
-############# AlgoApi ########################
-class AlgoApi:
+############# KitaApi ########################
+class KitaApi:
 
-    # Members
+    # Parameter
     # region
-    # The following vars must be init from "above"
-    start_dt: datetime
-    end_dt: datetime
-    running_mode: RunningMode
-    robot_name: str
-    robot_parameter: dict[str, Union[str, int, bool, float, TradeDirection]]
-    account: Account
+    # These parameters can be set by the startup module like MainConsole.py
+    # If not set from there, the given default values will be used
+    StartUtc = datetime.strptime("1900-01-01", "%Y-%m-%d")
+    EndUtc = datetime.strptime("2100-01-01", "%Y-%m-%d")
+    RunningMode: RunMode = RunMode.SilentBacktesting
+    AccountInitialBalance: float = 10000
+    AccountLeverage: int = 500
+    AccountCurrency: str = "EUR"
     # endregion
 
     def __init__(self):
@@ -1554,8 +1564,8 @@ class AlgoApi:
         self,
         symbol_name: str,
         assets_file_name: str,
-        quote_provider: BrokerProvider,
-        trade_provider: BrokerProvider,
+        quote_provider: QuoteProvider,
+        trade_provider: TradeProvider,
         str_time_zone: str = "utc",
     ):
         symbol = Symbol(
@@ -1564,27 +1574,27 @@ class AlgoApi:
         self.symbol_dictionary[symbol_name] = symbol
         quote_provider.initialize(symbol_name)
 
-        self.start_dt = self.start_dt.astimezone(symbol.time_zone)
-        self.end_dt = self.end_dt.astimezone(symbol.time_zone)
+        self.start_local_dt = self.StartUtc.astimezone(symbol.time_zone)
+        self.end_local_dt = self.EndUtc.astimezone(symbol.time_zone)
 
-        error, quote = quote_provider.get_quote_bar_at_date(self.start_dt)
+        error, quote = quote_provider.get_quote_bar_at_date(self.start_local_dt)
 
         if "" == error:
             self.time = quote.time.astimezone(symbol.time_zone)
             self.bid = quote.open
             self.ask = quote.open + quote.open_spread
 
-        trade_provider.initialize(symbol_name)
+        trade_provider.initialize(symbol_name, self.account)
 
     def get_bars(
-        self, start_dt: datetime, timeframe_seconds: int, symbol_name: str
+        self, start_local_dt: datetime, timeframe_seconds: int, symbol_name: str
     ) -> Bars:
         new_bars = Bars(timeframe_seconds, symbol_name)
         symbol = self.symbol_dictionary[symbol_name]
         symbol.bars_list.append(new_bars)
 
         # build bars
-        error, quote = symbol.quote_provider.get_quote_bar_at_date(start_dt)
+        error, quote = symbol.quote_provider.get_quote_bar_at_date(start_local_dt)
         new_bars.update_bar(quote)
 
         while True:
@@ -1593,7 +1603,7 @@ class AlgoApi:
                 break
 
             new_bars.update_bar(quote)
-            if new_bars.open_times.count > 0 and quote.time >= start_dt:
+            if new_bars.open_times.count > 0 and quote.time >= start_local_dt:
                 break
         pass
         return new_bars
@@ -1804,12 +1814,12 @@ class AlgoApi:
         mode: int = PyLogger.HEADER_AND_SEVERAL_LINES,
         header: str = "",
     ):
-        if self.running_mode != RunningMode.Optimization:
+        if self.RunningMode != RunMode.Optimization:
             self.logger = PyLogger()
             self.logger.log_open(
                 self.logger.make_log_path(),
                 filename,
-                self.running_mode == RunningMode.RealTime,
+                self.RunningMode == RunMode.RealTime,
                 mode,
             )
             # if not openState:
@@ -1869,10 +1879,10 @@ class AlgoApi:
             if len(bid_asks) >= 2:
                 bid_asks = bid_asks[1].split(",")
                 if len(bid_asks) == 2:
-                    i_ask = AlgoApi.string_to_integer(bid_asks[0])
+                    i_ask = KitaApi.string_to_integer(bid_asks[0])
                     open_spread = lp.symbol.point_size * i_ask
                     # open_bid = lp.symbol.point_size * (
-                    #     i_ask - AlgoApi.string_to_integer(bid_asks[1])
+                    #     i_ask - KitaApi.string_to_integer(bid_asks[1])
                     # )
 
         price_diff = (1 if lp.trade_type == TradeType.Buy else -1) * (
@@ -1899,36 +1909,36 @@ class AlgoApi:
                 self.logger.add_text(lp.symbol.name)
                 continue
             elif change_part == "Lots":
-                self.logger.add_text(AlgoApi.double_to_string(lp.lots, lot_digits))
+                self.logger.add_text(KitaApi.double_to_string(lp.lots, lot_digits))
                 continue
             elif change_part == "OpenPrice":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(lp.entry_price, lp.symbol.digits)
+                    KitaApi.double_to_string(lp.entry_price, lp.symbol.digits)
                 )
                 continue
             elif change_part == "Swap":
-                self.logger.add_text(AlgoApi.double_to_string(lp.swap, 2))
+                self.logger.add_text(KitaApi.double_to_string(lp.swap, 2))
                 continue
             elif change_part == "Swap/Lot":
-                self.logger.add_text(AlgoApi.double_to_string(lp.swap / lp.lots, 2))
+                self.logger.add_text(KitaApi.double_to_string(lp.swap / lp.lots, 2))
                 continue
             elif change_part == "OpenAsks":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(open_spread, lp.symbol.digits)
+                    KitaApi.double_to_string(open_spread, lp.symbol.digits)
                     if lp.trade_type == TradeType.Buy
                     else ""
                 )
                 continue
             elif change_part == "OpenBid":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(openBid, lp.symbol.digits)
+                    KitaApi.double_to_string(openBid, lp.symbol.digits)
                     if lp.trade_type == TradeType.Sell
                     else ""
                 )
                 continue
             elif change_part == "OpenSpreadPoints":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(
+                    KitaApi.double_to_string(
                         self.i_price((open_spread - openBid), lp.symbol.point_size), 0
                     )
                 )
@@ -1946,22 +1956,22 @@ class AlgoApi:
                 continue
             elif change_part == "PointValue":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(
-                        self.calc_1point_and_1lot_2money(lp.symbol), 5
+                    KitaApi.double_to_string(
+                        self.get_money_from_1point_and_1lot(lp.symbol), 5
                     )
                 )
                 continue
             elif change_part == "ClosingPrice":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(lp.closing_price, lp.symbol.digits)
+                    KitaApi.double_to_string(lp.closing_price, lp.symbol.digits)
                 )
                 continue
             elif change_part == "Commission":
-                self.logger.add_text(AlgoApi.double_to_string(lp.commissions, 2))
+                self.logger.add_text(KitaApi.double_to_string(lp.commissions, 2))
                 continue
             elif change_part == "Comm/Lot":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(lp.commissions / lp.lots, 2)
+                    KitaApi.double_to_string(lp.commissions / lp.lots, 2)
                 )
                 continue
             elif change_part == "CloseAsk":
@@ -1975,7 +1985,7 @@ class AlgoApi:
                 continue
             elif change_part == "CloseBid":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(
+                    KitaApi.double_to_string(
                         self.get_bid_ask_price(lp.symbol, BidAsk.Bid), lp.symbol.digits
                     )
                     if lp.trade_type == TradeType.Buy
@@ -1984,7 +1994,7 @@ class AlgoApi:
                 continue
             elif change_part == "CloseSpreadPoints":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(
+                    KitaApi.double_to_string(
                         self.i_price(
                             self.get_bid_ask_price(lp.symbol, BidAsk.Ask)
                             - self.get_bid_ask_price(lp.symbol, BidAsk.Bid),
@@ -1995,7 +2005,7 @@ class AlgoApi:
                 )
                 continue
             elif change_part == "Balance":
-                self.logger.add_text(AlgoApi.double_to_string(lp.balance, 2))
+                self.logger.add_text(KitaApi.double_to_string(lp.balance, 2))
                 continue
             elif change_part == "Dur. d.h.self.s":
                 self.logger.add_text(
@@ -2005,45 +2015,45 @@ class AlgoApi:
             elif change_part == "Number":
                 self.logging_trade_count += 1
                 self.logger.add_text(
-                    AlgoApi.integer_to_string(self.logging_trade_count)
+                    KitaApi.integer_to_string(self.logging_trade_count)
                 )
                 continue
             elif change_part == "Volume":
-                self.logger.add_text(AlgoApi.double_to_string(lp.volume_in_units, 1))
+                self.logger.add_text(KitaApi.double_to_string(lp.volume_in_units, 1))
                 continue
             elif change_part == "DiffPoints":
-                self.logger.add_text(AlgoApi.double_to_string(point_diff, 0))
+                self.logger.add_text(KitaApi.double_to_string(point_diff, 0))
                 continue
             elif change_part == "DiffGross":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(
-                        self.calc_points_and_lot_2money(lp.symbol, point_diff, lp.lots),
+                    KitaApi.double_to_string(
+                        self.get_money_from_points_and_lot(lp.symbol, point_diff, lp.lots),
                         2,
                     )
                 )
                 continue
             elif change_part == "net_profit":
-                self.logger.add_text(AlgoApi.double_to_string(lp.net_profit, 2))
+                self.logger.add_text(KitaApi.double_to_string(lp.net_profit, 2))
                 continue
             elif change_part == "NetProf/Lot":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(lp.net_profit / lp.lots, 2)
+                    KitaApi.double_to_string(lp.net_profit / lp.lots, 2)
                 )
                 continue
             elif change_part == "AccountMargin":
-                self.logger.add_text(AlgoApi.double_to_string(lp.account_margin, 2))
+                self.logger.add_text(KitaApi.double_to_string(lp.account_margin, 2))
                 continue
             elif change_part == "TradeMargin":
-                self.logger.add_text(AlgoApi.double_to_string(lp.trade_margin, 2))
+                self.logger.add_text(KitaApi.double_to_string(lp.trade_margin, 2))
                 continue
             elif change_part == "MaxEquityDrawdown":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(lp.max_equity_drawdown, 2)
+                    KitaApi.double_to_string(lp.max_equity_drawdown, 2)
                 )
                 continue
             elif change_part == "MaxTradeEquityDrawdownValue":
                 self.logger.add_text(
-                    AlgoApi.double_to_string(lp.max_trade_equity_drawdown_value, 2)
+                    KitaApi.double_to_string(lp.max_trade_equity_drawdown_value, 2)
                 )
                 continue
             else:
@@ -2072,7 +2082,7 @@ class AlgoApi:
         return symbol.bid if bidAsk == BidAsk.Bid else symbol.ask
 
     @staticmethod
-    def calc_profitmode_2lots(
+    def get_lots_from_profitmode(
         symbol: Symbol,
         profitMode: ProfitMode,
         value: float,
@@ -2088,55 +2098,55 @@ class AlgoApi:
             return "Invalid tick_value"
         """
         if ProfitMode == ProfitMode.lots:
-            desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lot_siz =value)
+            desi_mon = self.get_money_from_points_and_lot(symbol: Symbol, tpPts, lot_siz =value)
         elif ProfitMode == ProfitMode.lots_pro10k:
             lot_siz = (self.account.balance - self.account.margin) / 10000 * value
-            desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lot_size)
+            desi_mon = self.get_money_from_points_and_lot(symbol: Symbol, tpPts, lot_size)
         elif ProfitMode == ProfitMode.profit_percent:
             desi_mon = (self.account.balance - self.account.margin) * value / 100
-            lot_siz = self.calc_money_and_points_2lots(symbol: Symbol, desired_money, tpPts, self.commission_per_lot(symbol: Symbol))
+            lot_siz = self.get_lots_from_money_and_points(symbol: Symbol, desired_money, tpPts, self.commission_per_lot(symbol: Symbol))
         elif ProfitMode == ProfitMode.profit_ammount:
-            lot_siz = self.calc_money_and_points_2lots(symbol: Symbol, desi_mon =value, tp_pts =tpPts, x_pro_lot =self.commission_per_lot(symbol: Symbol))
+            lot_siz = self.get_lots_from_money_and_points(symbol: Symbol, desi_mon =value, tp_pts =tpPts, x_pro_lot =self.commission_per_lot(symbol: Symbol))
         elif profitMode in [ProfitMode.risk_constant, ProfitMode.risk_reinvest]:
             balance = self.account.balance if ProfitMode == ProfitMode.risk_reinvest else self.initial_account_balance
             money_to_risk = (balance - self.account.margin) * value / 100
-            lot_siz = self.calc_money_and_points_2lots(symbol: Symbol, moneyToRisk, riskPoints, self.commission_per_lot(symbol: Symbol))
-            desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lot_size)
+            lot_siz = self.get_lots_from_money_and_points(symbol: Symbol, moneyToRisk, riskPoints, self.commission_per_lot(symbol: Symbol))
+            desi_mon = self.get_money_from_points_and_lot(symbol: Symbol, tpPts, lot_size)
         elif profitMode in [ProfitMode.constant_invest, ProfitMode.Reinvest]:
             invest_money = (self.initial_account_balance if ProfitMode == ProfitMode.constant_invest else self.account.balance) * value / 100
             units = investMoney * symbol.point_size / symbol.tick_value / symbol.bid
             lot_siz = symbol.volume_in_units_to_quantity(units)
-            desi_mon = self.calc_points_and_lot_2money(symbol: Symbol, tpPts, lot_size)
+            desi_mon = self.get_money_from_points_and_lot(symbol: Symbol, tpPts, lot_size)
         """
         return ""
 
     @staticmethod
-    def calc_points_and_lot_2money(symbol: Symbol, points: int, lot: float) -> float:
+    def get_money_from_points_and_lot(symbol: Symbol, points: int, lot: float) -> float:
         return symbol.tick_value * symbol.lot_size * points * lot
 
     @staticmethod
-    def calc_points_and_volume_2money(
+    def get_money_from_points_and_volume(
         symbol: Symbol, points: int, volume: float
     ) -> float:
         return symbol.tick_value * points * volume / symbol.lot_size
 
     @staticmethod
-    def calc_1point_and_1lot_2money(symbol: Symbol, reverse: bool = False):
-        ret_val = AlgoApi.calc_points_and_lot_2money(symbol, 1, 1)
+    def get_money_from_1point_and_1lot(symbol: Symbol, reverse: bool = False):
+        ret_val = KitaApi.get_money_from_points_and_lot(symbol, 1, 1)
         if reverse:
             ret_val *= symbol.bid
         return ret_val
 
     @staticmethod
-    def calc_money_and_lot_2points(symbol: Symbol, money: float, lot: float):
+    def get_points_from_money_and_lot(symbol: Symbol, money: float, lot: float):
         return money / (lot * symbol.tick_value * symbol.lot_size)
 
     @staticmethod
-    def calc_money_and_volume_2points(symbol: Symbol, money: float, volume: float):
+    def get_points_from_money_and_volume(symbol: Symbol, money: float, volume: float):
         return money / (volume * symbol.tick_value)
 
     @staticmethod
-    def calc_money_and_points_2lots(
+    def get_lots_from_money_and_points(
         symbol: Symbol, money: float, points: int, xProLot: float
     ):
         ret_val = abs(money / (points * symbol.tick_value * symbol.lot_size + xProLot))
@@ -2147,36 +2157,6 @@ class AlgoApi:
 
     # Methods
     # region
-    def load_class_from_file(self, file_path: str, class_name: str):
-        # Load the module dynamically and init
-        module_name = os.path.splitext(os.path.basename(file_path))[0]
-        spec = importlib.util.spec_from_file_location(module_name, file_path)  # type: ignore
-        if spec is not None:
-            module = importlib.util.module_from_spec(spec)  # type: ignore
-            if spec.loader is not None:  # type: ignore
-                # Ensure the module is in sys.modules for reference
-                # sys.modules[module_name] = module
-
-                # Execute the module
-                spec.loader.exec_module(module)  # type: ignore
-
-                # Retrieve the class from the module
-                if hasattr(module, class_name):  # type: ignore
-                    loaded_class = getattr(module, class_name)
-
-                    # Instantiate the class and pass the loader's self by calling __init__
-                    instance = loaded_class(api=self)
-                    
-                    # Set the parameters
-                    for key, value in self.robot_parameter.items():
-                        #if hasattr(module, key):  # Ensure the attribute exists
-                        setattr(instance, key, value)
-
-                    return instance
-                else:
-                    raise AttributeError(f"Class {class_name} not found in {file_path}")
-
-        return None  # type: ignore
 
     # def update_chart_text_and_bars(self):
     """
@@ -2218,9 +2198,13 @@ class AlgoApi:
     """
 
     def start(self):
-        self.time: datetime = self.start_dt
-        self.initial_time: datetime = self.start_dt
-        self.initial_account_balance: float = self.account.balance
+        self.account: Account = Account()
+        self.account.balance = self.account.equity = self.AccountInitialBalance
+        self.account.leverage = self.AccountLeverage
+        self.account.asset = self.AccountCurrency
+
+        self.initial_account_balance: float = self.AccountInitialBalance
+        self.initial_utc: datetime = self.StartUtc
         self.symbol_dictionary: dict[str, Symbol] = {}  # type: ignore
         self.positions: list[Position] = []
         self.history: list[Position] = []
@@ -2245,11 +2229,6 @@ class AlgoApi:
         self.open_duration_count: list[int] = [0] * 1  # arrays because of by reference
         self.max_open_duration: list[timedelta] = [timedelta.min] * 1
 
-        self.loaded_robot = self.load_class_from_file(
-            os.path.join("robots", self.robot_name + ".py"),
-            self.robot_name,
-        )
-
         self.loaded_robot.on_start()  # type: ignore
 
     def tick(self):
@@ -2257,7 +2236,7 @@ class AlgoApi:
         # 1st tick must update all bars and Indicators which have been inized in on_start()
         for symbol in self.symbol_dictionary.values():
             error = symbol.on_tick()
-            if "" != error or symbol.time > self.end_dt:
+            if "" != error or symbol.time > self.end_local_dt:
                 return True
 
             ########################################
@@ -2314,7 +2293,6 @@ class AlgoApi:
         duration_count += self.open_duration_count[0]
         min_duration = min(self.min_open_duration[0], min_duration)
         max_duration = max(self.max_open_duration[0], max_duration)
-        self.loaded_robot.on_stop(self)  # type:ignore
 
         # self.max(self.max_invest_count[0], self.max_invest_count)
 
@@ -2329,7 +2307,7 @@ class AlgoApi:
         loosing_trades = len([x for x in self.history if x.net_profit < 0])
         net_profit = sum(x.net_profit for x in self.history)
         trading_days = (  # 365 - 2*52 = 261 - 9 holidays = 252
-            (self.time - self.initial_time).days / 365.0 * 252.0
+            (self.time - self.initial_utc).days / 365.0 * 252.0
         )
         if 0 == trading_days:
             annual_profit = 0
@@ -2389,16 +2367,16 @@ class AlgoApi:
         self.log_add_text_line("")
         self.log_add_text_line(
             "Net Profit,"
-            + AlgoApi.double_to_string(profit + loss, 2)
+            + KitaApi.double_to_string(profit + loss, 2)
             + ",,,,Long: "
-            + AlgoApi.double_to_string(
+            + KitaApi.double_to_string(
                 sum(
                     x.net_profit for x in self.history if x.trade_type == TradeType.Buy
                 ),
                 2,
             )
             + ",,,,Short:,"
-            + AlgoApi.double_to_string(
+            + KitaApi.double_to_string(
                 sum(
                     x.net_profit for x in self.history if x.trade_type == TradeType.Sell
                 ),
@@ -2406,7 +2384,7 @@ class AlgoApi:
             )
         )
 
-        # self.log_add_text_line("max_margin: " + self.account.asset + " " + AlgoApi.double_to_string(mMaxMargin, 2))
+        # self.log_add_text_line("max_margin: " + self.account.asset + " " + KitaApi.double_to_string(mMaxMargin, 2))
         # self.log_add_text_line("max_same_time_open: " + str(mSameTimeOpen)
         # + ", @ " + mSameTimeOpenDateTime.strftime("%d.%m.%Y %H:%M:%S")
         # + ", Count# " + str(mSameTimeOpenCount))
@@ -2414,7 +2392,7 @@ class AlgoApi:
             "Max Balance Drawdown Value: "
             + self.account.asset
             + " "
-            + AlgoApi.double_to_string(self.max_balance_drawdown_value[0], 2)
+            + KitaApi.double_to_string(self.max_balance_drawdown_value[0], 2)
             + "; @ "
             + self.max_balance_drawdown_time.strftime("%d.%m.%Y %H:%M:%S")
             + "; Count# "
@@ -2426,7 +2404,7 @@ class AlgoApi:
             + (
                 "NaN"
                 if self.max_balance[0] == 0
-                else AlgoApi.double_to_string(
+                else KitaApi.double_to_string(
                     100 * self.max_balance_drawdown_value[0] / self.max_balance[0], 2
                 )
             )
@@ -2436,7 +2414,7 @@ class AlgoApi:
             "Max Equity Drawdown Value: "
             + self.account.asset
             + " "
-            + AlgoApi.double_to_string(self.max_equity_drawdown_value[0], 2)
+            + KitaApi.double_to_string(self.max_equity_drawdown_value[0], 2)
             + "; @ "
             + self.max_equity_drawdown_time.strftime("%d.%m.%Y %H:%M:%S")
             + "; Count# "
@@ -2445,12 +2423,12 @@ class AlgoApi:
 
         self.log_add_text_line(
             "Max Current Equity Drawdown %: "
-            + AlgoApi.double_to_string(max_current_equity_dd_percent, 2)
+            + KitaApi.double_to_string(max_current_equity_dd_percent, 2)
         )
 
         self.log_add_text_line(
             "Max start Equity Drawdown %: "
-            + AlgoApi.double_to_string(max_start_equity_dd_percent, 2)
+            + KitaApi.double_to_string(max_start_equity_dd_percent, 2)
         )
 
         self.log_add_text_line(
@@ -2458,29 +2436,29 @@ class AlgoApi:
             + (
                 "-"
                 if loosing_trades == 0
-                else AlgoApi.double_to_string(profit_factor, 2)
+                else KitaApi.double_to_string(profit_factor, 2)
             )
         )
 
         self.log_add_text_line(
-            "Sharpe Ratio: " + AlgoApi.double_to_string(sharpe_ratio, 2)
+            "Sharpe Ratio: " + KitaApi.double_to_string(sharpe_ratio, 2)
         )
         self.log_add_text_line(
-            "Sortino Ratio: " + AlgoApi.double_to_string(sortino_ratio, 2)
-        )
-
-        self.log_add_text_line("Calmar Ratio: " + AlgoApi.double_to_string(calmar, 2))
-        self.log_add_text_line(
-            "Winning Ratio: " + AlgoApi.double_to_string(winning_ratio_percent, 2)
+            "Sortino Ratio: " + KitaApi.double_to_string(sortino_ratio, 2)
         )
 
+        self.log_add_text_line("Calmar Ratio: " + KitaApi.double_to_string(calmar, 2))
         self.log_add_text_line(
-            "Trades Per Month: " + AlgoApi.double_to_string(trades_per_month, 2)
+            "Winning Ratio: " + KitaApi.double_to_string(winning_ratio_percent, 2)
+        )
+
+        self.log_add_text_line(
+            "Trades Per Month: " + KitaApi.double_to_string(trades_per_month, 2)
         )
 
         self.log_add_text_line(
             "Average Annual Profit Percent: "
-            + AlgoApi.double_to_string(annual_profit_percent, 2)
+            + KitaApi.double_to_string(annual_profit_percent, 2)
         )
 
         # if avg_open_duration_sum != 0:
@@ -2501,7 +2479,7 @@ class AlgoApi:
         #             if i > 1:
         #                 histoRestSum += investCountHisto[i]
         #     if histoRestSum != 0:
-        #         self.log_add_text_line("histo_rest_quotient: " + AlgoApi.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
+        #         self.log_add_text_line("histo_rest_quotient: " + KitaApi.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
         self.log_close()
 
     def calculate_reward(self) -> float:
@@ -2536,7 +2514,7 @@ class AlgoApi:
             return 0
 
 
-############# Classes using AlgoApi ########################
+############# Classes using KitaApi ########################
 class HedgePosition:
     # Member variables
     # region
@@ -2554,7 +2532,7 @@ class HedgePosition:
     freeze_profit_offset: float = 0
     freeze_price_offset: float = 0
     last_modified_time: datetime = datetime.min
-    bot: AlgoApi
+    bot: KitaApi
 
     @property
     def profit(self) -> float:
@@ -2581,7 +2559,7 @@ class HedgePosition:
 
     # endregion
 
-    def __init__(self, algo_api: AlgoApi, symbol: Symbol, is_long: bool, label: str):
+    def __init__(self, algo_api: KitaApi, symbol: Symbol, is_long: bool, label: str):
         self.bot = algo_api
         self.symbol = symbol
         self.is_long = is_long

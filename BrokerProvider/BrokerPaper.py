@@ -1,29 +1,14 @@
-from datetime import datetime
-from AlgoApi import QuoteBar, BrokerProvider, Account
+# from datetime import datetime
+from KitaApi import TradeProvider, Account
 
 
-class BrokerPaper(BrokerProvider):
-    def __init__(self, parameter: str, data_rate: int, account: Account):
-        super().__init__(parameter, data_rate, account)
+class BrokerPaper(TradeProvider):
+    def __init__(self, parameter: str, account: Account):
+        TradeProvider.__init__(self, parameter, account)
 
-    def initialize(self, symbol_name: str):
+    def initialize(self, symbol_name: str, account: Account):
         self.symbol_name = symbol_name
-        pass
-
-    def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
-        return None  # type: ignore
-        pass
-
-    def get_first_quote_bar(self) -> tuple[str, QuoteBar]:
-        return None  # type: ignore
-        pass
-
-    def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
-        return None  # type: ignore
-        pass
-
-    def read_quote_bar(self) -> tuple[str, QuoteBar]:
-        return None  # type: ignore
+        self.account = account
         pass
 
     def update_account(self):

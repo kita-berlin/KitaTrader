@@ -2,12 +2,12 @@ import os
 import struct
 import pytz
 from datetime import datetime, timedelta
-from AlgoApi import QuoteBar, Account, BrokerProvider
+from KitaApi import QuoteBar, QuoteProvider
 
 
-class BrokerMe(BrokerProvider):
-    def __init__(self, parameter: str, data_rate: int, account: Account):
-        super().__init__(parameter, data_rate, account)
+class BrokerMe(QuoteProvider):
+    def __init__(self, parameter: str, data_rate: int):
+        QuoteProvider.__init__(self, parameter, data_rate)
         self.file_handle = None
 
     def __del__(self):
@@ -16,9 +16,11 @@ class BrokerMe(BrokerProvider):
 
     def initialize(self, symbol_name: str):
         self.symbol_name = symbol_name
+
         # parameter: path to me files, assets file name in files directory
         para_split = self.parameter.split(",")
         self.symbol_path = os.path.join(para_split[0], self.symbol_name)
+        self.assets_file = para_split[0]
 
     def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
         self.bars_filename = os.path.join(
@@ -109,9 +111,6 @@ class BrokerMe(BrokerProvider):
         )
         quote.open_spread -= quote.open
         return quote  # type: ignore
-
-    def update_account(self):
-        pass
 
 
 # end of file

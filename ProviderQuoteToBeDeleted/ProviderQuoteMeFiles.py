@@ -2,7 +2,7 @@ import os
 import struct
 import pytz
 from datetime import datetime, timedelta
-from AlgoApi import AlgoApi
+from KitaApi import KitaApi
 
 # the following weired imports are a suggsetion from copilot
 # to solve the problem of differences between visual studio editor
@@ -18,7 +18,7 @@ except:
 
 ######################################
 class ProviderQuote:
-    def __init__(self, algo_api: AlgoApi, symbol_info: SymbolInfo):
+    def __init__(self, algo_api: KitaApi, symbol_info: SymbolInfo):
         self.bin_settings = algo_api.bin_settings
         self.symbol_info = symbol_info
         self.file_handle = None

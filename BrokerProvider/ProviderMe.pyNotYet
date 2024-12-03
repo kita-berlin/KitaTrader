@@ -44,7 +44,7 @@ SymbolInfo:
 
             self.quote_provider = ProviderQuote(self.algo_api, self)
             error, quote = self.quote_provider.get_quote_bar_at_date(
-                self.algo_api.bin_settings.start_dt
+                self.algo_api.bin_settings.StartDateTime
             )
             if None == quote:
                 print(error)

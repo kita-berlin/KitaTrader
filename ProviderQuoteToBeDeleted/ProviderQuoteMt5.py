@@ -25,8 +25,8 @@ class ProviderQuote:
         # set time zone to UTC
         ticks = mt5.copy_ticks_range(  # pylint: disable=no-member # type: ignore
             symbol_info.broker_symbol_name,
-            algo_api.bin_settings.start_dt,
-            algo_api.bin_settings.end_dt,
+            algo_api.bin_settings.StartDateTime,
+            algo_api.bin_settings.EndDateTime,
             mt5.COPY_TICKS_ALL,  # combination of flags defining the type of requested ticks
         )
         print("ticks received:", len(ticks))
@@ -90,10 +90,10 @@ class ProviderQuote:
         )
 
         if self.trading_platform.bin_settings.platform == Platforms.Mt5Live:
-            start_dt = dtNow
+            StartDateTime = dtNow
         else:
-            start_dt = self.trading_platform.get_utc_time_from_local_time(
-                self.trading_platform.bin_settings.start_dt
+            StartDateTime = self.trading_platform.get_utc_time_from_local_time(
+                self.trading_platform.bin_settings.StartDateTime
             )
 
         lookback_time_seconds = (

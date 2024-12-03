@@ -1,11 +1,11 @@
 import os
 from datetime import datetime
-from AlgoApi import Account, BrokerProvider, QuoteBar
+from KitaApi import QuoteProvider, QuoteBar
 
 
-class BrokerCsv(BrokerProvider):
-    def __init__(self, parameter: str, data_rate: int, account: Account):
-        super().__init__(parameter, data_rate, account)
+class BrokerCsv(QuoteProvider):
+    def __init__(self, parameter: str, data_rate: int):
+        super().__init__(parameter, data_rate)
         self.file_handle = None
 
     def __del__(self):
@@ -31,7 +31,4 @@ class BrokerCsv(BrokerProvider):
 
     def read_quote_bar(self) -> tuple[str, QuoteBar]:
         return None  # type: ignore
-        pass
-
-    def update_account(self):
         pass

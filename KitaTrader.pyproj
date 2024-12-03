@@ -45,11 +45,10 @@
     <Folder Include="typings\MetaTrader5\" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Api\AlgoApi.py" />
-    <Compile Include="Api\AlgoApiEnums.py" />
+    <Compile Include="Api\KitaApi.py" />
+    <Compile Include="Api\KitaApiEnums.py" />
     <Compile Include="Api\Constants.py" />
     <Compile Include="Api\CoFu.py" />
-    <Compile Include="Api\IRobot.py" />
     <Compile Include="MainConsole.py" />
     <Compile Include="MainRl.py" />
     <Compile Include="BrokerProvider\BrokerCsv.py" />

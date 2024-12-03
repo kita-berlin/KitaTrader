@@ -137,7 +137,7 @@ class ChartIconType(Enum):
     DownTriangle = 7
 
 
-class RunningMode(Enum):
+class RunMode(Enum):
     #
     # Summary:
     #     The cBot is running in real time.

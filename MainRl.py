@@ -6,7 +6,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from stable_baselines3 import PPO
 import talib
-from Api.AlgoApi import AlgoApi
+from Api.KitaApi import KitaApi
 
 
 class trading_env(gym.Env):
@@ -19,10 +19,10 @@ class trading_env(gym.Env):
         self.start_date = start_date
         self.end_date = end_date
 
-        self.algo_api = AlgoApi()
+        self.algo_api = KitaApi()
         error, self.system_settings = self.algo_api.load_settings(self)
-        self.system_settings.start_dt = start_date
-        self.system_settings.end_dt = end_date
+        self.system_settings.StartDateTime = start_date
+        self.system_settings.EndDateTime = end_date
         self.df = data_file
         self.df = self.df.loc[start_date:end_date]
         self.open_trades_count = 0
@@ -107,10 +107,10 @@ class trading_env(gym.Env):
 
         self.current_step = 0
 
-        self.algo_api = AlgoApi()
+        self.algo_api = KitaApi()
         error, self.system_settings = self.algo_api.load_settings(self)
-        self.system_settings.start_dt = self.start_date
-        self.system_settings.end_dt = self.end_date
+        self.system_settings.StartDateTime = self.start_date
+        self.system_settings.EndDateTime = self.end_date
         self.df = self.data_file
         self.df = self.df.loc[self.start_date : self.end_date]
         self.open_trades_count = 0

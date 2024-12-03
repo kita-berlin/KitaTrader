@@ -1,15 +1,15 @@
 import os
 import pandas as pd
-import AlgoApi
+import KitaApi
 from Settings import BinSettings
 from QuoteBar import QuoteBar
 from SymbolInfo import SymbolInfo
-from AlgoApi import AlgoApi
+from KitaApi import KitaApi
 
 
 ######################################
 class ProviderQuote:
-    def __init__(self, algo_api: AlgoApi, symbol_info: SymbolInfo):
+    def __init__(self, algo_api: KitaApi, symbol_info: SymbolInfo):
         self.bin_settings: BinSettings = algo_api.bin_settings
         self.symbol_info: SymbolInfo = symbol_info
 
@@ -48,7 +48,7 @@ class ProviderQuote:
         df.drop(["Date", "Time"], axis=1, inplace=True)
 
         # Filter the data_frame to include only entries starting from the given date
-        self.df_start = df[df["date_time"] >= pd.Timestamp(self.bin_settings.start_dt)]
+        self.df_start = df[df["date_time"] >= pd.Timestamp(self.bin_settings.StartDateTime)]
 
         # Delete the data_frame
         del df

@@ -1,19 +1,19 @@
 ﻿from math import sqrt
-from IRobot import IRobot
-from AlgoApiEnums import *
-from AlgoApi import HedgePosition
+from KitaApiEnums import *
+from KitaApi import Position, KitaApi
 from Api.CoFu import *
 from Constants import *
-from AlgoApi import Symbol, PyLogger
+from KitaApi import Symbol, PyLogger
+from talib import MA_Type  # type: ignore
 from BrokerMe import BrokerMe
 from BrokerPaper import BrokerPaper
-from BrokerMt5 import BrokerMt5  # type: ignore
-from BrokerCsv import BrokerCsv  # type: ignore
-from talib import MA_Type  # type: ignore
+
+# from BrokerMt5 import BrokerMt5
+# from BrokerCsv import BrokerCsv
 
 
-class Martingale(IRobot):
-        
+class Martingale(KitaApi):
+
     # History
     # region
     version: str = "Martingale V1.0"
@@ -22,8 +22,8 @@ class Martingale(IRobot):
 
     # Parameter
     # region
-    # These parameters will be set by the values from the robot_parameter dictionary
-    # If not defined there, the default values will be used
+    # These parameters can be set by the startup module like MainConsole.py
+    # If not set from there, the given default values will be used
     Rebuy1stPercent = 1.5
     RebuyPercent = 0.2
     TakeProfitPercent = 0.2
@@ -36,9 +36,7 @@ class Martingale(IRobot):
     sqrt252: float = sqrt(252)
     # endregion
 
-    def __init__(self, api:IRobot):  # type: ignore
-        # Store the loader's self for shared context
-        self.api = api
+    def __init__(self):  # type: ignore
         pass
 
     ###################################
@@ -48,7 +46,7 @@ class Martingale(IRobot):
         # region
         self.is_long = True
         self.current_volume = self.initial_volume = self.Volume
-        self.hedge_positions: list[HedgePosition] = []
+        self.positions: list[Position] = []
         self.max_invest_count: list[int] = [0] * 1
         self.cluster_count: int = 0
         self.avg_price: float = 0
@@ -90,26 +88,23 @@ class Martingale(IRobot):
 
         # mt5_broker =  BrokerMt5(account, "62060378, pepperstone_uk-Demo, tFue0y*akr")
         quote_provider = BrokerMe(
-            # path to mbar files, data rate, account for trading not used)
-            "G:\\Meine Ablage\\TickBars\\mbars",
+            "G:\\Meine Ablage\\TickBars\\mbars",  # path to mbar files
             0,  # Data rate in seconds (0 means fastest possible)
-            self.api.account,
         )
 
-        # BrokerPaper has no 1st parameter,
-        # data rate in seconds (-1 means not a qote provider but a trade provider),
         # account for trading
-        trade_provider = BrokerPaper("", -1, self.api.account)
+        trade_provider = BrokerPaper("", self.account)
 
         # symbol, asset filename in files directory, quote_provider, trade_provider
-        self.api.init_symbol(
+        self.init_symbol(
             "NZDCAD",
             "Assets_Pepperstone_Demo.csv",
             quote_provider,
             trade_provider,
             # if K of New_YorK is versal, 7 hours are added
-            # what gives NY 17:00 = midnight (we call this NY normalized time)
-            # str_time_zone="America/New_YorK",
+            # This gives NY 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59
+            # (we call this "NY normalized time")
+            str_time_zone="America/New_YorK",
         )
 
         # example how to use bars
@@ -186,29 +181,20 @@ class Martingale(IRobot):
         pass
 
         if self.invest_count >= 1:
-            last_position = self.hedge_positions[-1]
+            last_position = self.positions[-1]
             self.cluster_profit = self.current_volume = 0
             cluster_price_by_volume_sum = 0
 
-            for pos in self.hedge_positions:
-                self.cluster_profit += pos.profit
-                if pos.main_position is not None:  # type: ignore
-                    cluster_price_by_volume_sum += (
-                        pos.main_position.entry_price
-                        * pos.main_position.volume_in_units
-                    )
-                if pos.main_position is not None:  # type: ignore
-                    self.current_volume += pos.main_position.volume_in_units
+            for pos in self.positions:
+                cluster_price_by_volume_sum += pos.entry_price * pos.volume_in_units
+                self.current_volume += pos.volume_in_units
 
-            self.avg_price = (
-                cluster_price_by_volume_sum / self.current_volume
-                + last_position.freeze_price_offset
-            )
+            self.avg_price = cluster_price_by_volume_sum / self.current_volume
 
             current_repurchase_price = self.sub_long(
                 self.is_long,
-                last_position.freeze_corrected_entry_price,
-                last_position.freeze_corrected_entry_price
+                last_position.entry_price,
+                last_position.entry_price
                 * (self.Rebuy1stPercent if self.invest_count < 2 else self.RebuyPercent)
                 / 100,
             )
@@ -217,8 +203,7 @@ class Martingale(IRobot):
             # tp_price = self.add_long(self.is_long, self.avg_price, tp_value)
             tp_points = self.i_price(tp_value, self.symbol.point_size)
 
-            # initial_target_cash = self.parent_bot.mBot.calc_points_and_volume_2money(self.parent_bot.bot_symbol, tp_points, self.parent_bot.initial_volume)
-            target_cash = self.calc_points_and_volume_2money(
+            target_cash = self.get_money_from_points_and_volume(
                 self.symbol, tp_points, self.current_volume
             )
         pass
@@ -250,7 +235,7 @@ class Martingale(IRobot):
                     is_just_closed = True
         pass
 
-        # buy ?
+        # Open ?
         if self.symbol.is_trading_allowed and not is_just_closed:
             is_reinvest = False
             volume_to_add = self.initial_volume
@@ -273,13 +258,17 @@ class Martingale(IRobot):
                 # und TakeProfitPercent aussehen?
                 # Das volume_to_add beeinflusst den Mischpreis (self.avg_price)
                 # und zieht ihn näher zum aktuellen Preis hin
-                h_pos = HedgePosition(
-                    self.api, symbol, self.is_long, self.get_label()  # type: ignore
+                pos = self.execute_market_order(
+                    TradeType.Buy if self.is_long else TradeType.Sell,
+                    self.symbol.name,
+                    self.symbol.normalize_volume_in_units(volume_to_add),
+                    self.get_label(),
                 )
-                h_pos.do_main_open(volume_to_add)
-                self.hedge_positions.append(h_pos)
+
                 self.invest_count += 1
                 self.max(self.max_invest_count, self.invest_count)
+                self.margin_after_open = self.symbol.trade_provider.account.margin
+
                 if not self.is_train:
                     print(
                         self.symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
@@ -319,12 +308,14 @@ class Martingale(IRobot):
 
     ###################################
     def close_all_open_positions(self):
-        # is_cluster = len(self.hedge_positions) >= 2
+        # is_cluster = len(self.positions) >= 2
         # if isCluster:
         #     self.log_add_text("\n")
 
-        for i in range(len(self.hedge_positions) - 1, -1, -1):
-            self.hedge_positions[i].do_main_close(
+        for pos in self.positions:
+            self.close_trade(
+                pos,
+                self.margin_after_open,
                 self.min_open_duration,
                 self.avg_open_duration_sum,
                 self.open_duration_count,
@@ -335,7 +326,7 @@ class Martingale(IRobot):
         self.log_add_text("\n")
 
         self.cluster_count += 1
-        self.hedge_positions = []
+        self.positions = []
         self.invest_count = 0
 
     ###################################
