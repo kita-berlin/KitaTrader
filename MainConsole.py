@@ -22,7 +22,7 @@ class MainConsole:
 
         # 2. Set the parameters of the self.robot
         # region
-        self.robot.Rebuy1stPercent = 2911
+        self.robot.Rebuy1stPercent = 1.0
         self.robot.RebuyPercent = 0.1
         self.robot.TakeProfitPercent = 0.1
         self.robot.Volume = 1000

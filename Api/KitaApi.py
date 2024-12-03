@@ -1574,7 +1574,7 @@ class KitaApi:
         self.symbol_dictionary[symbol_name] = symbol
         quote_provider.initialize(symbol_name)
 
-        self.start_local_dt = self.StartUtc.astimezone(symbol.time_zone)
+        self.initial_local_dt= self.start_local_dt = self.StartUtc.astimezone(symbol.time_zone)
         self.end_local_dt = self.EndUtc.astimezone(symbol.time_zone)
 
         error, quote = quote_provider.get_quote_bar_at_date(self.start_local_dt)
@@ -2204,7 +2204,6 @@ class KitaApi:
         self.account.asset = self.AccountCurrency
 
         self.initial_account_balance: float = self.AccountInitialBalance
-        self.initial_utc: datetime = self.StartUtc
         self.symbol_dictionary: dict[str, Symbol] = {}  # type: ignore
         self.positions: list[Position] = []
         self.history: list[Position] = []
@@ -2307,7 +2306,7 @@ class KitaApi:
         loosing_trades = len([x for x in self.history if x.net_profit < 0])
         net_profit = sum(x.net_profit for x in self.history)
         trading_days = (  # 365 - 2*52 = 261 - 9 holidays = 252
-            (self.time - self.initial_utc).days / 365.0 * 252.0
+            (self.time - self.initial_local_dt).days / 365.0 * 252.0
         )
         if 0 == trading_days:
             annual_profit = 0

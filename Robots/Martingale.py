@@ -186,6 +186,7 @@ class Martingale(KitaApi):
             cluster_price_by_volume_sum = 0
 
             for pos in self.positions:
+                self.cluster_profit += pos.net_profit
                 cluster_price_by_volume_sum += pos.entry_price * pos.volume_in_units
                 self.current_volume += pos.volume_in_units
 
@@ -214,8 +215,8 @@ class Martingale(KitaApi):
             if self.invest_count > 0:
                 # check profit instead of price because of swaps etc.
                 if self.cluster_profit > target_cash:
-                    # invest_count = self.invest_count
                     self.close_all_open_positions()  # close all open trades
+
                     # "Time; Profit; max_equity_draw_down; cluster_count; invest_count; calmar; Rebuy1st%; Rebuy%; take_profit%"
                     if not self.is_train:
                         print(
