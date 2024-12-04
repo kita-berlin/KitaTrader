@@ -11,6 +11,7 @@ class MainConsole:
         # region
         self.robot = Martingale()
         self.robot.robot = self.robot  # type:ignore
+        #self.robot.StartUtc = datetime.min  # datetime.min means earliest possible
         self.robot.StartUtc = datetime.strptime("2024-01-01", "%Y-%m-%d")
         self.robot.EndUtc = datetime.strptime("2030-01-01", "%Y-%m-%d")
         self.robot.RunningMode = RunMode.SilentBacktesting
@@ -20,7 +21,7 @@ class MainConsole:
         self.robot.AccountCurrency = "EUR"
         # endregion
 
-        # 2. Set the parameters of the self.robot
+        # 2. Set the parameters of the robot
         # region
         self.robot.Rebuy1stPercent = 1.0
         self.robot.RebuyPercent = 0.1

@@ -7,7 +7,7 @@ import traceback
 import locale
 from abc import ABC, abstractmethod
 from numpy.typing import NDArray
-from typing import TypeVar, Iterable, Iterator, Any
+from typing import TypeVar, Iterable, Iterator
 from datetime import datetime, timedelta, tzinfo
 from KitaApiEnums import *
 from CoFu import *
@@ -1161,16 +1161,17 @@ class MarketValues:
 
 
 class QuoteProvider(ABC):
-    symbol_name: str
+    kita_api: KitaApi
+    symbol: Symbol
+    assets_file_name: str
     market_values: MarketValues
 
     def __init__(self, parameter: str, data_rate: int):
         self.parameter = parameter
         self.data_rate = data_rate
-        pass
 
     @abstractmethod
-    def initialize(self, *args: Any, **kwargs: Any): ...
+    def initialize(self, kita_api: KitaApi, symbol: Symbol): ...
 
     @abstractmethod
     def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]: ...
@@ -1183,7 +1184,7 @@ class QuoteProvider(ABC):
 
 
 class TradeProvider(ABC):
-    symbol_name: str
+    kita_api: KitaApi
     market_values: MarketValues
 
     def __init__(self, parameter: str):
@@ -1191,7 +1192,7 @@ class TradeProvider(ABC):
         pass
 
     @abstractmethod
-    def initialize(self, *args: Any, **kwargs: Any): ...
+    def initialize(self, kita_api: KitaApi, symbol: Symbol): ...
 
     @abstractmethod
     def update_account(self): ...
@@ -1206,6 +1207,9 @@ class SymbolInfo:
     name: str = ""
     bars_list: list[Bars] = []
     time: datetime = datetime.min
+    initial_local_dt: datetime = datetime.min
+    start_local_dt: datetime = datetime.min
+    end_local_dt: datetime = datetime.min
     bid: float = 0
     ask: float = 0
     broker_symbol_name: str = ""
@@ -1214,12 +1218,12 @@ class SymbolInfo:
     lot_size: float = 0.0
     leverage: float = 0.0
     time_zone: tzinfo = tzinfo()
+    is_ny_normalized: bool = False
     # endregion
 
     def __init__(
         self,
         symbol_name: str,
-        assets_file_name: str,
         quote_provider: QuoteProvider,
         trade_provider: TradeProvider,
         str_time_zone: str,
@@ -1227,13 +1231,17 @@ class SymbolInfo:
         self.name = symbol_name
         self.quote_provider = quote_provider
         self.trade_provider = trade_provider
-        self.time_zone = pytz.timezone(str_time_zone)
+        tz_split = str_time_zone.split(":")
+        self.time_zone = pytz.timezone(tz_split[0])
+        self.is_ny_normalized = (
+            "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]
+        )
 
-        assets_path = os.path.join("Files", assets_file_name)
+        assets_path = os.path.join("Files", self.quote_provider.assets_file_name)
         self.market_values = self.quote_provider.market_values = (
             self.trade_provider.market_values
         ) = MarketValues()
-        error = self.init_market_info(assets_path, symbol_name, self.market_values)
+        error = self.init_market_info(assets_path, self.name, self.market_values)
         if "" != error:
             print(error)
             exit()
@@ -1359,13 +1367,14 @@ class SymbolInfo:
         for bars in self.bars_list:
             bars.update_bar(quote)
 
-        self.time = quote.time.astimezone(self.time_zone)
+        self.time = quote.time
         self.bid = quote.open
         self.ask = quote.open + quote.open_spread
 
     def on_tick(self) -> str:
         error, quote = self.quote_provider.get_next_quote_bar()
-        if None == quote:  # type: ignore
+
+        if "" != error:
             return error
         self.update_bars(quote)
         return ""
@@ -1375,14 +1384,11 @@ class Symbol(SymbolInfo):
     def __init__(
         self,
         symbol_name: str,
-        assets_file_name: str,
         quote_provider: QuoteProvider,
         trade_provider: TradeProvider,
         str_time_zone: str,
     ):
-        super().__init__(
-            symbol_name, assets_file_name, quote_provider, trade_provider, str_time_zone
-        )
+        super().__init__(symbol_name, quote_provider, trade_provider, str_time_zone)
 
     ######################################
     @property
@@ -1568,33 +1574,33 @@ class KitaApi:
 
     # Trading API
     # region
-    def init_symbol(
+    def load_symbol(
         self,
         symbol_name: str,
-        assets_file_name: str,
         quote_provider: QuoteProvider,
         trade_provider: TradeProvider,
         str_time_zone: str = "utc",
-    ):
-        symbol = Symbol(
-            symbol_name, assets_file_name, quote_provider, trade_provider, str_time_zone
-        )
+    ) -> str:
+        symbol = Symbol(symbol_name, quote_provider, trade_provider, str_time_zone)
+
         self.symbol_dictionary[symbol_name] = symbol
-        quote_provider.initialize(symbol_name)
 
-        self.initial_local_dt = self.start_local_dt = self.StartUtc.astimezone(
-            symbol.time_zone
-        )
-        self.end_local_dt = self.EndUtc.astimezone(symbol.time_zone)
+        quote_provider.initialize(self, symbol)
+        trade_provider.initialize(self, symbol)
 
-        error, quote = quote_provider.get_quote_bar_at_date(self.start_local_dt)
+        if datetime.min == self.StartUtc:
+            error, quote = quote_provider.get_first_quote_bar()
+        else:
+            error, quote = quote_provider.get_quote_bar_at_date(self.StartUtc)
 
-        if "" == error:
-            self.time = quote.time.astimezone(symbol.time_zone)
-            self.bid = quote.open
-            self.ask = quote.open + quote.open_spread
+        symbol.initial_local_dt = symbol.start_local_dt = quote.time
+        symbol.end_local_dt = self.EndUtc.astimezone(symbol.time_zone)
 
-        trade_provider.initialize(symbol_name, self)
+        if "" != error:
+            return error
+        
+        symbol.update_bars(quote)
+        return ""
 
     def get_bars(
         self, start_local_dt: datetime, timeframe_seconds: int, symbol_name: str
@@ -1890,7 +1896,7 @@ class KitaApi:
                 bid_asks = bid_asks[1].split(",")
                 if len(bid_asks) == 2:
                     i_ask = KitaApi.string_to_integer(bid_asks[0])
-                    open_spread = lp.symbol.point_size * i_ask
+                    open_spread = round(lp.symbol.point_size * i_ask, lp.symbol.digits)
                     # open_bid = lp.symbol.point_size * (
                     #     i_ask - KitaApi.string_to_integer(bid_asks[1])
                     # )
@@ -2239,7 +2245,6 @@ class KitaApi:
         self.avg_open_duration_sum: list[timedelta] = [timedelta.min] * 1
         self.open_duration_count: list[int] = [0] * 1  # arrays because of by reference
         self.max_open_duration: list[timedelta] = [timedelta.min] * 1
-
         self.robot.on_start()  # type: ignore
 
     def tick(self):
@@ -2249,7 +2254,7 @@ class KitaApi:
 
             # Update quote, bars, indicators which are bound to this symbol
             error = symbol.on_tick()
-            if "" != error or symbol.time > self.end_local_dt:
+            if "" != error or symbol.time > symbol.end_local_dt:
                 return True  # end reached
 
             # Update Account
@@ -2308,9 +2313,13 @@ class KitaApi:
         winning_trades = len([x for x in self.history if x.net_profit >= 0])
         loosing_trades = len([x for x in self.history if x.net_profit < 0])
         net_profit = sum(x.net_profit for x in self.history)
-        trading_days = (  # 365 - 2*52 = 261 - 9 holidays = 252
-            (self.time - self.initial_local_dt).days / 365.0 * 252.0
-        )
+        trading_days = 0
+        for symbol in self.symbol_dictionary.values():
+            trading_days = (  # 365 - 2*52 = 261 - 9 holidays = 252
+                (symbol.time - symbol.initial_local_dt).days / 365.0 * 252.0
+            )
+            break
+
         if 0 == trading_days:
             annual_profit = 0
         else:

@@ -2,10 +2,12 @@ import os
 import struct
 import pytz
 from datetime import datetime, timedelta
-from KitaApi import QuoteBar, QuoteProvider
+from KitaApi import QuoteBar, QuoteProvider, KitaApi, Symbol
 
 
 class BrokerMe(QuoteProvider):
+    assets_file_name: str = "Assets_Pepperstone_Demo.csv"
+
     def __init__(self, parameter: str, data_rate: int):
         QuoteProvider.__init__(self, parameter, data_rate)
         self.file_handle = None
@@ -14,13 +16,10 @@ class BrokerMe(QuoteProvider):
         if self.file_handle is not None:
             self.file_handle.close()
 
-    def initialize(self, symbol_name: str):
-        self.symbol_name = symbol_name
-
-        # parameter: path to me files, assets file name in files directory
-        para_split = self.parameter.split(",")
-        self.symbol_path = os.path.join(para_split[0], self.symbol_name)
-        self.assets_file = para_split[0]
+    def initialize(self, kita_api: KitaApi, symbol: Symbol):
+        self.kita_api = kita_api
+        self.symbol = symbol
+        self.symbol_path = os.path.join(self.parameter, self.symbol.name)
 
     def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
         self.bars_filename = os.path.join(
@@ -55,17 +54,30 @@ class BrokerMe(QuoteProvider):
         return "", quote  # type: ignore
 
     def get_first_quote_bar(self) -> tuple[str, QuoteBar]:
-        return None  # type: ignore
-        pass
+        symbol_timeframe_path = os.path.join(self.symbol_path, "m1")
+
+        # Get all filenames in the directory
+        filenames = os.listdir(symbol_timeframe_path)
+
+        # Sort filenames in ascending order
+        self.bars_filename = os.path.join(self.symbol_path, "m1", sorted(filenames)[0])
+
+        if self.file_handle != None:
+            self.file_handle.close()
+
+        self.file_handle = open(self.bars_filename, "rb")
+        quote = self.read_quote_bar()
+
+        return "", quote  # type: ignore
 
     def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
         quote = self.read_quote_bar()
         if None == quote:  # type: ignore
-            self.last_date_time += timedelta(days=1)
-            if self.last_date_time > datetime.now().astimezone(pytz.utc):
+            self.last_utc += timedelta(days=1)
+            if self.last_utc > datetime.now().astimezone(pytz.utc):
                 return "No more data", None  # type: ignore
 
-            return self.get_quote_bar_at_date(self.last_date_time)
+            return self.get_quote_bar_at_date(self.last_utc)
         else:
             return "", quote  # type: ignore
 
@@ -79,9 +91,11 @@ class BrokerMe(QuoteProvider):
         unpacked_dt = struct.unpack("<Q", dt_data)[0]
         timestamp = unpacked_dt // 1000
 
-        self.last_date_time = quote.time = datetime.fromtimestamp(timestamp).astimezone(
-            pytz.utc
+        self.last_utc = datetime.fromtimestamp(timestamp).astimezone(pytz.utc)
+        quote.time = self.last_utc.astimezone(self.symbol.time_zone) + timedelta(
+            hours=(7 if self.symbol.is_ny_normalized else 0)
         )
+
         quote.milli_seconds = unpacked_dt % 1000
         quote.open = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
@@ -104,12 +118,11 @@ class BrokerMe(QuoteProvider):
             self.market_values.digits,
         )
         quote.volume = struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
-        quote.open_spread = round(
+        open_ask = (
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
-            * self.market_values.point_size,
-            self.market_values.digits,
+            * self.market_values.point_size
         )
-        quote.open_spread -= quote.open
+        quote.open_spread = round(open_ask - quote.open, self.market_values.digits)
         return quote  # type: ignore
 
 

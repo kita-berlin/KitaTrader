@@ -1,18 +1,19 @@
 # from datetime import datetime
-from KitaApi import TradeProvider, KitaApi
+from KitaApi import TradeProvider, KitaApi, Symbol
 
 
 class BrokerPaper(TradeProvider):
     def __init__(self, parameter: str):
         TradeProvider.__init__(self, parameter)
 
-    def initialize(self, symbol_name: str, kita_api: KitaApi):
-        self.symbol_name = symbol_name
+    def initialize(self, kita_api: KitaApi, symbol: Symbol):
+        self.symbol = symbol
         self.kita_api = kita_api
         pass
 
     def update_account(self):
         pass
 
+    # change to: close trade etc. All trading functions must end up here because they might be have to be sent to the broker
     def add_profit(self, profit: float):
         self.kita_api.account.balance += profit

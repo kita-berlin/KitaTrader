@@ -86,28 +86,20 @@ class Martingale(KitaApi):
         self.log_flush()
         # endregion
 
-        # mt5_broker =  BrokerMt5(account, "62060378, pepperstone_uk-Demo, tFue0y*akr")
-        quote_provider = BrokerMe(
-            "G:\\Meine Ablage\\TickBars\\mbars",  # path to mbar files
-            0,  # Data rate in seconds (0 means fastest possible)
-        )
+        # Example for 
+        # mt5_broker =  BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", data_rate=0)
 
-        # account for trading
-        trade_provider = BrokerPaper("")
-
-        # symbol, asset filename in files directory, quote_provider, trade_provider
-        self.init_symbol(
+        self.load_symbol(
             "NZDCAD",
-            "Assets_Pepperstone_Demo.csv",
-            quote_provider,
-            trade_provider,
-            # if K of New_YorK is versal, 7 hours are added
-            # This gives NY 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59
+            BrokerMe("G:\\Meine Ablage\\TickBars", data_rate=0), # data_rate in seconds, 0 means fastetst possible 
+            BrokerPaper(""),
+            # If :Normalized is added to America/New_York, 7 hours are added
+            # This gives NY 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "NY normalized time")
-            str_time_zone="America/New_YorK",
+            "America/New_York:Normalized"
         )
 
-        # example how to use bars
+        # Example how to use bars
         # self.bars = self.get_bars(Constants.SEC_PER_MINUTE, self.symbol.name)
 
         """ example how to use indicators
@@ -138,7 +130,7 @@ class Martingale(KitaApi):
 
         if not self.is_train:
             print(
-                "Time; Direction; Profit; max_equity_draw_down; cluster_count; invest_count; calmar; Rebuy1st%; Rebuy%; take_profit%"
+                "Time, Direction, Profit, max_equity_draw_down, cluster_count, invest_count, calmar, Rebuy1st%, Rebuy%, take_profit%"
             )
 
     ###################################
