@@ -46,7 +46,6 @@ class Bar:
 
 class QuoteBar:
     time: datetime = datetime.min
-    milli_seconds: int = 0
     open: float = 0
     high: float = 0
     low: float = 0
@@ -1218,7 +1217,7 @@ class SymbolInfo:
     lot_size: float = 0.0
     leverage: float = 0.0
     time_zone: tzinfo = tzinfo()
-    is_ny_normalized: bool = False
+    normalized_hours_offset: int = 0
     # endregion
 
     def __init__(
@@ -1233,9 +1232,9 @@ class SymbolInfo:
         self.trade_provider = trade_provider
         tz_split = str_time_zone.split(":")
         self.time_zone = pytz.timezone(tz_split[0])
-        self.is_ny_normalized = (
-            "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]
-        )
+        # 7 is the difference between midnight and 17:00 New York time
+        if "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]:
+            self.normalized_hours_offset = 7
 
         assets_path = os.path.join("Files", self.quote_provider.assets_file_name)
         self.market_values = self.quote_provider.market_values = (
@@ -1322,7 +1321,7 @@ class SymbolInfo:
                     if symbol_name != line[0]:
                         continue
 
-                    if len(line) != 16:
+                    if len(line) < 16:
                         return f"{assets_path} has wrong format (not 16 columns)"
 
                     market_values.symbol_name = symbol_name
@@ -1338,15 +1337,17 @@ class SymbolInfo:
 
                     market_time_split = line[8].split("-")
                     market_tzid_split = line[8].split(":")
+
                     market_values.symbol_tz_id = market_tzid_split[0].strip()
-                    market_values.market_open_time = timedelta(
-                        hours=int(market_tzid_split[1]),
-                        minutes=int(market_tzid_split[2].split("-")[0]),
-                    )
-                    market_values.market_close_time = timedelta(
-                        hours=int(market_time_split[1].split(":")[0]),
-                        minutes=int(market_time_split[1].split(":")[1]),
-                    )
+                    if 2 == len(market_values.symbol_tz_id):
+                        market_values.market_open_time = timedelta(
+                            hours=int(market_tzid_split[1]),
+                            minutes=int(market_tzid_split[2].split("-")[0]),
+                        )
+                        market_values.market_close_time = timedelta(
+                            hours=int(market_time_split[1].split(":")[0]),
+                            minutes=int(market_time_split[1].split(":")[1]),
+                        )
 
                     market_values.min_volume = float(line[9])
                     market_values.max_volume = 10000 * market_values.min_volume
@@ -1373,6 +1374,9 @@ class SymbolInfo:
 
     def on_tick(self) -> str:
         error, quote = self.quote_provider.get_next_quote_bar()
+        quote.time = quote.time.astimezone(self.time_zone) + timedelta(
+            hours=self.normalized_hours_offset
+        )
 
         if "" != error:
             return error
@@ -1592,13 +1596,17 @@ class KitaApi:
             error, quote = quote_provider.get_first_quote_bar()
         else:
             error, quote = quote_provider.get_quote_bar_at_date(self.StartUtc)
+        
+        quote.time = quote.time.astimezone(symbol.time_zone) + timedelta(
+            hours=symbol.normalized_hours_offset
+        )
 
         symbol.initial_local_dt = symbol.start_local_dt = quote.time
         symbol.end_local_dt = self.EndUtc.astimezone(symbol.time_zone)
 
         if "" != error:
             return error
-        
+
         symbol.update_bars(quote)
         return ""
 
@@ -1611,10 +1619,18 @@ class KitaApi:
 
         # build bars
         error, quote = symbol.quote_provider.get_quote_bar_at_date(start_local_dt)
+        quote.time = quote.time.astimezone(symbol.time_zone) + timedelta(
+            hours=symbol.normalized_hours_offset
+        )
+
         new_bars.update_bar(quote)
 
         while True:
             error, quote = symbol.quote_provider.get_next_quote_bar()
+            quote.time = quote.time.astimezone(symbol.time_zone) + timedelta(
+                hours=symbol.normalized_hours_offset
+            )
+
             if "" != error:
                 break
 

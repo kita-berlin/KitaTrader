@@ -11,8 +11,8 @@ class MainConsole:
         # region
         self.robot = Martingale()
         self.robot.robot = self.robot  # type:ignore
-        #self.robot.StartUtc = datetime.min  # datetime.min means earliest possible
-        self.robot.StartUtc = datetime.strptime("2024-01-01", "%Y-%m-%d")
+        self.robot.StartUtc = datetime.min  # datetime.min means earliest possible
+        #self.robot.StartUtc = datetime.strptime("2024-01-02", "%Y-%m-%d")
         self.robot.EndUtc = datetime.strptime("2030-01-01", "%Y-%m-%d")
         self.robot.RunningMode = RunMode.SilentBacktesting
 

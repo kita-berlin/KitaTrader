@@ -30,7 +30,7 @@
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
     <Content Include="BrokerProvider\ProviderCsv.pyNotYet" />
     <Content Include="BrokerProvider\ProviderMe.pyNotYet" />
-    <Content Include="BrokerProvider\BrokerMt5.py" />
+    <Content Include="BrokerProvider\QuoteTradeMt5.py" />
     <Content Include="BrokerProvider\ProviderPaper.pyNotYet" />
     <Content Include="requirements.txt" />
     <Content Include="typings\MetaTrader5\__init__.pyi" />
@@ -49,11 +49,12 @@
     <Compile Include="Api\KitaApiEnums.py" />
     <Compile Include="Api\Constants.py" />
     <Compile Include="Api\CoFu.py" />
+    <Compile Include="BrokerProvider\QuoteDukascopy.py" />
     <Compile Include="MainConsole.py" />
     <Compile Include="MainRl.py" />
-    <Compile Include="BrokerProvider\BrokerCsv.py" />
-    <Compile Include="BrokerProvider\BrokerPaper.py" />
-    <Compile Include="BrokerProvider\BrokerMe.py" />
+    <Compile Include="BrokerProvider\QuoteCsv.py" />
+    <Compile Include="BrokerProvider\TradePaper.py" />
+    <Compile Include="BrokerProvider\QuoteMe.py" />
     <Compile Include="BrokerProvider\ProviderMt5.pyNotYet" />
     <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteCsv.py" />
     <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteMeFiles.py" />

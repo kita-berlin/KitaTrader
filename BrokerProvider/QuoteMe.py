@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from KitaApi import QuoteBar, QuoteProvider, KitaApi, Symbol
 
 
-class BrokerMe(QuoteProvider):
+class QuoteMe(QuoteProvider):
+    provider_name = "QuoteMe"
     assets_file_name: str = "Assets_Pepperstone_Demo.csv"
 
     def __init__(self, parameter: str, data_rate: int):
@@ -51,7 +52,7 @@ class BrokerMe(QuoteProvider):
         self.file_handle = open(self.bars_filename, "rb")
         quote = self.read_quote_bar()
 
-        return "", quote  # type: ignore
+        return quote
 
     def get_first_quote_bar(self) -> tuple[str, QuoteBar]:
         symbol_timeframe_path = os.path.join(self.symbol_path, "m1")
@@ -68,7 +69,7 @@ class BrokerMe(QuoteProvider):
         self.file_handle = open(self.bars_filename, "rb")
         quote = self.read_quote_bar()
 
-        return "", quote  # type: ignore
+        return quote
 
     def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
         quote = self.read_quote_bar()
@@ -79,7 +80,7 @@ class BrokerMe(QuoteProvider):
 
             return self.get_quote_bar_at_date(self.last_utc)
         else:
-            return "", quote  # type: ignore
+            return quote
 
     def read_quote_bar(self) -> tuple[str, QuoteBar]:
         quote = QuoteBar()
@@ -90,13 +91,12 @@ class BrokerMe(QuoteProvider):
 
         unpacked_dt = struct.unpack("<Q", dt_data)[0]
         timestamp = unpacked_dt // 1000
+        milliseconds = unpacked_dt % 1000
 
-        self.last_utc = datetime.fromtimestamp(timestamp).astimezone(pytz.utc)
-        quote.time = self.last_utc.astimezone(self.symbol.time_zone) + timedelta(
-            hours=(7 if self.symbol.is_ny_normalized else 0)
-        )
+        self.last_utc = quote.time = datetime.fromtimestamp(timestamp).astimezone(
+            pytz.utc
+        ) + timedelta(milliseconds=milliseconds)
 
-        quote.milli_seconds = unpacked_dt % 1000
         quote.open = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
             * self.market_values.point_size,
@@ -123,7 +123,7 @@ class BrokerMe(QuoteProvider):
             * self.market_values.point_size
         )
         quote.open_spread = round(open_ask - quote.open, self.market_values.digits)
-        return quote  # type: ignore
+        return "", quote
 
 
 # end of file

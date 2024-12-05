@@ -2,7 +2,7 @@
 from KitaApi import TradeProvider, KitaApi, Symbol
 
 
-class BrokerPaper(TradeProvider):
+class TradePaper(TradeProvider):
     def __init__(self, parameter: str):
         TradeProvider.__init__(self, parameter)
 

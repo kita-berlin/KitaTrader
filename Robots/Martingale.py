@@ -5,8 +5,10 @@ from Api.CoFu import *
 from Constants import *
 from KitaApi import Symbol, PyLogger
 from talib import MA_Type  # type: ignore
-from BrokerMe import BrokerMe
-from BrokerPaper import BrokerPaper
+
+# from QuoteMe import QuoteMe
+from QuoteDukascopy import Dukascopy
+from TradePaper import TradePaper
 
 # from BrokerMt5 import BrokerMt5
 # from BrokerCsv import BrokerCsv
@@ -86,17 +88,18 @@ class Martingale(KitaApi):
         self.log_flush()
         # endregion
 
-        # Example for 
+        # Example for
         # mt5_broker =  BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", data_rate=0)
 
         self.load_symbol(
             "NZDCAD",
-            BrokerMe("G:\\Meine Ablage\\TickBars", data_rate=0), # data_rate in seconds, 0 means fastetst possible 
-            BrokerPaper(""),
+            # QuoteMe("G:\\Meine Ablage\\TickBars", data_rate=0), # data_rate in seconds, 0 means fastetst possible
+            Dukascopy("", data_rate=0),
+            TradePaper(""),
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives NY 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "NY normalized time")
-            "America/New_York:Normalized"
+            "America/New_York:Normalized",
         )
 
         # Example how to use bars
