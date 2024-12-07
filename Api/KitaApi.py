@@ -1008,7 +1008,7 @@ class Bars:
     def count(self) -> int:  # Gets the number of bars.#
         return len(self.open_times.data)
 
-    default_timeframe_seconds: int  # Get the timeframe in seconds.#
+    timeframe_seconds: int  # Get the timeframe in seconds.#
     symbol_name: str  # Gets the symbol name.#
     open_prices: DataSeries  # Gets the Open price bars data.#
     high_prices: DataSeries  # Gets the High price bars data.#
@@ -1027,18 +1027,19 @@ class Bars:
     ) -> bool: ...
 
     def __init__(self, timeframe_seconds: int, symbol_name: str):
-        self.default_timeframe_seconds = timeframe_seconds
+        self.timeframe_seconds = timeframe_seconds
         self.symbol_name = symbol_name
 
-        # Create initial OHLC data for drawing
+        # Create initial OHLC data
         self.open_times = TimeSeries()
         self.open_prices = DataSeries()
-        self.high_prices = DataSeries()
-        self.low_prices = DataSeries()
-        self.close_prices = DataSeries()
-        self.tick_volumes = DataSeries()
         self.open_asks = DataSeries()
-        self.line_colors = np.array([])
+        if 0 != timeframe_seconds:
+            self.high_prices = DataSeries()
+            self.low_prices = DataSeries()
+            self.close_prices = DataSeries()
+            self.tick_volumes = DataSeries()
+            # self.line_colors = np.array([])
 
     pass
 
@@ -1048,34 +1049,38 @@ class Bars:
 
         # do we have to build a new bar ?
         # epoc_dt = quote.time.timestamp() // 60
-        # tf_minutes = self.default_timeframe_seconds // 60
+        # tf_minutes = self.timeframe_seconds // 60
         # tf_modulo = epoc_dt % tf_minutes
-        if 0 == self.open_times.count or self.is_new_bar_get(
-            self.default_timeframe_seconds, quote.time, self.open_times.data[-1]
+        if (
+            0 == self.open_times.count
+            or 0 == self.timeframe_seconds
+            or self.is_new_bar_get(
+                self.timeframe_seconds, quote.time, self.open_times.data[-1]
+            )
         ):
             self.open_times.data = np.append(
                 self.open_times.data, np.datetime64(quote.time, "D")
             )
             self.open_prices.data = np.append(self.open_prices.data, quote.open)
-            self.high_prices.data = np.append(self.high_prices.data, quote.open)
-            self.low_prices.data = np.append(self.low_prices.data, quote.open)
-            self.close_prices.data = np.append(self.close_prices.data, quote.open)
-            self.tick_volumes.data = np.append(self.tick_volumes.data, 0)
             self.open_asks.data = np.append(self.open_asks.data, quote.open_spread)
-            self.line_colors = np.append(self.line_colors, "green")
+            if 0 != self.timeframe_seconds:
+                self.high_prices.data = np.append(self.high_prices.data, quote.open)
+                self.low_prices.data = np.append(self.low_prices.data, quote.open)
+                self.close_prices.data = np.append(self.close_prices.data, quote.open)
+                self.tick_volumes.data = np.append(self.tick_volumes.data, 0)
+                # self.line_colors = np.append(self.line_colors, "green")
+
             self.is_new_bar = True
         else:
             self.high_prices.data[-1] = max(self.high_prices.data[-1], quote.high)
             self.low_prices.data[-1] = min(self.low_prices.data[-1], quote.low)
             self.close_prices.data[-1] = quote.close
-            self.tick_volumes.data[-1] += (
-                1 if 0 == self.tick_volumes.data[-1] else self.tick_volumes.data[-1]
-            )
-            self.line_colors[-1] = (
-                "green"
-                if self.close_prices.data[-1] > self.open_prices.data[-1]
-                else "red"
-            )
+            self.tick_volumes.data[-1] += 1 if 0 == quote.volume else quote.volume
+            # self.line_colors[-1] = (
+            #     "green"
+            #     if self.close_prices.data[-1] > self.open_prices.data[-1]
+            #     else "red"
+            # )
 
         # self.open_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
         # self.high_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
@@ -1170,7 +1175,7 @@ class QuoteProvider(ABC):
         self.data_rate = data_rate
 
     @abstractmethod
-    def initialize(self, kita_api: KitaApi, symbol: Symbol): ...
+    def initialize(self, kita_api: KitaApi, symbol: Symbol, cache_path: str): ...
 
     @abstractmethod
     def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]: ...
@@ -1191,7 +1196,7 @@ class TradeProvider(ABC):
         pass
 
     @abstractmethod
-    def initialize(self, kita_api: KitaApi, symbol: Symbol): ...
+    def initialize(self, kita_api: KitaApi, symbol: Symbol, cache_path: str = ""): ...
 
     @abstractmethod
     def update_account(self): ...
@@ -1201,13 +1206,15 @@ class TradeProvider(ABC):
 
 
 class SymbolInfo:
+
     # Members
     # region
+    kita_api: KitaApi = None  # type: ignore
     name: str = ""
-    bars_list: list[Bars] = []
+    bars_dict: dict[int, Bars] = {}
     time: datetime = datetime.min
+    prev_time: datetime = datetime.min
     initial_local_dt: datetime = datetime.min
-    start_local_dt: datetime = datetime.min
     end_local_dt: datetime = datetime.min
     bid: float = 0
     ask: float = 0
@@ -1218,20 +1225,24 @@ class SymbolInfo:
     leverage: float = 0.0
     time_zone: tzinfo = tzinfo()
     normalized_hours_offset: int = 0
+    _point_value: float = 0
     # endregion
 
     def __init__(
         self,
+        kita_api: KitaApi,
         symbol_name: str,
         quote_provider: QuoteProvider,
         trade_provider: TradeProvider,
         str_time_zone: str,
     ):
+        self.kita_api = kita_api
         self.name = symbol_name
         self.quote_provider = quote_provider
         self.trade_provider = trade_provider
         tz_split = str_time_zone.split(":")
         self.time_zone = pytz.timezone(tz_split[0])
+
         # 7 is the difference between midnight and 17:00 New York time
         if "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]:
             self.normalized_hours_offset = 7
@@ -1251,13 +1262,13 @@ class SymbolInfo:
         self.lot_step = self.min_volume
         self.leverage = self.market_values.symbol_leverage
         self.lot_size = self.market_values.lot_size
-        self.tick_value = self.market_values.point_value
+        self._point_value = self.market_values.point_value
         self.commission = self.market_values.commission
         self.swap_long = self.market_values.swap_long
         self.swap_short = self.market_values.swap_short
         self.swap3_days_rollover = 3
         self.base_asset = self.market_values.symbol_currency_base
-        self.QuoteAsset = self.market_values.symbol_currency_quote
+        self.quote_asset = self.market_values.symbol_currency_quote
         self.swap_calculation_type: SymbolSwapCalculationType = (
             SymbolSwapCalculationType.Pips
         )
@@ -1270,28 +1281,27 @@ class SymbolInfo:
 
     @property
     def point_size(self) -> float:
-        return self._tick_size
+        return self._point_size
 
     @point_size.setter
     def point_size(self, value: float):
-        self._tick_size: float = value
+        self._point_size: float = value
         self.digits = int(0.5 + math.log10(1 / value))
 
     @property
-    def tick_value(self) -> float:
-        return self._tick_value
-
-    @tick_value.setter
-    def tick_value(self, value: float):
-        self._tick_value: float = value
+    def point_value(self) -> float:
+        if self.kita_api.account.currency == self.quote_asset:
+            return self._point_size * self.lot_size
+        else:
+            if self.kita_api.account.currency == self.base_asset:
+                return 1 / (self._point_size * self.lot_size * self.bid)
+        # else:
+        # to_do: currency conversion from quote currency to account currency
+        return 1
 
     @property
     def pip_value(self) -> float:
-        return self._tick_value * 10
-
-    @pip_value.setter
-    def pip_value(self, value: float):
-        self._pip_value: float = value
+        return self._point_value * 10
 
     @property
     def pip_size(self) -> float:
@@ -1318,7 +1328,7 @@ class SymbolInfo:
                     if line[0] == "Name" and line[1] == "Price":
                         continue
 
-                    if symbol_name != line[0]:
+                    if line[0] not in symbol_name:
                         continue
 
                     if len(line) < 16:
@@ -1364,35 +1374,92 @@ class SymbolInfo:
 
         return error
 
-    def update_bars(self, quote: QuoteBar):
-        for bars in self.bars_list:
-            bars.update_bar(quote)
+    def load_bars(self, timeframe_seconds: int) -> tuple[str, Bars]:
+        if timeframe_seconds not in self.bars_dict:
+            new_bars = Bars(timeframe_seconds, self.name)
+            self.bars_dict[timeframe_seconds] = new_bars
+        return "", self.bars_dict[timeframe_seconds]
 
-        self.time = quote.time
-        self.bid = quote.open
-        self.ask = quote.open + quote.open_spread
+    def do_first_run(self) -> str:
+        # Create the data rate provider
+        self.load_bars(self.quote_provider.data_rate)
 
-    def on_tick(self) -> str:
-        error, quote = self.quote_provider.get_next_quote_bar()
-        quote.time = quote.time.astimezone(self.time_zone) + timedelta(
-            hours=self.normalized_hours_offset
-        )
-
+        # Find first quote start date or get quote at given start date
+        if datetime.min == self.kita_api.StartUtc:
+            error, quote = self.quote_provider.get_first_quote_bar()
+        else:
+            error, quote = self.quote_provider.get_quote_bar_at_date(
+                self.kita_api.StartUtc
+            )
         if "" != error:
             return error
-        self.update_bars(quote)
-        return ""
+
+        # Convert initial_local_dt and end_local_dt to time zone
+        self.initial_local_dt = quote.time.astimezone(self.time_zone) + timedelta(
+            hours=self.normalized_hours_offset
+        )
+        self.end_local_dt = (
+            datetime.now()
+            if datetime.max == self.kita_api.EndUtc
+            else self.kita_api.EndUtc
+        ).astimezone(self.time_zone) + timedelta(hours=self.normalized_hours_offset)
+
+        prev_time = datetime.min
+        print("Generating Numpy arrays")
+        while True:
+            # Convert quote time to symbol's time zone
+            quote.time = quote.time.astimezone(self.time_zone) + timedelta(
+                hours=self.normalized_hours_offset
+            )
+
+            if quote.time >= self.end_local_dt:
+                return "end reached"
+
+            # for bars in self.bars_dict.values():
+            #     bars.update_bar(quote)
+
+            error, quote = self.quote_provider.get_next_quote_bar()
+            if "" != error:
+                return error
+
+            if quote.time.day != prev_time.day:
+                print(str(quote.time))
+
+            prev_time = quote.time
+
+    def get_next_quote(self) -> tuple[str, QuoteBar]:
+        quote = QuoteBar()
+        return "", quote
+
+    def on_tick(self) -> str:
+        error = ""
+        if self.kita_api.is_first_run:
+            self.do_first_run()
+            self.kita_api.is_first_run = False
+
+        # get quote from data rate provider, not from driver
+        error, quote = self.get_next_quote()
+
+        if "" == error:
+            self.time = quote.time
+            self.bid = quote.open
+            self.ask = quote.open + quote.open_spread
+
+        return error
 
 
 class Symbol(SymbolInfo):
     def __init__(
         self,
+        kita_api: KitaApi,
         symbol_name: str,
         quote_provider: QuoteProvider,
         trade_provider: TradeProvider,
         str_time_zone: str,
     ):
-        super().__init__(symbol_name, quote_provider, trade_provider, str_time_zone)
+        super().__init__(
+            kita_api, symbol_name, quote_provider, trade_provider, str_time_zone
+        )
 
     ######################################
     @property
@@ -1568,6 +1635,7 @@ class KitaApi:
     StartUtc = datetime.strptime("1900-01-01", "%Y-%m-%d")
     EndUtc = datetime.strptime("2100-01-01", "%Y-%m-%d")
     RunningMode: RunMode = RunMode.SilentBacktesting
+    CachePath: str = ""
     AccountInitialBalance: float = 10000.0
     AccountLeverage: int = 500
     AccountCurrency: str = "EUR"
@@ -1584,61 +1652,20 @@ class KitaApi:
         quote_provider: QuoteProvider,
         trade_provider: TradeProvider,
         str_time_zone: str = "utc",
-    ) -> str:
-        symbol = Symbol(symbol_name, quote_provider, trade_provider, str_time_zone)
+    ) -> tuple[str, Symbol]:
+        symbol = Symbol(
+            self, symbol_name, quote_provider, trade_provider, str_time_zone
+        )
 
         self.symbol_dictionary[symbol_name] = symbol
 
-        quote_provider.initialize(self, symbol)
+        app_data = os.environ.get("APPDATA")
+        cache_path = os.path.join(str(app_data), "KiTa", "Cache")
+
+        quote_provider.initialize(self, symbol, cache_path)
         trade_provider.initialize(self, symbol)
 
-        if datetime.min == self.StartUtc:
-            error, quote = quote_provider.get_first_quote_bar()
-        else:
-            error, quote = quote_provider.get_quote_bar_at_date(self.StartUtc)
-        
-        quote.time = quote.time.astimezone(symbol.time_zone) + timedelta(
-            hours=symbol.normalized_hours_offset
-        )
-
-        symbol.initial_local_dt = symbol.start_local_dt = quote.time
-        symbol.end_local_dt = self.EndUtc.astimezone(symbol.time_zone)
-
-        if "" != error:
-            return error
-
-        symbol.update_bars(quote)
-        return ""
-
-    def get_bars(
-        self, start_local_dt: datetime, timeframe_seconds: int, symbol_name: str
-    ) -> Bars:
-        new_bars = Bars(timeframe_seconds, symbol_name)
-        symbol = self.symbol_dictionary[symbol_name]
-        symbol.bars_list.append(new_bars)
-
-        # build bars
-        error, quote = symbol.quote_provider.get_quote_bar_at_date(start_local_dt)
-        quote.time = quote.time.astimezone(symbol.time_zone) + timedelta(
-            hours=symbol.normalized_hours_offset
-        )
-
-        new_bars.update_bar(quote)
-
-        while True:
-            error, quote = symbol.quote_provider.get_next_quote_bar()
-            quote.time = quote.time.astimezone(symbol.time_zone) + timedelta(
-                hours=symbol.normalized_hours_offset
-            )
-
-            if "" != error:
-                break
-
-            new_bars.update_bar(quote)
-            if new_bars.open_times.count > 0 and quote.time >= start_local_dt:
-                break
-        pass
-        return new_bars
+        return "", symbol
 
     def close_trade(
         self,
@@ -2128,8 +2155,8 @@ class KitaApi:
         desired_money[0] = 0
         lot_size[0] = 0
 
-        if math.isnan(symbol.tick_value):
-            return "Invalid tick_value"
+        if math.isnan(symbol.point_value):
+            return "Invalid point_value"
         """
         if ProfitMode == ProfitMode.lots:
             desi_mon = self.get_money_from_points_and_lot(symbol: Symbol, tpPts, lot_siz =value)
@@ -2148,7 +2175,7 @@ class KitaApi:
             desi_mon = self.get_money_from_points_and_lot(symbol: Symbol, tpPts, lot_size)
         elif profitMode in [ProfitMode.constant_invest, ProfitMode.Reinvest]:
             invest_money = (self.initial_account_balance if ProfitMode == ProfitMode.constant_invest else self.account.balance) * value / 100
-            units = investMoney * symbol.point_size / symbol.tick_value / symbol.bid
+            units = investMoney * symbol.point_size / symbol.point_value / symbol.bid
             lot_siz = symbol.volume_in_units_to_quantity(units)
             desi_mon = self.get_money_from_points_and_lot(symbol: Symbol, tpPts, lot_size)
         """
@@ -2156,13 +2183,13 @@ class KitaApi:
 
     @staticmethod
     def get_money_from_points_and_lot(symbol: Symbol, points: int, lot: float) -> float:
-        return symbol.tick_value * symbol.lot_size * points * lot
+        return symbol.point_value * symbol.lot_size * points * lot
 
     @staticmethod
     def get_money_from_points_and_volume(
         symbol: Symbol, points: int, volume: float
     ) -> float:
-        return symbol.tick_value * points * volume / symbol.lot_size
+        return symbol.point_value * points * volume / symbol.lot_size
 
     @staticmethod
     def get_money_from_1point_and_1lot(symbol: Symbol, reverse: bool = False):
@@ -2173,17 +2200,17 @@ class KitaApi:
 
     @staticmethod
     def get_points_from_money_and_lot(symbol: Symbol, money: float, lot: float):
-        return money / (lot * symbol.tick_value * symbol.lot_size)
+        return money / (lot * symbol.point_value * symbol.lot_size)
 
     @staticmethod
     def get_points_from_money_and_volume(symbol: Symbol, money: float, volume: float):
-        return money / (volume * symbol.tick_value)
+        return money / (volume * symbol.point_value)
 
     @staticmethod
     def get_lots_from_money_and_points(
         symbol: Symbol, money: float, points: int, xProLot: float
     ):
-        ret_val = abs(money / (points * symbol.tick_value * symbol.lot_size + xProLot))
+        ret_val = abs(money / (points * symbol.point_value * symbol.lot_size + xProLot))
         ret_val = max(ret_val, symbol.min_volume)
         ret_val = min(ret_val, symbol.max_volume)
         return ret_val
@@ -2261,6 +2288,7 @@ class KitaApi:
         self.avg_open_duration_sum: list[timedelta] = [timedelta.min] * 1
         self.open_duration_count: list[int] = [0] * 1  # arrays because of by reference
         self.max_open_duration: list[timedelta] = [timedelta.min] * 1
+        self.is_first_run: bool = True
         self.robot.on_start()  # type: ignore
 
     def tick(self):
@@ -2277,10 +2305,11 @@ class KitaApi:
             if len(self.positions) >= 1:
                 symbol.trade_provider.update_account()
 
-            # Update robot
+            # call the robot
             self.robot.on_tick(symbol)  # type: ignore
 
             # do max/min calcs
+            # region
             self.max(self.max_margin, self.account.margin)
             if self.max(self.same_time_open, len(self.positions)):
                 self.same_time_open_date_time = symbol.time
@@ -2300,6 +2329,9 @@ class KitaApi:
             ):
                 self.max_equity_drawdown_time = symbol.time
                 self.max_equity_drawdown_count = len(self.history)
+            # endregion
+
+            symbol.prev_time = symbol.time
 
         return False
 

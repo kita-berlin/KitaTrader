@@ -328,7 +328,7 @@ class SymbolMinCommissionType(Enum):
     #
     # Summary:
     #     Symbol minimum commission type is in Symbol Quote Asset
-    QuoteAsset = 1
+    quote_asset = 1
 
 
 class SymbolSwapCalculationType(Enum):

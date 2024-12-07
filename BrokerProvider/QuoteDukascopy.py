@@ -1,3 +1,4 @@
+import os
 import struct
 import requests
 import pytz
@@ -25,22 +26,39 @@ class Dukascopy(QuoteProvider):
         self.requests.headers.update(self.headers)
         self.current_index = 0
 
-    def initialize(self, kita_api: KitaApi, symbol: Symbol):
+    def initialize(self, kita_api: KitaApi, symbol: Symbol, cache_path: str):
         self.kita_api = kita_api
         self.symbol = symbol
+        self.cache_path = os.path.join(cache_path, self.provider_name)
+        if not os.path.exists(self.cache_path):
+            os.makedirs(self.cache_path)
 
     def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
-        dt = dt.replace(minute=0, second=0, microsecond=0)
-        url = self.get_dukascopy_filename(self.WebRoot, dt, self.symbol.name)
-        response = self.requests.get(url, stream=True)
-        response.raise_for_status()
-        raw_data = response.content
+        while True:
+            dt = dt.replace(minute=0, second=0, microsecond=0)
+            url = self.get_url(self.WebRoot, dt, self.symbol.name)
+            path = self.get_file_name(self.cache_path, dt, self.symbol.name)
+            if os.path.exists(path):
+                with open(path, "rb") as file:
+                    self.data = file.read()
+            else:
+                try:
+                    response = self.requests.get(url, stream=True)
+                    response.raise_for_status()
+                    decompressor = LZMADecompressor()
+                    raw_data = response.content
+                    self.data = decompressor.decompress(raw_data)
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    with open(path, "wb") as new_file:
+                        new_file.write(self.data)
+                except Exception as e:
+                    return str(e), None  # type: ignore
 
-        if not raw_data:
-            return "", None  # type: ignore
+            if 0 == len(self.data):
+                dt += timedelta(hours=1)
+            else:
+                break
 
-        decompressor = LZMADecompressor()
-        self.data = decompressor.decompress(raw_data)
         self.current_index = 0
         return self.get_one_quote(dt)
 
@@ -80,8 +98,9 @@ class Dukascopy(QuoteProvider):
     def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
         if self.is_last_tick_of_hour:
             self.last_dt += timedelta(hours=1)
-
-        return self.get_one_quote(self.last_dt)
+            return self.get_quote_bar_at_date(self.last_dt)
+        else:
+            return self.get_one_quote(self.last_dt)
 
     def get_first_quote_bar(self) -> tuple[str, QuoteBar]:
         start_date = datetime(2000, 1, 1)
@@ -89,9 +108,7 @@ class Dukascopy(QuoteProvider):
 
         while (end_date - start_date).days > 1:
             mid_date = start_date + (end_date - start_date) / 2
-            url = self.get_dukascopy_filename(
-                Dukascopy.WebRoot, mid_date, self.symbol.name
-            )
+            url = self.get_url(Dukascopy.WebRoot, mid_date, self.symbol.name)
             try:
                 response = self.requests.get(url, stream=True)
                 response.raise_for_status()
@@ -101,10 +118,19 @@ class Dukascopy(QuoteProvider):
 
         return self.get_quote_bar_at_date(end_date)
 
-    def get_dukascopy_filename(
-        self, base_url: str, dt: datetime, symbol_name: str
-    ) -> str:
+    def get_url(self, base_url: str, dt: datetime, symbol_name: str) -> str:
         return f"{base_url}/{symbol_name}/{dt.year}/{dt.month - 1:02}/{dt.day:02}/{dt.hour:02}h_ticks.bi5"
+
+    def get_file_name(self, cache_path: str, dt: datetime, symbol_name: str) -> str:
+        return os.path.join(
+            cache_path,
+            symbol_name,
+            "bi5",
+            f"{dt.year:04}",
+            f"{dt.month - 1:02}",
+            f"{dt.day:02}",
+            f"{dt.hour:02}h_ticks.bi5",
+        )
 
 
 # end of file

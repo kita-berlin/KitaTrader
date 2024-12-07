@@ -1,17 +1,16 @@
 ﻿from math import sqrt
 from KitaApiEnums import *
-from KitaApi import Position, KitaApi
+from KitaApi import KitaApi
 from Api.CoFu import *
 from Constants import *
 from KitaApi import Symbol, PyLogger
 from talib import MA_Type  # type: ignore
 
-# from QuoteMe import QuoteMe
-from QuoteDukascopy import Dukascopy
 from TradePaper import TradePaper
-
-# from BrokerMt5 import BrokerMt5
-# from BrokerCsv import BrokerCsv
+from QuoteMe import QuoteMe  # type: ignore
+from QuoteDukascopy import Dukascopy  # type: ignore
+from QuoteTradeMt5 import BrokerMt5  # type: ignore
+from QuoteCsv import BrokerCsv  # type: ignore
 
 
 class Martingale(KitaApi):
@@ -48,7 +47,6 @@ class Martingale(KitaApi):
         # region
         self.is_long = True
         self.current_volume = self.initial_volume = self.Volume
-        self.positions: list[Position] = []
         self.max_invest_count: list[int] = [0] * 1
         self.cluster_count: int = 0
         self.avg_price: float = 0
@@ -91,23 +89,30 @@ class Martingale(KitaApi):
         # Example for
         # mt5_broker =  BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", data_rate=0)
 
-        self.load_symbol(
+        error, symbol = self.load_symbol(
             "NZDCAD",
-            # QuoteMe("G:\\Meine Ablage\\TickBars", data_rate=0), # data_rate in seconds, 0 means fastetst possible
+
+            # data_rate in seconds, 0 means fastetst possible (i.e. Ticks)
             Dukascopy("", data_rate=0),
+            # QuoteMe("G:\\Meine Ablage\\TickBars", data_rate=0),
+
+            # Paper trading
             TradePaper(""),
+
             # If :Normalized is added to America/New_York, 7 hours are added
-            # This gives NY 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
-            # (we call this "NY normalized time")
+            # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
+            # (we call this "New York normalized time")
             "America/New_York:Normalized",
         )
 
         # Example how to use bars
-        # self.bars = self.get_bars(Constants.SEC_PER_MINUTE, self.symbol.name)
+        # if "" == error:
+        #     error, m1_bars = symbol.load_bars(Constants.SEC_PER_MINUTE)
+        #     m1_bars.count
 
         """ example how to use indicators
         self.time_period = 14
-        self.indi_bars = self.market_data.get_bars(SEC_PER_HOUR, self.symbol.name)
+        self.indi_bars = self.market_data.load_bars(SEC_PER_HOUR, self.symbol.name)
         
         self.sma = indicators.moving_average(
             source =self.indi_bars.close_prices,
@@ -138,7 +143,6 @@ class Martingale(KitaApi):
 
     ###################################
     def on_tick(self, symbol: Symbol):
-        self.symbol = symbol
         """example how to use own indicators and ta-lib
         ta_sma = talib.SMA(
             self.indi_bars.close_prices.data[-self.time_period :], timeperiod =self.time_period
@@ -166,8 +170,8 @@ class Martingale(KitaApi):
         my_lower = self.bb_indi.Bottoself.Last(0)
         """
 
-        current_open = symbol.ask if self.is_long else self.symbol.bid
-        current_close = self.symbol.bid if self.is_long else self.symbol.ask
+        current_open = symbol.ask if self.is_long else symbol.bid
+        current_close = symbol.bid if self.is_long else symbol.ask
         target_cash = current_repurchase_price = 0
 
         # Check spread
@@ -208,10 +212,10 @@ class Martingale(KitaApi):
 
             tp_value = current_close * self.TakeProfitPercent / 100
             # tp_price = self.add_long(self.is_long, self.avg_price, tp_value)
-            tp_points = self.i_price(tp_value, self.symbol.point_size)
+            tp_points = self.i_price(tp_value, symbol.point_size)
 
             target_cash = self.get_money_from_points_and_volume(
-                self.symbol, tp_points, self.current_volume
+                symbol, tp_points, self.current_volume
             )
         pass
 
@@ -226,7 +230,7 @@ class Martingale(KitaApi):
                     # "Time; Profit; max_equity_draw_down; cluster_count; invest_count; calmar; Rebuy1st%; Rebuy%; take_profit%"
                     if not self.is_train:
                         print(
-                            self.symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
+                            symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
                             + ("Long" if self.is_long else "Short")
                             # + "; {:.2f}".format(
                             #     self.account.balance - self.initial_account_balance
@@ -267,9 +271,9 @@ class Martingale(KitaApi):
                 # und zieht ihn näher zum aktuellen Preis hin
                 pos = self.execute_market_order(
                     TradeType.Buy if self.is_long else TradeType.Sell,
-                    self.symbol.name,
-                    self.symbol.normalize_volume_in_units(volume_to_add),
-                    self.get_label(),
+                    symbol.name,
+                    symbol.normalize_volume_in_units(volume_to_add),
+                    self.get_label(symbol),
                 )
 
                 self.invest_count += 1
@@ -278,7 +282,7 @@ class Martingale(KitaApi):
 
                 if not self.is_train:
                     print(
-                        self.symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
+                        symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
                         + ("Long" if self.is_long else "Short")
                         + "; {:.2f}".format(
                             self.account.balance - self.initial_account_balance
@@ -304,12 +308,12 @@ class Martingale(KitaApi):
         pass
 
     ###################################
-    def get_label(self):
+    def get_label(self, symbol: Symbol):
         return (
             f"{self.version};"
             f"{self.cluster_count}_{self.invest_count};"
-            f"{int(0.5 + (self.symbol.ask if self.is_long else self.symbol.bid) / self.symbol.point_size)};"
-            f"{self.symbol.time};"
+            f"{int(0.5 + (symbol.ask if self.is_long else symbol.bid) / symbol.point_size)};"
+            f"{symbol.time};"
         )
 
     ###################################

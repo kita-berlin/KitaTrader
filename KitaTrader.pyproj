@@ -60,6 +60,7 @@
     <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteMeFiles.py" />
     <Compile Include="ProviderQuoteToBeDeleted\ProviderQuoteMt5.py" />
     <Compile Include="ReadData.py" />
+    <Compile Include="Robots\Template.py" />
     <Compile Include="Robots\Martingale.py" />
     <Compile Include="Robots\Ultron.py" />
   </ItemGroup>

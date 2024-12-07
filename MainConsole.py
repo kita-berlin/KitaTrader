@@ -9,15 +9,20 @@ class MainConsole:
 
         # 1. Set the parameters of the platform
         # region
-        self.robot = Martingale()
+        self.robot = Martingale()  # The robot to be used
         self.robot.robot = self.robot  # type:ignore
-        self.robot.StartUtc = datetime.min  # datetime.min means earliest possible
-        #self.robot.StartUtc = datetime.strptime("2024-01-02", "%Y-%m-%d")
-        self.robot.EndUtc = datetime.strptime("2030-01-01", "%Y-%m-%d")
+
+        #self.robot.StartUtc = datetime.min  # means earliest possible
+        self.robot.StartUtc = datetime.strptime("2.12.2024", "%d.%m.%Y")
+
+        self.robot.EndUtc = datetime.max  # means latest possible
+        # self.robot.EndUtc = datetime.strptime("2024-06-30", "%Y-%m-%d")
+
         self.robot.RunningMode = RunMode.SilentBacktesting
 
         self.robot.AccountInitialBalance = 10000
         self.robot.AccountLeverage = 500
+        # until full currency conversion is implemented, the quote currency of the traded symbol is used as the account currency
         self.robot.AccountCurrency = "EUR"
         # endregion
 

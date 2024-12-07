@@ -29,13 +29,13 @@ SymbolInfo:
             self.lot_step = self.min_lot
             self.leverage = self.algo_api.market_values.symbol_leverage
             self.lot_size = self.algo_api.market_values.lot_size
-            self.tick_value = self.algo_api.market_values.point_value
+            self.point_value = self.algo_api.market_values.point_value
             self.commission = self.algo_api.market_values.commission
             self.swap_long = self.algo_api.market_values.swap_long
             self.swap_short = self.algo_api.market_values.swap_short
             self.swap3_days_rollover = 3
             self.base_asset = self.algo_api.market_values.symbol_currency_base
-            self.QuoteAsset = self.algo_api.market_values.symbol_currency_quote
+            self.quote_asset = self.algo_api.market_values.symbol_currency_quote
             self.swap_calculation_type: SymbolSwapCalculationType = (
                 SymbolSwapCalculationType.Pips
             )
