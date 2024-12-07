@@ -6,7 +6,7 @@ class TradePaper(TradeProvider):
     def __init__(self, parameter: str):
         TradeProvider.__init__(self, parameter)
 
-    def initialize(self, kita_api: KitaApi, symbol: Symbol):
+    def init_symbol(self, kita_api: KitaApi, symbol: Symbol, cache_path: str = ""):
         self.symbol = symbol
         self.kita_api = kita_api
         pass

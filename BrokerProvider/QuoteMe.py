@@ -10,14 +10,15 @@ class QuoteMe(QuoteProvider):
     assets_file_name: str = "Assets_Pepperstone_Demo.csv"
 
     def __init__(self, parameter: str, data_rate: int):
-        QuoteProvider.__init__(self, parameter, data_rate)
+        assets_path = os.path.join("Files", self.assets_file_name)
+        QuoteProvider.__init__(self, parameter, assets_path, data_rate)
         self.file_handle = None
 
     def __del__(self):
         if self.file_handle is not None:
             self.file_handle.close()
 
-    def initialize(self, kita_api: KitaApi, symbol: Symbol, cache_path: str):
+    def init_symbol(self, kita_api: KitaApi, symbol: Symbol, cache_path: str):
         self.kita_api = kita_api
         self.symbol = symbol
         self.cache_path = cache_path

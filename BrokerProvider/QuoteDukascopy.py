@@ -21,12 +21,13 @@ class Dukascopy(QuoteProvider):
     is_last_tick_of_hour: bool = False
 
     def __init__(self, parameter: str, data_rate: int):
-        QuoteProvider.__init__(self, parameter, data_rate)
+        assets_path = os.path.join("Files", self.assets_file_name)
+        QuoteProvider.__init__(self, parameter, assets_path, data_rate)
         self.requests = requests.Session()
         self.requests.headers.update(self.headers)
         self.current_index = 0
 
-    def initialize(self, kita_api: KitaApi, symbol: Symbol, cache_path: str):
+    def init_symbol(self, kita_api: KitaApi, symbol: Symbol, cache_path: str):
         self.kita_api = kita_api
         self.symbol = symbol
         self.cache_path = os.path.join(cache_path, self.provider_name)

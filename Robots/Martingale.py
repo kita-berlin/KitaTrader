@@ -86,19 +86,22 @@ class Martingale(KitaApi):
         self.log_flush()
         # endregion
 
-        # Example for
-        # mt5_broker =  BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", data_rate=0)
+        # data_rate in seconds, 0 means fastetst possible (i.e. Ticks)
+        quote_provider = Dukascopy("", data_rate=0)
+        # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", data_rate=0),
+        # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", data_rate=0)
 
-        error, symbol = self.load_symbol(
+        i = 0
+        for symbol_name in quote_provider.symbols:
+            i = i + 1
+            print(str(i) + ": " + symbol_name)
+
+        # error, symbol =
+        self.load_symbol(
             "NZDCAD",
-
-            # data_rate in seconds, 0 means fastetst possible (i.e. Ticks)
-            Dukascopy("", data_rate=0),
-            # QuoteMe("G:\\Meine Ablage\\TickBars", data_rate=0),
-
+            quote_provider,
             # Paper trading
             TradePaper(""),
-
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "New York normalized time")

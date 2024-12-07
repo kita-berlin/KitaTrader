@@ -1141,41 +1141,77 @@ class Bars:
     """
 
 
-class MarketValues:
-    def __init__(self):
-        self.symbol_name = ""
-        self.swap_long = 0.0
-        self.swap_short = 0.0
-        self.point_size = 0.0
-        self.avg_spread = 0.0
-        self.digits = 0
-        self.point_value = 0.0
-        self.margin_required = 0.0
-        self.symbol_tz_id = ""
-        self.market_open_time = timedelta()
-        self.market_close_time = timedelta()
-        self.min_volume = 0.0
-        self.max_volume = 0.0
-        self.lot_size = 0.0
-        self.commission = 0.0
-        self.broker_symbol = ""
-        self.symbol_leverage = 0.0
-        self.symbol_currency_base = ""
-        self.symbol_currency_quote = ""
-
-
 class QuoteProvider(ABC):
     kita_api: KitaApi
     symbol: Symbol
-    assets_file_name: str
-    market_values: MarketValues
+    assets_path: str
+    symbols: Symbols
 
-    def __init__(self, parameter: str, data_rate: int):
+    def __init__(self, parameter: str, assets_path: str, data_rate: int):
         self.parameter = parameter
+        self.assets_path = assets_path
         self.data_rate = data_rate
+        self.symbols = Symbols()
+        self.init_market_info(assets_path, None)  # type:ignore
+
+    def init_market_info(self, assets_path: str, symbol: SymbolInfo) -> str:
+        error = ""
+        try:
+            with open(assets_path, newline="") as csvfile:
+                reader = csv.reader(csvfile)
+                for line in reader:
+                    if not line:
+                        continue
+                    line = [item.strip() for item in line]
+
+                    if line[1] == "Price":
+                        continue
+
+                    self.symbols.add_symbol(line[0])
+                    if None == symbol or line[0] not in symbol.name:  # type:ignore
+                        continue
+
+                    if len(line) < 16:
+                        return f"{assets_path} has wrong format (not 16 columns)"
+
+                    symbol.swap_long = float(line[3])
+                    symbol.swap_short = float(line[4])
+                    symbol.point_size = float(line[5]) / 10.0
+                    symbol.avg_spread = float(line[2]) / symbol.point_size
+                    symbol.digits = int(0.5 + math.log10(1 / symbol.point_size))
+                    symbol.margin_required = float(line[7])
+
+                    market_time_split = line[8].split("-")
+                    market_tzid_split = line[8].split(":")
+
+                    symbol.symbol_tz_id = market_tzid_split[0].strip()
+                    if 2 == len(symbol.symbol_tz_id):
+                        symbol.market_open_time = timedelta(
+                            hours=int(market_tzid_split[1]),
+                            minutes=int(market_tzid_split[2].split("-")[0]),
+                        )
+                        symbol.market_close_time = timedelta(
+                            hours=int(market_time_split[1].split(":")[0]),
+                            minutes=int(market_time_split[1].split(":")[1]),
+                        )
+
+                    symbol.min_volume = float(line[9])
+                    symbol.max_volume = 10000 * symbol.min_volume
+                    symbol.commission = float(line[10])
+                    symbol.broker_symbol = line[11]
+                    symbol.symbol_leverage = float(line[12])
+                    symbol.lot_size = float(line[13])
+                    symbol.currency_base = line[14].strip()
+                    symbol.currency_quote = line[15].strip()
+
+        except Exception as ex:
+            error = str(ex)
+            error += "\n" + traceback.format_exc()
+
+        return error
 
     @abstractmethod
-    def initialize(self, kita_api: KitaApi, symbol: Symbol, cache_path: str): ...
+    def init_symbol(self, kita_api: KitaApi, symbol: Symbol, cache_path: str): ...
 
     @abstractmethod
     def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]: ...
@@ -1189,20 +1225,44 @@ class QuoteProvider(ABC):
 
 class TradeProvider(ABC):
     kita_api: KitaApi
-    market_values: MarketValues
 
     def __init__(self, parameter: str):
         self.parameter = parameter
         pass
 
     @abstractmethod
-    def initialize(self, kita_api: KitaApi, symbol: Symbol, cache_path: str = ""): ...
+    def init_symbol(self, kita_api: KitaApi, symbol: Symbol, cache_path: str = ""): ...
 
     @abstractmethod
     def update_account(self): ...
 
     @abstractmethod
     def add_profit(self, profit: float): ...
+
+
+class Symbols:
+    def __init__(self):
+        self._symbols: list[str] = []
+
+    def __getitem__(self, index: int) -> str:
+        """Gets the desired symbol by index."""
+        return self._symbols[index]
+
+    @property
+    def count(self) -> int:
+        """Gets the total number of the symbols in the list."""
+        return len(self._symbols)
+
+    def get_symbols(self, *symbol_names: str) -> list[str]:
+        """Gets multiple symbols by name."""
+        return self._symbols
+
+    def exists(self, symbol_name: str) -> bool:
+        """Checks if a specific symbol name exists in the list."""
+        return any(symbol == symbol_name for symbol in self._symbols)
+
+    def add_symbol(self, symbol_name: str):
+        self._symbols.append(symbol_name)
 
 
 class SymbolInfo:
@@ -1219,13 +1279,28 @@ class SymbolInfo:
     bid: float = 0
     ask: float = 0
     broker_symbol_name: str = ""
-    min_volume: float = 0.0
-    max_volume: float = 0.0
-    lot_size: float = 0.0
-    leverage: float = 0.0
+    min_volume: float = 0
+    max_volume: float = 0
+    lot_size: float = 0
+    leverage: float = 0
     time_zone: tzinfo = tzinfo()
     normalized_hours_offset: int = 0
-    _point_value: float = 0
+    swap_long: float = 0
+    swap_short: float = 0
+    avg_spread: float = 0
+    digits: int = 0
+    margin_required: float = 0
+    symbol_tz_id: str = ""
+    market_open_time = timedelta()
+    market_close_time = timedelta()
+    min_volume: float = 0
+    max_volume: float = 0
+    lot_size: float = 0
+    commission: float = 0
+    broker_symbol: str = ""
+    symbol_leverage: float = 0
+    currency_base: str = ""
+    currency_quote: str = ""
     # endregion
 
     def __init__(
@@ -1247,37 +1322,13 @@ class SymbolInfo:
         if "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]:
             self.normalized_hours_offset = 7
 
-        assets_path = os.path.join("Files", self.quote_provider.assets_file_name)
-        self.market_values = self.quote_provider.market_values = (
-            self.trade_provider.market_values
-        ) = MarketValues()
-        error = self.init_market_info(assets_path, self.name, self.market_values)
+        error = self.quote_provider.init_market_info(
+            self.quote_provider.assets_path,
+            self,
+        )
         if "" != error:
             print(error)
             exit()
-
-        self.point_size = self.market_values.point_size
-        self.min_volume = self.market_values.min_volume
-        self.max_volume = self.market_values.max_volume
-        self.lot_step = self.min_volume
-        self.leverage = self.market_values.symbol_leverage
-        self.lot_size = self.market_values.lot_size
-        self._point_value = self.market_values.point_value
-        self.commission = self.market_values.commission
-        self.swap_long = self.market_values.swap_long
-        self.swap_short = self.market_values.swap_short
-        self.swap3_days_rollover = 3
-        self.base_asset = self.market_values.symbol_currency_base
-        self.quote_asset = self.market_values.symbol_currency_quote
-        self.swap_calculation_type: SymbolSwapCalculationType = (
-            SymbolSwapCalculationType.Pips
-        )
-        self.is_trading_enabled = True
-        self.trading_mode = SymbolTradingMode.FullAccess
-
-        self.quote_provider.market_values = self.trade_provider.market_values = (
-            self.market_values
-        )
 
     @property
     def point_size(self) -> float:
@@ -1290,10 +1341,10 @@ class SymbolInfo:
 
     @property
     def point_value(self) -> float:
-        if self.kita_api.account.currency == self.quote_asset:
+        if self.kita_api.account.currency == self.currency_quote:
             return self._point_size * self.lot_size
         else:
-            if self.kita_api.account.currency == self.base_asset:
+            if self.kita_api.account.currency == self.currency_base:
                 return 1 / (self._point_size * self.lot_size * self.bid)
         # else:
         # to_do: currency conversion from quote currency to account currency
@@ -1301,7 +1352,7 @@ class SymbolInfo:
 
     @property
     def pip_value(self) -> float:
-        return self._point_value * 10
+        return self.point_value * 10
 
     @property
     def pip_size(self) -> float:
@@ -1312,67 +1363,6 @@ class SymbolInfo:
     @property
     def market_hours(self) -> MarketHours:
         return MarketHours()
-
-    def init_market_info(
-        self, assets_path: str, symbol_name: str, market_values: MarketValues
-    ) -> str:
-        error = ""
-        try:
-            with open(assets_path, newline="") as csvfile:
-                reader = csv.reader(csvfile)
-                for line in reader:
-                    if not line:
-                        continue
-                    line = [item.strip() for item in line]
-
-                    if line[0] == "Name" and line[1] == "Price":
-                        continue
-
-                    if line[0] not in symbol_name:
-                        continue
-
-                    if len(line) < 16:
-                        return f"{assets_path} has wrong format (not 16 columns)"
-
-                    market_values.symbol_name = symbol_name
-                    market_values.swap_long = float(line[3])
-                    market_values.swap_short = float(line[4])
-                    market_values.point_size = float(line[5]) / 10.0
-                    market_values.avg_spread = float(line[2]) / market_values.point_size
-                    market_values.digits = int(
-                        0.5 + math.log10(1 / market_values.point_size)
-                    )
-                    market_values.point_value = float(line[6]) / 10.0
-                    market_values.margin_required = float(line[7])
-
-                    market_time_split = line[8].split("-")
-                    market_tzid_split = line[8].split(":")
-
-                    market_values.symbol_tz_id = market_tzid_split[0].strip()
-                    if 2 == len(market_values.symbol_tz_id):
-                        market_values.market_open_time = timedelta(
-                            hours=int(market_tzid_split[1]),
-                            minutes=int(market_tzid_split[2].split("-")[0]),
-                        )
-                        market_values.market_close_time = timedelta(
-                            hours=int(market_time_split[1].split(":")[0]),
-                            minutes=int(market_time_split[1].split(":")[1]),
-                        )
-
-                    market_values.min_volume = float(line[9])
-                    market_values.max_volume = 10000 * market_values.min_volume
-                    market_values.commission = float(line[10])
-                    market_values.broker_symbol = line[11]
-                    market_values.symbol_leverage = float(line[12])
-                    market_values.lot_size = float(line[13])
-                    market_values.symbol_currency_base = line[14].strip()
-                    market_values.symbol_currency_quote = line[15].strip()
-                    break
-        except Exception as ex:
-            error = str(ex)
-            error += "\n" + traceback.format_exc()
-
-        return error
 
     def load_bars(self, timeframe_seconds: int) -> tuple[str, Bars]:
         if timeframe_seconds not in self.bars_dict:
@@ -1662,8 +1652,8 @@ class KitaApi:
         app_data = os.environ.get("APPDATA")
         cache_path = os.path.join(str(app_data), "KiTa", "Cache")
 
-        quote_provider.initialize(self, symbol, cache_path)
-        trade_provider.initialize(self, symbol)
+        quote_provider.init_symbol(self, symbol, cache_path)
+        trade_provider.init_symbol(self, symbol)
 
         return "", symbol
 
