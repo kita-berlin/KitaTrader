@@ -2,16 +2,16 @@ import os
 import struct
 import pytz
 from datetime import datetime, timedelta
-from KitaApi import QuoteBar, QuoteProvider, KitaApi, Symbol
+from KitaApi import Bar, QuoteProvider, KitaApi, Symbol
 
 
 class QuoteMe(QuoteProvider):
     provider_name = "QuoteMe"
     assets_file_name: str = "Assets_Pepperstone_Demo.csv"
 
-    def __init__(self, parameter: str, data_rate: int):
+    def __init__(self, parameter: str, datarate: int):
         assets_path = os.path.join("Files", self.assets_file_name)
-        QuoteProvider.__init__(self, parameter, assets_path, data_rate)
+        QuoteProvider.__init__(self, parameter, assets_path, datarate)
         self.file_handle = None
 
     def __del__(self):
@@ -24,7 +24,7 @@ class QuoteMe(QuoteProvider):
         self.cache_path = cache_path
         self.symbol_path = os.path.join(self.parameter, self.symbol.name)
 
-    def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
+    def get_quote_bar_at_datetime(self, dt: datetime) -> tuple[str, Bar]:
         self.bars_filename = os.path.join(
             self.symbol_path,
             "m1",
@@ -56,7 +56,7 @@ class QuoteMe(QuoteProvider):
 
         return quote
 
-    def get_first_quote_bar(self) -> tuple[str, QuoteBar]:
+    def get_first_quote_bar(self) -> tuple[str, Bar]:
         symbol_timeframe_path = os.path.join(self.symbol_path, "m1")
 
         # Get all filenames in the directory
@@ -73,19 +73,19 @@ class QuoteMe(QuoteProvider):
 
         return quote
 
-    def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
+    def get_next_quote_bar(self) -> tuple[str, Bar]:
         quote = self.read_quote_bar()
         if None == quote:  # type: ignore
             self.last_utc += timedelta(days=1)
             if self.last_utc > datetime.now().astimezone(pytz.utc):
                 return "No more data", None  # type: ignore
 
-            return self.get_quote_bar_at_date(self.last_utc)
+            return self.get_quote_bar_at_datetime(self.last_utc)
         else:
             return quote
 
-    def read_quote_bar(self) -> tuple[str, QuoteBar]:
-        quote = QuoteBar()
+    def read_quote_bar(self) -> tuple[str, Bar]:
+        quote = Bar()
 
         dt_data = self.file_handle.read(8)  # type: ignore
         if dt_data == b"":
@@ -95,26 +95,26 @@ class QuoteMe(QuoteProvider):
         timestamp = unpacked_dt // 1000
         milliseconds = unpacked_dt % 1000
 
-        self.last_utc = quote.time = datetime.fromtimestamp(timestamp).astimezone(
+        self.last_utc = quote.open_time = datetime.fromtimestamp(timestamp).astimezone(
             pytz.utc
         ) + timedelta(milliseconds=milliseconds)
 
-        quote.open = round(
+        quote.open_price = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
             * self.market_values.point_size,
             self.market_values.digits,
         )
-        quote.high = round(
+        quote.high_price = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
             * self.market_values.point_size,
             self.market_values.digits,
         )
-        quote.low = round(
+        quote.low_price = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
             * self.market_values.point_size,
             self.market_values.digits,
         )
-        quote.close = round(
+        quote.close_price = round(
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
             * self.market_values.point_size,
             self.market_values.digits,
@@ -124,7 +124,7 @@ class QuoteMe(QuoteProvider):
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
             * self.market_values.point_size
         )
-        quote.open_spread = round(open_ask - quote.open, self.market_values.digits)
+        quote.open_spread = round(open_ask - quote.open_price, self.market_values.digits)
         return "", quote
 
 

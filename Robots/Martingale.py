@@ -10,7 +10,7 @@ from TradePaper import TradePaper
 from QuoteMe import QuoteMe  # type: ignore
 from QuoteDukascopy import Dukascopy  # type: ignore
 from QuoteTradeMt5 import BrokerMt5  # type: ignore
-from QuoteCsv import BrokerCsv  # type: ignore
+from QuoteCsv import QuoteCsv  # type: ignore
 
 
 class Martingale(KitaApi):
@@ -86,11 +86,14 @@ class Martingale(KitaApi):
         self.log_flush()
         # endregion
 
-        # data_rate in seconds, 0 means fastetst possible (i.e. Ticks)
-        quote_provider = Dukascopy("", data_rate=0)
-        # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", data_rate=0),
-        # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", data_rate=0)
+        # Possible quote_providers
+        # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
+        quote_provider = Dukascopy("", datarate=0)
+        # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", datarate=0),
+        # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", datarate=0)
+        # quote_provider = QuoteCsv("G:\\Meine Ablage", datarate=0)
 
+        # Demo to show all available symbols
         i = 0
         for symbol_name in quote_provider.symbols:
             i = i + 1
@@ -181,7 +184,7 @@ class Martingale(KitaApi):
         is_spread = True
         if (
             symbol.spread < 0
-            or symbol.spread > 2 * symbol.market_values.avg_spread * symbol.point_size
+            or symbol.spread > 2 * symbol.avg_spread * symbol.point_size
         ):
             is_spread = False
         is_trading_allowed = is_spread

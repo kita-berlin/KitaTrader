@@ -9,10 +9,10 @@ from KitaApi import KitaApi
 # and script runtime. The proble is that the script runtime cannot
 # find ..folders because there is no parent module ?!?
 try:
-    from ..Api.QuoteBar import QuoteBar
+    from ..Api.Bar import Bar
     from ..Api.SymbolInfo import SymbolInfo
 except:
-    from QuoteBar import QuoteBar
+    from Bar import Bar
     from SymbolInfo import SymbolInfo
 
 
@@ -29,7 +29,7 @@ class ProviderQuote:
             self.file_handle.close()
 
     ######################################
-    def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
+    def get_quote_bar_at_datetime(self, dt: datetime) -> tuple[str, Bar]:
         self.bars_filename = os.path.join(
             self.bin_settings.platform_parameter,
             self.symbol_info.name,
@@ -64,20 +64,20 @@ class ProviderQuote:
         return "", quote
 
     ######################################
-    def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
+    def get_next_quote_bar(self) -> tuple[str, Bar]:
         quote = self.read_quote_bar()
         if None == quote:
             self.last_date_time += timedelta(days=1)
             if self.last_date_time > datetime.utcnow().astimezone(pytz.utc):
                 return "No more data", None
 
-            return self.get_quote_bar_at_date(self.last_date_time)
+            return self.get_quote_bar_at_datetime(self.last_date_time)
         else:
             return "", quote
 
     ######################################
-    def read_quote_bar(self) -> tuple[str, QuoteBar]:
-        quote = QuoteBar()
+    def read_quote_bar(self) -> tuple[str, Bar]:
+        quote = Bar()
 
         dt_data = self.file_handle.read(8)
         if dt_data == b"":
@@ -86,26 +86,26 @@ class ProviderQuote:
         unpacked_dt = struct.unpack("<Q", dt_data)[0]
         timestamp = unpacked_dt // 1000
 
-        self.last_date_time = quote.time = datetime.fromtimestamp(timestamp).astimezone(
+        self.last_date_time = quote.open_time = datetime.fromtimestamp(timestamp).astimezone(
             pytz.utc
         )
         quote.milli_seconds = unpacked_dt % 1000
-        quote.open = round(
+        quote.open_price = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
             * self.symbol_info.point_size,
             self.symbol_info.digits,
         )
-        quote.high = round(
+        quote.high_price = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
             * self.symbol_info.point_size,
             self.symbol_info.digits,
         )
-        quote.low = round(
+        quote.low_price = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
             * self.symbol_info.point_size,
             self.symbol_info.digits,
         )
-        quote.close = round(
+        quote.close_price = round(
             struct.unpack("<L", self.file_handle.read(4))[0]
             * self.symbol_info.point_size,
             self.symbol_info.digits,

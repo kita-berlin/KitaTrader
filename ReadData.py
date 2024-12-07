@@ -4,7 +4,7 @@ from datetime import datetime
 import pandas as pd
 
 
-class QuoteBar:
+class Bar:
     def __init__(self):
         self.time = None
         self.milli_seconds = 0
@@ -36,14 +36,14 @@ class market_file:
         self.last_date_time = None
 
     def read_quote_bar(self):
-        quote = QuoteBar()
+        quote = Bar()
         dt_data = self.file_handle.read(8)
         if dt_data == b"":
             return None
 
         unpacked_dt = struct.unpack("<Q", dt_data)[0]
         timestamp = unpacked_dt // 1000
-        self.last_date_time = quote.time = datetime.utcfromtimestamp(timestamp)
+        self.last_date_time = quote.open_time = datetime.utcfromtimestamp(timestamp)
         quote.milli_seconds = unpacked_dt % 1000
 
         for attribute in ["Open", "High", "Low", "Close", "open_spread"]:

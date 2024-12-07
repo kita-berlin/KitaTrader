@@ -1,11 +1,10 @@
 import os
 import struct
 import requests
-import pytz
-from datetime import datetime, timedelta
 from datetime import datetime, timedelta
 from lzma import LZMADecompressor, FORMAT_AUTO  # type: ignore
-from KitaApi import QuoteBar, QuoteProvider, KitaApi, Symbol
+from Constants import Constants
+from KitaApi import Quote, QuoteProvider, KitaApi, Symbol
 
 
 class Dukascopy(QuoteProvider):
@@ -17,12 +16,12 @@ class Dukascopy(QuoteProvider):
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like\
 		Gecko) Chrome/102.0.5005.61 Safari/537.36"
     }
-    last_dt: datetime = datetime.min
+    last_timestamp: float = 0
     is_last_tick_of_hour: bool = False
 
-    def __init__(self, parameter: str, data_rate: int):
+    def __init__(self, parameter: str, datarate: int):
         assets_path = os.path.join("Files", self.assets_file_name)
-        QuoteProvider.__init__(self, parameter, assets_path, data_rate)
+        QuoteProvider.__init__(self, parameter, assets_path, datarate)
         self.requests = requests.Session()
         self.requests.headers.update(self.headers)
         self.current_index = 0
@@ -34,9 +33,9 @@ class Dukascopy(QuoteProvider):
         if not os.path.exists(self.cache_path):
             os.makedirs(self.cache_path)
 
-    def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]:
+    def get_quote_bar_at_datetime(self, dt: datetime) -> tuple[str, Quote]:
         while True:
-            dt = dt.replace(minute=0, second=0, microsecond=0)
+            timestamp = dt.replace(minute=0, second=0, microsecond=0).timestamp()
             url = self.get_url(self.WebRoot, dt, self.symbol.name)
             path = self.get_file_name(self.cache_path, dt, self.symbol.name)
             if os.path.exists(path):
@@ -61,31 +60,28 @@ class Dukascopy(QuoteProvider):
                 break
 
         self.current_index = 0
-        return self.get_one_quote(dt)
+        return self.get_one_quote(timestamp)
 
-    def get_one_quote(self, dt: datetime) -> tuple[str, QuoteBar]:
-        quote = QuoteBar()
+    def get_one_quote(self, timestamp: float) -> tuple[str, Quote]:
+        quote = Quote()
         error = ""
 
         try:
-            time_delta = struct.unpack_from(">I", self.data, self.current_index)[0]
-            ask = (
+            timedelta = struct.unpack_from(">I", self.data, self.current_index)[0]
+            quote.ask = round(
                 struct.unpack_from(">I", self.data, self.current_index + 4)[0]
-                * self.symbol.point_size
+                * self.symbol.point_size,
+                self.symbol.digits,
             )
-            quote.open = quote.high = quote.low = quote.close = round(
+            quote.bid = round(
                 struct.unpack_from(">I", self.data, self.current_index + 8)[0]
                 * self.symbol.point_size,
                 self.symbol.digits,
             )
-            quote.volume = struct.unpack_from(">f", self.data, self.current_index + 12)[
-                0
-            ]
-            quote.volume += struct.unpack_from(
-                ">f", self.data, self.current_index + 16
-            )[0]
-            quote.time = (dt + timedelta(milliseconds=time_delta)).astimezone(pytz.utc)
-            quote.open_spread = round(ask - quote.open, self.symbol.digits)
+
+            # Python timestamp is microseconds since 1.1.1970
+            # Ducascopy timedelta is milliseconds since hour start
+            quote.timestamp = timestamp + timedelta / 1e3
             self.current_index += 20
 
             self.is_last_tick_of_hour = self.current_index >= len(self.data)
@@ -93,17 +89,19 @@ class Dukascopy(QuoteProvider):
         except Exception as e:
             error = str(e)
 
-        self.last_dt = dt
+        self.last_timestamp = timestamp
         return error, quote
 
-    def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
+    def get_next_quote_bar(self) -> tuple[str, Quote]:
         if self.is_last_tick_of_hour:
-            self.last_dt += timedelta(hours=1)
-            return self.get_quote_bar_at_date(self.last_dt)
+            self.last_timestamp += Constants.SEC_PER_HOUR
+            return self.get_quote_bar_at_datetime(
+                datetime.fromtimestamp(self.last_timestamp)
+            )
         else:
-            return self.get_one_quote(self.last_dt)
+            return self.get_one_quote(self.last_timestamp)
 
-    def get_first_quote_bar(self) -> tuple[str, QuoteBar]:
+    def get_first_quote_bar(self) -> tuple[str, Quote]:
         start_date = datetime(2000, 1, 1)
         end_date = datetime.now()
 
@@ -117,7 +115,7 @@ class Dukascopy(QuoteProvider):
             except requests.RequestException:
                 start_date = mid_date
 
-        return self.get_quote_bar_at_date(end_date)
+        return self.get_quote_bar_at_datetime(end_date)
 
     def get_url(self, base_url: str, dt: datetime, symbol_name: str) -> str:
         return f"{base_url}/{symbol_name}/{dt.year}/{dt.month - 1:02}/{dt.day:02}/{dt.hour:02}h_ticks.bi5"

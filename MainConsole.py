@@ -1,7 +1,6 @@
-from datetime import datetime
 from Api.CoFu import *
 from KitaApiEnums import *
-from Martingale import Martingale
+from Template import Template
 
 
 class MainConsole:
@@ -9,11 +8,11 @@ class MainConsole:
 
         # 1. Set the parameters of the platform
         # region
-        self.robot = Martingale()  # The robot to be used
+        self.robot = Template()  # The robot to be used
         self.robot.robot = self.robot  # type:ignore
 
         #self.robot.StartUtc = datetime.min  # means earliest possible
-        self.robot.StartUtc = datetime.strptime("2.12.2024", "%d.%m.%Y")
+        self.robot.StartUtc = datetime.strptime("5.12.2024", "%d.%m.%Y")
 
         self.robot.EndUtc = datetime.max  # means latest possible
         # self.robot.EndUtc = datetime.strptime("2024-06-30", "%Y-%m-%d")
@@ -28,10 +27,10 @@ class MainConsole:
 
         # 2. Set the parameters of the robot
         # region
-        self.robot.Rebuy1stPercent = 1.0
-        self.robot.RebuyPercent = 0.1
-        self.robot.TakeProfitPercent = 0.1
-        self.robot.Volume = 1000
+        # self.robot.Rebuy1stPercent = 1.0
+        # self.robot.RebuyPercent = 0.1
+        # self.robot.TakeProfitPercent = 0.1
+        # self.robot.Volume = 1000
         self.robot.Direction = TradeDirection.Mode1
         # endregion
 

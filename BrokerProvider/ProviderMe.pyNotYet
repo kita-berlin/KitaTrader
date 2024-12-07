@@ -43,7 +43,7 @@ SymbolInfo:
             self.trading_mode = SymbolTradingMode.FullAccess
 
             self.quote_provider = ProviderQuote(self.algo_api, self)
-            error, quote = self.quote_provider.get_quote_bar_at_date(
+            error, quote = self.quote_provider.get_quote_bar_at_datetime(
                 self.algo_api.bin_settings.StartDateTime
             )
             if None == quote:

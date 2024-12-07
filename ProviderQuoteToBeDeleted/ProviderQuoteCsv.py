@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import KitaApi
 from Settings import BinSettings
-from QuoteBar import QuoteBar
+from Bar import Bar
 from SymbolInfo import SymbolInfo
 from KitaApi import KitaApi
 
@@ -18,7 +18,7 @@ class ProviderQuote:
         del self.df_start
 
     ######################################
-    def get_quote_bar_at_date(self, dt) -> tuple[str, QuoteBar]:
+    def get_quote_bar_at_datetime(self, dt) -> tuple[str, Bar]:
         filename = self.bars_filename = os.path.join(
             self.bin_settings.platform_parameter,
             self.symbol_info.name,
@@ -59,23 +59,23 @@ class ProviderQuote:
         return error, quote
 
     ######################################
-    def get_next_quote_bar(self) -> tuple[str, QuoteBar]:
+    def get_next_quote_bar(self) -> tuple[str, Bar]:
         error, quote = self.read_quote_bar()
         return error, quote
 
     ######################################
-    def read_quote_bar(self) -> tuple[str, QuoteBar]:
+    def read_quote_bar(self) -> tuple[str, Bar]:
         quote = None
         error = "No more data"
         if self.current_index < len(self.df_start):
-            quote = QuoteBar()
-            quote.time = self.df_start.iloc[self.current_index].date_time
-            quote.open = self.df_start.iloc[self.current_index].open
-            quote.high = self.df_start.iloc[self.current_index].High
-            quote.low = self.df_start.iloc[self.current_index].Low
-            quote.close = self.df_start.iloc[self.current_index].close
+            quote = Bar()
+            quote.open_time = self.df_start.iloc[self.current_index].date_time
+            quote.open_price = self.df_start.iloc[self.current_index].open
+            quote.high_price = self.df_start.iloc[self.current_index].High
+            quote.low_price = self.df_start.iloc[self.current_index].Low
+            quote.close_price = self.df_start.iloc[self.current_index].close
             quote.volume = self.df_start.iloc[self.current_index].Volume
-            quote.open_spread = quote.open + 12 * 1e-5  # set spread to 12 toints
+            quote.open_spread = quote.open_price + 12 * 1e-5  # set spread to 12 toints
             self.current_index += 1
             error = ""
 

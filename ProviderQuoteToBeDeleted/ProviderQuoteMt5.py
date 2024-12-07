@@ -8,7 +8,7 @@ import pytz
 import time
 import MetaTrader5 as mt5
 from Settings import BinSettings
-from QuoteBar import QuoteBar
+from Bar import Bar
 from SymbolInfo import SymbolInfo
 from Constants import *
 from CoFu import *
@@ -76,8 +76,8 @@ class ProviderQuote:
         return utc.astimezone(self.broker_tz_info)
 
     ######################################
-    # def get_quote_bar_at_date(self, dt) -> tuple[str, QuoteBar]:
-    def get1st_quote(self):  # -> str, QuoteBar:
+    # def get_quote_bar_at_datetime(self, dt) -> tuple[str, Bar]:
+    def get1st_quote(self):  # -> str, Bar:
         lenRates: int = 0
 
         # Info: MT5 uses broker time
@@ -128,7 +128,7 @@ class ProviderQuote:
         return "", self.get_current_quote()
 
     ######################################
-    def get_next_quote_bar(self):  # -> str, QuoteBar:
+    def get_next_quote_bar(self):  # -> str, Bar:
         if Platforms.Mt5Backtest == self.trading_platform.bin_settings.platform:
             self.current_index += 1
             self.current_index = min(self.current_index, len(self.Rates) - 1)
@@ -137,7 +137,7 @@ class ProviderQuote:
 
     ######################################
     def get_current_quote(self):
-        qb = QuoteBar()
+        qb = Bar()
 
         if Platforms.Mt5Live == self.trading_platform.bin_settings.platform:
             current_tick = mt5.symbol_info_tick(self.symbol_info.name)

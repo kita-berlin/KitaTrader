@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import math
+from matplotlib.dates import SEC_PER_DAY
 import numpy as np
 import csv
 import traceback
@@ -27,31 +28,32 @@ class TradeResult:
 class Bar:
     def __init__(
         self,
-        open_time: datetime,
-        open: float,
-        high: float,
-        low: float,
-        close: float,
-        tick_volume: int,
-        open_spread: float,
+        open_time: datetime = datetime.min,
+        open: float = 0,
+        high_time: datetime = datetime.min,
+        high: float = 0,
+        low_time: datetime = datetime.min,
+        low: float = 0,
+        close: float = 0,
+        volume: float = 0,
+        open_spread: float = 0,
     ):
         self.open_time = open_time
         self.open_price = open
+        self.high_time = high_time
         self.high_price = high
+        self.low_time = low_time
         self.low_price = low
         self.close_price = close
-        self.tick_volume = tick_volume
+        self.volume = volume
         self.open_spread = open_spread
 
 
-class QuoteBar:
-    time: datetime = datetime.min
-    open: float = 0
-    high: float = 0
-    low: float = 0
-    close: float = 0
-    volume: int = 0
-    open_spread: float = 0
+class Quote:
+    def __init__(self, timestamp: float = 0, bid: float = 0, ask: float = 0):
+        self.timestamp = timestamp
+        self.bid = bid
+        self.ask = ask
 
 
 class PyLogger:
@@ -1044,37 +1046,41 @@ class Bars:
     pass
 
     ######################################
-    def update_bar(self, quote: QuoteBar) -> None:
+    def update_bar(self, quote: Bar) -> None:
         self.is_new_bar = False
 
         # do we have to build a new bar ?
-        # epoc_dt = quote.time.timestamp() // 60
+        # epoc_dt = quote.open_time.timestamp() // 60
         # tf_minutes = self.timeframe_seconds // 60
         # tf_modulo = epoc_dt % tf_minutes
         if (
             0 == self.open_times.count
             or 0 == self.timeframe_seconds
             or self.is_new_bar_get(
-                self.timeframe_seconds, quote.time, self.open_times.data[-1]
+                self.timeframe_seconds, quote.open_time, self.open_times.data[-1]
             )
         ):
             self.open_times.data = np.append(
-                self.open_times.data, np.datetime64(quote.time, "D")
+                self.open_times.data, np.datetime64(quote.open_time, "D")
             )
-            self.open_prices.data = np.append(self.open_prices.data, quote.open)
+            self.open_prices.data = np.append(self.open_prices.data, quote.open_price)
             self.open_asks.data = np.append(self.open_asks.data, quote.open_spread)
             if 0 != self.timeframe_seconds:
-                self.high_prices.data = np.append(self.high_prices.data, quote.open)
-                self.low_prices.data = np.append(self.low_prices.data, quote.open)
-                self.close_prices.data = np.append(self.close_prices.data, quote.open)
+                self.high_prices.data = np.append(
+                    self.high_prices.data, quote.open_price
+                )
+                self.low_prices.data = np.append(self.low_prices.data, quote.open_price)
+                self.close_prices.data = np.append(
+                    self.close_prices.data, quote.open_price
+                )
                 self.tick_volumes.data = np.append(self.tick_volumes.data, 0)
                 # self.line_colors = np.append(self.line_colors, "green")
 
             self.is_new_bar = True
         else:
-            self.high_prices.data[-1] = max(self.high_prices.data[-1], quote.high)
-            self.low_prices.data[-1] = min(self.low_prices.data[-1], quote.low)
-            self.close_prices.data[-1] = quote.close
+            self.high_prices.data[-1] = max(self.high_prices.data[-1], quote.high_price)
+            self.low_prices.data[-1] = min(self.low_prices.data[-1], quote.low_price)
+            self.close_prices.data[-1] = quote.close_price
             self.tick_volumes.data[-1] += 1 if 0 == quote.volume else quote.volume
             # self.line_colors[-1] = (
             #     "green"
@@ -1147,14 +1153,14 @@ class QuoteProvider(ABC):
     assets_path: str
     symbols: Symbols
 
-    def __init__(self, parameter: str, assets_path: str, data_rate: int):
+    def __init__(self, parameter: str, assets_path: str, datarate: int):
         self.parameter = parameter
         self.assets_path = assets_path
-        self.data_rate = data_rate
+        self.datarate = datarate
         self.symbols = Symbols()
         self.init_market_info(assets_path, None)  # type:ignore
 
-    def init_market_info(self, assets_path: str, symbol: SymbolInfo) -> str:
+    def init_market_info(self, assets_path: str, symbol: Symbol) -> str:
         error = ""
         try:
             with open(assets_path, newline="") as csvfile:
@@ -1214,13 +1220,13 @@ class QuoteProvider(ABC):
     def init_symbol(self, kita_api: KitaApi, symbol: Symbol, cache_path: str): ...
 
     @abstractmethod
-    def get_quote_bar_at_date(self, dt: datetime) -> tuple[str, QuoteBar]: ...
+    def get_quote_bar_at_datetime(self, dt: datetime) -> tuple[str, Quote]: ...
 
     @abstractmethod
-    def get_first_quote_bar(self) -> tuple[str, QuoteBar]: ...
+    def get_first_quote_bar(self) -> tuple[str, Quote]: ...
 
     @abstractmethod
-    def get_next_quote_bar(self) -> tuple[str, QuoteBar]: ...
+    def get_next_quote_bar(self) -> tuple[str, Quote]: ...
 
 
 class TradeProvider(ABC):
@@ -1265,7 +1271,7 @@ class Symbols:
         self._symbols.append(symbol_name)
 
 
-class SymbolInfo:
+class Symbol:
 
     # Members
     # region
@@ -1273,9 +1279,7 @@ class SymbolInfo:
     name: str = ""
     bars_dict: dict[int, Bars] = {}
     time: datetime = datetime.min
-    prev_time: datetime = datetime.min
-    initial_local_dt: datetime = datetime.min
-    end_local_dt: datetime = datetime.min
+    prev_time: float = 0
     bid: float = 0
     ask: float = 0
     broker_symbol_name: str = ""
@@ -1301,34 +1305,10 @@ class SymbolInfo:
     symbol_leverage: float = 0
     currency_base: str = ""
     currency_quote: str = ""
-    # endregion
-
-    def __init__(
-        self,
-        kita_api: KitaApi,
-        symbol_name: str,
-        quote_provider: QuoteProvider,
-        trade_provider: TradeProvider,
-        str_time_zone: str,
-    ):
-        self.kita_api = kita_api
-        self.name = symbol_name
-        self.quote_provider = quote_provider
-        self.trade_provider = trade_provider
-        tz_split = str_time_zone.split(":")
-        self.time_zone = pytz.timezone(tz_split[0])
-
-        # 7 is the difference between midnight and 17:00 New York time
-        if "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]:
-            self.normalized_hours_offset = 7
-
-        error = self.quote_provider.init_market_info(
-            self.quote_provider.assets_path,
-            self,
-        )
-        if "" != error:
-            print(error)
-            exit()
+    dynamic_leverage: list[LeverageTier] = []
+    datarate_timestamp: NDArray[np.float64] = np.array([], dtype=np.float64)
+    datarate_bid: NDArray[np.float64] = np.array([], dtype=np.float64)
+    datarate_ask: NDArray[np.float64] = np.array([], dtype=np.float64)
 
     @property
     def point_size(self) -> float:
@@ -1358,87 +1338,16 @@ class SymbolInfo:
     def pip_size(self) -> float:
         return self.point_size * 10
 
-    dynamic_leverage: list[LeverageTier] = []
-
     @property
     def market_hours(self) -> MarketHours:
         return MarketHours()
 
-    def load_bars(self, timeframe_seconds: int) -> tuple[str, Bars]:
-        if timeframe_seconds not in self.bars_dict:
-            new_bars = Bars(timeframe_seconds, self.name)
-            self.bars_dict[timeframe_seconds] = new_bars
-        return "", self.bars_dict[timeframe_seconds]
+    @property
+    def spread(self):
+        return self.ask - self.bid
 
-    def do_first_run(self) -> str:
-        # Create the data rate provider
-        self.load_bars(self.quote_provider.data_rate)
+    # endregion
 
-        # Find first quote start date or get quote at given start date
-        if datetime.min == self.kita_api.StartUtc:
-            error, quote = self.quote_provider.get_first_quote_bar()
-        else:
-            error, quote = self.quote_provider.get_quote_bar_at_date(
-                self.kita_api.StartUtc
-            )
-        if "" != error:
-            return error
-
-        # Convert initial_local_dt and end_local_dt to time zone
-        self.initial_local_dt = quote.time.astimezone(self.time_zone) + timedelta(
-            hours=self.normalized_hours_offset
-        )
-        self.end_local_dt = (
-            datetime.now()
-            if datetime.max == self.kita_api.EndUtc
-            else self.kita_api.EndUtc
-        ).astimezone(self.time_zone) + timedelta(hours=self.normalized_hours_offset)
-
-        prev_time = datetime.min
-        print("Generating Numpy arrays")
-        while True:
-            # Convert quote time to symbol's time zone
-            quote.time = quote.time.astimezone(self.time_zone) + timedelta(
-                hours=self.normalized_hours_offset
-            )
-
-            if quote.time >= self.end_local_dt:
-                return "end reached"
-
-            # for bars in self.bars_dict.values():
-            #     bars.update_bar(quote)
-
-            error, quote = self.quote_provider.get_next_quote_bar()
-            if "" != error:
-                return error
-
-            if quote.time.day != prev_time.day:
-                print(str(quote.time))
-
-            prev_time = quote.time
-
-    def get_next_quote(self) -> tuple[str, QuoteBar]:
-        quote = QuoteBar()
-        return "", quote
-
-    def on_tick(self) -> str:
-        error = ""
-        if self.kita_api.is_first_run:
-            self.do_first_run()
-            self.kita_api.is_first_run = False
-
-        # get quote from data rate provider, not from driver
-        error, quote = self.get_next_quote()
-
-        if "" == error:
-            self.time = quote.time
-            self.bid = quote.open
-            self.ask = quote.open + quote.open_spread
-
-        return error
-
-
-class Symbol(SymbolInfo):
     def __init__(
         self,
         kita_api: KitaApi,
@@ -1447,14 +1356,24 @@ class Symbol(SymbolInfo):
         trade_provider: TradeProvider,
         str_time_zone: str,
     ):
-        super().__init__(
-            kita_api, symbol_name, quote_provider, trade_provider, str_time_zone
-        )
+        self.kita_api = kita_api
+        self.name = symbol_name
+        self.quote_provider = quote_provider
+        self.trade_provider = trade_provider
+        tz_split = str_time_zone.split(":")
+        self.time_zone = pytz.timezone(tz_split[0])
 
-    ######################################
-    @property
-    def spread(self):
-        return self.ask - self.bid
+        # 7 is the difference between midnight and 17:00 New York time
+        if "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]:
+            self.normalized_hours_offset = 7
+
+        error = self.quote_provider.init_market_info(
+            self.quote_provider.assets_path,
+            self,
+        )
+        if "" != error:
+            print(error)
+            exit()
 
     def normalize_volume_in_units(
         self, volume: float, rounding_mode: RoundingMode = RoundingMode.ToNearest
@@ -1473,11 +1392,85 @@ class Symbol(SymbolInfo):
 
     def quantity_to_volume_in_units(self, quantity: float) -> float:
         return quantity * self.lot_size
-        pass
 
     def volume_in_units_to_quantity(self, volume: float) -> float:
         return volume / self.lot_size
-        pass
+
+    def load_bars(self, timeframe_seconds: int) -> tuple[str, Bars]:
+        if timeframe_seconds not in self.bars_dict:
+            new_bars = Bars(timeframe_seconds, self.name)
+            self.bars_dict[timeframe_seconds] = new_bars
+        return "", self.bars_dict[timeframe_seconds]
+
+    def do_first_run(self) -> str:
+        datarate_timestamp: list[float] = []
+        datarate_bid: list[float] = []
+        datarate_ask: list[float] = []
+
+        # Find first quote start date or get quote at given start date
+        if datetime.min == self.kita_api.StartUtc:
+            error, quote = self.quote_provider.get_first_quote_bar()
+        else:
+            error, quote = self.quote_provider.get_quote_bar_at_datetime(
+                self.kita_api.StartUtc
+            )
+        if "" != error:
+            return error
+
+        # Convert first quote time and EndUtc to time zone
+        self.initial_local_dt = datetime.fromtimestamp(quote.timestamp).astimezone(
+            self.time_zone
+        ) + timedelta(hours=self.normalized_hours_offset)
+        self.end_local_dt = (
+            datetime.now()
+            if datetime.max == self.kita_api.EndUtc
+            else self.kita_api.EndUtc
+        ).astimezone(self.time_zone) + timedelta(hours=self.normalized_hours_offset)
+
+        print("Generating Numpy arrays")
+        while True:
+            if datetime.fromtimestamp(quote.timestamp) >= self.kita_api.EndUtc:
+                return "end reached"
+
+            datarate_timestamp.append(quote.timestamp)
+            datarate_bid.append(quote.bid)
+            datarate_ask.append(quote.ask)
+
+            # for bars in self.bars_dict.values():
+            #     bars.update_bar(quote)
+
+            error, quote = self.quote_provider.get_next_quote_bar()
+            if "" != error:
+                self.datarate_timestamp = np.array(datarate_timestamp, dtype=np.float64)
+                self.datarate_bid = np.array(datarate_bid, dtype=np.float64)
+                self.datarate_ask = np.array(datarate_ask, dtype=np.float64)
+                return error
+
+            if quote.timestamp // SEC_PER_DAY != self.prev_time // SEC_PER_DAY:
+                print(str(datetime.fromtimestamp(quote.timestamp)))
+
+            self.prev_time = quote.timestamp
+
+    def get_next_quote(self) -> tuple[str, Quote]:
+        quote = Quote()
+        return "", quote
+
+    def on_tick(self) -> str:
+        error = ""
+        if self.kita_api.is_first_run:
+            # init data rate provider
+            self.do_first_run()
+            self.kita_api.is_first_run = False
+
+        # get quote from data rate provider, not from driver
+        error, quote = self.get_next_quote()
+
+        if "" == error:
+            self.timestamp = quote.timestamp
+            self.bid = quote.bid
+            self.ask = quote.ask
+
+        return error
 
 
 class Position:
@@ -2321,7 +2314,7 @@ class KitaApi:
                 self.max_equity_drawdown_count = len(self.history)
             # endregion
 
-            symbol.prev_time = symbol.time
+            symbol.prev_time = symbol.timestamp
 
         return False
 
