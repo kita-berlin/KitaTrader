@@ -1,0 +1,40 @@
+1. Code Layout:
+   •	Indentation: Use 4 spaces per indentation level.
+   •	Maximum Line Length: 79 characters for code and 72 for comments/docstrings.
+   •	Blank Lines: Use blank lines to separate functions, classes, and blocks of code within functions.
+
+2. Naming Conventions:
+   •	Variables and Functions: snake_case.
+   •	Classes: PascalCase (CamelCase).
+   •	Enums and their members: PascalCase (CamelCase).
+   •	Constants: UPPER_CASE_WITH_UNDERSCORES.
+   •	Abstract classes start with an I as Interface.
+
+3. Imports:
+   •	Place imports at the top of the file.
+   •	Group imports into three categories:
+   1.	Standard library imports.
+   2.	Third-party library imports.
+   3.	Local application/library imports.
+
+4. Whitespace:
+   •	Avoid extraneous whitespace in expressions and statements.
+   •	Use a single space around operators and after commas but not inside parentheses.
+
+5. Comments:
+   •	Write comments that are clear, concise, and relevant.
+   •	Use docstrings for documenting public modules, classes, and functions.
+
+6. String Quotes:
+   •	Use either single or double quotes consistently within a project.
+   •	We are using double quotes
+
+7. Exceptions:
+   •	Use try-except blocks for handling exceptions.
+
+8. Miscellaneous:
+   •	Use descriptive variable names.
+   •	Avoid mutable default arguments in functions.
+   •	Using Black (Hotkey ^K^D) to beautify the code.
+   •	Type checking in Visual Studio must be set to "strict" (Options/Python/Analysis)
+

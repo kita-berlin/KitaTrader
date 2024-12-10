@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{636cf776-2a26-42ce-b92c-ad2db37c2232}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>MainConsole.py</StartupFile>
+    <SearchPath>Robots;Api;BrokerProvider</SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId>Global|PythonCore|3.9</InterpreterId>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
+    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <Name>kita_trader</Name>
+    <IsWindowsApplication>False</IsWindowsApplication>
+    <CommandLineArguments>
+    </CommandLineArguments>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="241124 Python Coding Conventions.txt" />
+    <Content Include="Files\Assets_Dukascopy_Live.csv" />
+    <Content Include="Files\Assets_Pepperstone_Demo.csv" />
+    <Content Include="BrokerProvider\QuoteTradeMt5.py" />
+    <Content Include="requirements.txt" />
+    <Content Include="typings\MetaTrader5\__init__.pyi" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Api\" />
+    <Folder Include="Files\" />
+    <Folder Include="BrokerProvider\" />
+    <Folder Include="Robots\" />
+    <Folder Include="typings\" />
+    <Folder Include="typings\MetaTrader5\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Api\KitaApi.py" />
+    <Compile Include="Api\KitaApiEnums.py" />
+    <Compile Include="Api\Constants.py" />
+    <Compile Include="Api\CoFu.py" />
+    <Compile Include="BrokerProvider\QuoteDukascopy.py" />
+    <Compile Include="MainConsole.py" />
+    <Compile Include="BrokerProvider\QuoteCsv.py" />
+    <Compile Include="BrokerProvider\TradePaper.py" />
+    <Compile Include="BrokerProvider\QuoteMe.py" />
+    <Compile Include="Robots\Template.py" />
+    <Compile Include="Robots\Martingale.py" />
+    <Compile Include="Robots\Ultron.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <InterpreterReference Include="Global|PythonCore|3.9" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>
