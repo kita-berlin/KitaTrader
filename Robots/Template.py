@@ -1,11 +1,9 @@
-﻿from math import sqrt
+﻿import talib  # type: ignore
+from math import sqrt
 from KitaApiEnums import *
-from KitaApi import KitaApi
+from KitaApi import KitaApi, Symbol
 from Api.CoFu import *
 from Constants import *
-from KitaApi import Symbol
-from talib import MA_Type  # type: ignore
-
 from TradePaper import TradePaper
 from QuoteMe import QuoteMe  # type: ignore
 from QuoteDukascopy import Dukascopy  # type: ignore
@@ -37,11 +35,11 @@ class Template(KitaApi):
     # endregion
 
     ###################################
-    def on_start(self) -> None:
+    def on_init(self) -> None:
 
-        # Members; We do declaration here so members will be reinized by 2nd++ on_start()
-        # region
-        # endregion
+        # default backtest time window; can be overridden befor calling on_start
+        self.BacktestStartUtc = datetime.strptime("1.1.2024", "%d.%m.%Y")
+        self.BacktestEndUtc = datetime.max  # means latest possible
 
         # Possible quote_providers
         # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
@@ -56,7 +54,7 @@ class Template(KitaApi):
             i = i + 1
             print(str(i) + ": " + symbol_name)
 
-        error, symbol = self.load_symbol(
+        error, self.nzdcad_symbol = self.load_symbol(
             "NZDCAD",
             quote_provider,
             # Paper trading
@@ -66,16 +64,60 @@ class Template(KitaApi):
             # (we call this "New York normalized time")
             "America/New_York:Normalized",
         )
+        if "" != error:
+            print(error)
+            exit()
 
         # Example how to use bars
-        if "" == error:
-            error, m1_bars = symbol.load_bars(Constants.SEC_PER_MINUTE)
-            m1_bars.count
+        error, self.m1_bars = self.nzdcad_symbol.load_bars(Constants.SEC_PER_MINUTE)
+        if "" != error:
+            print(error)
+            exit()
+
+    def on_start(self) -> None:
+        # Members to be re-initialized on each new start
+        # region
+        # endregion
+
+        # example how to use ta-lib
+        ta_funcs = talib.get_functions()  # type:ignore
+        print(ta_funcs)  # type:ignore
+
+        self.time_period = 1
+        talib.SMA(  # type:ignore
+            self.m1_bars.close_prices.data[-self.time_period :],  # type:ignore
+            timeperiod=self.time_period,
+        )[-1]
+        pass
+
+        """
+        my_sma = self.Sma.Result.Last(0)
+
+        ta_sd = talib.STDDEV(
+            self.indi_bars.close_prices.data[-self.time_period :], timeperiod =self.time_period
+        )[-1]
+        my_sd = self.Sd.Result.Last(0)
+
+        taUpperArray, taMiddleArray, ta_lower_array = talib.BBANDS(
+            self.indi_bars.close_prices.data[-self.time_period :],
+            timeperiod =self.time_period,
+            nbdevup =2,
+            nbdevdn =2,
+            matype =MA_Type.SMA
+        )
+        ta_upper = taUpperArray[-1]
+        ta_middle = taMiddleArray[-1]
+        ta_lower = taLowerArray[-1]
+
+        my_upper = self.bb_indi.Top.Last(0)
+        my_middle = self.bb_indi.Main.Last(0)
+        my_lower = self.bb_indi.Bottoself.Last(0)
+        """
 
     ###################################
     def on_tick(self, symbol: Symbol):
-        if symbol.time.hour != symbol.prev_time.hour:
-            print(symbol.time, ", ", symbol.time.strftime("%A"))
+        if symbol.time.date() != symbol.prev_time.date():
+            print(symbol.time.strftime("%Y-%m-%d %H:%M:%S"), ", ", symbol.time.strftime("%A"))
 
     ###################################
     def on_stop(self):

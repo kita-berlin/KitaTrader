@@ -41,9 +41,9 @@ class Martingale(KitaApi):
     # endregion
 
     ###################################
-    def on_start(self) -> None:
+    def on_init(self) -> None:
 
-        # Members; We do declaration here so members will be reinized by 2nd++ on_start()
+        # Members; We do declaration here so members will be reinized by 2nd++ on_init()
         # region
         self.is_long = True
         self.current_volume = self.initial_volume = self.Volume

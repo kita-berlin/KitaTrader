@@ -84,12 +84,12 @@ class PyLogger:
 
     def log_open(self, pathName: str, filename: str, append: bool, mode: int):
         self.mode = mode
-        dir_path = os.path.join(os.path.dirname(pathName), os.path.dirname(filename))
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
+        folder = os.path.join(os.path.dirname(pathName), os.path.dirname(filename))
+        if not os.path.exists(folder):
+            os.makedirs(folder)
 
         new_file = self.make_unique_logfile_name(
-            os.path.join(dir_path, os.path.basename(filename))
+            os.path.join(folder, os.path.basename(filename))
         )
         ret_val = os.path.exists(new_file)
         try:
@@ -1289,7 +1289,7 @@ class Symbol:
     # region
     api: KitaApi = None  # type: ignore
     name: str = ""
-    bars_dict: dict[int, Bars] = {}
+    bars_dictonary: dict[int, Bars] = {}
     time: datetime = datetime.min
     prev_time: datetime = datetime.min
     initial_tz_dt: datetime = datetime.min
@@ -1321,10 +1321,8 @@ class Symbol:
     currency_quote: str = ""
     dynamic_leverage: list[LeverageTier] = []
     datarate_timestamp: NDArray[np.float64] = np.array([], dtype=np.float64)
-    datarate_bid: NDArray[np.float64] = np.array([], dtype=np.float64)
-    datarate_ask: NDArray[np.float64] = np.array([], dtype=np.float64)
-    ratedata: list[tuple[float, float, float]] = []
-    ratedata_index: int = 0
+    rate_data: NDArray[np.float64] = np.array([], dtype=np.float64)
+    rate_data_index: int = 0
 
     @property
     def point_size(self) -> float:
@@ -1413,10 +1411,10 @@ class Symbol:
         return volume / self.lot_size
 
     def load_bars(self, timeframe_seconds: int) -> tuple[str, Bars]:
-        if timeframe_seconds not in self.bars_dict:
+        if timeframe_seconds not in self.bars_dictonary:
             new_bars = Bars(timeframe_seconds, self.name)
-            self.bars_dict[timeframe_seconds] = new_bars
-        return "", self.bars_dict[timeframe_seconds]
+            self.bars_dictonary[timeframe_seconds] = new_bars
+        return "", self.bars_dictonary[timeframe_seconds]
 
     def init_datarate(self) -> str:
         folder = os.path.join(self.api.cache_path, f"{self.name}", "Ticks")
@@ -1424,61 +1422,80 @@ class Symbol:
             os.makedirs(folder)
 
         # load and cache all possible tick data
-        # error, quote = self.quote_provider.find_first_day()
-        # start_utc = datetime.fromtimestamp(quote.timestamp, tz=timezone.utc)
-        start_utc = self.api.StartUtc
-
-        # Convert StartUtc and EndUtc to symbols time zone
-        self.initial_tz_dt = self.api.StartUtc.astimezone(self.time_zone) + timedelta(
-            hours=self.normalized_hours_offset
-        )
-        self.end_tz_dt = (
-            datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            # - timedelta(seconds=1)
-            if self.api.EndUtc > datetime.now().astimezone(timezone.utc)
-            else self.api.EndUtc
-        ).astimezone(self.time_zone) + timedelta(hours=self.normalized_hours_offset)
-
-        # skip already existing .npz files
-        while True:
-            path = os.path.join(
-                folder,
-                f"{start_utc.year:04}{start_utc.month:02}{start_utc.day:02}ticks"
-                + ".npz",
-            )
-            if not os.path.exists(path):
-                break
-
-            start_utc += timedelta(days=1)
-            if start_utc.date() == datetime.now().date():
-                return self.concat_npz(folder)
-
-        # create newer .npz files
-        error, day_utc, day = self.quote_provider.get_day_at_utc(start_utc)
-
-        while True:
+        if datetime.min == self.api.TickDataStartUtc:
+            print("Finding first quote of " + self.name)
+            error, start_dt, quote = self.quote_provider.find_first_day()  # type:ignore
             if "" != error:
                 return error
+            self.api.TickDataStartUtc = start_dt
 
-            if day_utc > self.api.EndUtc:
-                return "End reached"
+        self.api.TickDataStartUtc = run_utc = self.api.TickDataStartUtc.replace(
+            tzinfo=timezone.utc
+        )
+
+        if datetime.max == self.api.TickDataEndUtc:
+            self.api.TickDataEndUtc = datetime.now()
+        self.api.TickDataEndUtc = self.api.TickDataEndUtc.replace(tzinfo=timezone.utc)
+
+        # Convert start and end datetimes to symbols time zone
+        self.initial_tz_dt = self.api.BacktestStartUtc.astimezone(
+            self.time_zone
+        ) + timedelta(hours=self.normalized_hours_offset)
+        self.end_tz_dt = (
+            (
+                self.api.TickDataEndUtc.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                - timedelta(seconds=1)
+            )
+        ).astimezone(self.time_zone) + timedelta(hours=self.normalized_hours_offset)
+
+        is_get_next_day_running = False
+        day_utc = run_utc
+        day = []
+        error = ""
+        run_utc -= timedelta(days=1)
+
+        print("Generating daily tick arrays for " + self.name)
+        while True:
+            run_utc += timedelta(days=1)
+            # always update numpy tick data until today's data
+            if run_utc.date() == datetime.now().date():
+                return self.concat_npz(folder)
+
+            path = os.path.join(
+                folder,
+                f"{run_utc.year:04}{run_utc.month:02}{run_utc.day:02}ticks" + ".npz",
+            )
+            if os.path.exists(path):
+                is_get_next_day_running = False
+                continue
+
+            # create .npz files
+            if not is_get_next_day_running:
+                error, day_utc, day = self.quote_provider.get_day_at_utc(run_utc)
+                is_get_next_day_running = True
+
+            if "" != error:
+                return error
 
             path = os.path.join(
                 folder,
                 f"{day_utc.year:04}{day_utc.month:02}{day_utc.day:02}ticks",
             )
 
-            if 0==len(day):
+            if 0 == len(day):
                 day = np.empty((0, 3), dtype=np.float64)
 
-            print(str(day_utc), ", ", day_utc.strftime("%A"))
+            print(self.name + " " + day_utc.strftime("%Y-%m-%d"))
             np.savez_compressed(path, np.array(day, dtype=np.float64))
             error, day_utc, day = self.quote_provider.get_next_day()
 
     def concat_npz(self, folder: str):
+        print("Concatenating tick arrays")
         # Convert yyyymmdd dates to comparable integers
-        start_date_int = int(self.api.StartUtc.strftime("%Y%m%d"))
-        end_date_int = int(self.api.EndUtc.strftime("%Y%m%d"))
+        start_date_int = int(self.api.TickDataStartUtc.strftime("%Y%m%d"))
+        end_date_int = int(self.api.TickDataEndUtc.strftime("%Y%m%d"))
 
         # List all .npz files in the folder
         files = [f for f in os.listdir(folder) if f.endswith("ticks.npz")]
@@ -1494,25 +1511,30 @@ class Symbol:
 
         # Load and concatenate arrays
         arrays: list[tuple[float, float, float]] = []
+        prev_dt = datetime.min
         for file in filtered_files:
             data = np.load(file)["arr_0"]
             if 0 != data.shape[0]:
+                dt = datetime.fromtimestamp(data[0][0], tz=timezone.utc)
+                if dt.year != prev_dt.year:
+                    print(dt.strftime("%Y-%m-%d"))
                 arrays.append(data)
+                prev_dt = dt
 
         # Concatenate all arrays
-        self.ratedata = np.concatenate(arrays, axis=0)  # type: ignore
+        self.rate_data = np.concatenate(arrays, axis=0)  # type: ignore
         return ""
 
     def on_tick(self) -> str:
-        self.timestamp = self.ratedata[self.ratedata_index][0]
+        self.timestamp = self.rate_data[self.rate_data_index][0]
         self.time = datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone(
             self.time_zone
         ) + timedelta(hours=self.normalized_hours_offset)
-        self.bid = self.ratedata[self.ratedata_index][1]
-        self.ask = self.ratedata[self.ratedata_index][2]
+        self.bid = self.rate_data[self.rate_data_index][1]
+        self.ask = self.rate_data[self.rate_data_index][2]
 
-        self.ratedata_index += 1
-        if self.ratedata_index >= len(self.ratedata):
+        self.rate_data_index += 1
+        if self.rate_data_index >= len(self.rate_data):
             return "End reached"
 
         return ""
@@ -1660,8 +1682,10 @@ class KitaApi:
     # region
     # These parameters can be set by the startup module like MainConsole.py
     # If not set from there, the given default values will be used
-    StartUtc = datetime.strptime("1900-01-01", "%Y-%m-%d")
-    EndUtc = datetime.strptime("2100-01-01", "%Y-%m-%d")
+    TickDataStartUtc = datetime.min
+    TickDataEndUtc = datetime.max
+    BacktestStartUtc = datetime.min
+    BacktestEndUtc = datetime.max
     RunningMode: RunMode = RunMode.SilentBacktesting
     CachePath: str = ""
     AccountInitialBalance: float = 10000.0
@@ -1682,8 +1706,79 @@ class KitaApi:
 
         pass
 
-    # Trading API
+    # Algo API
     # region
+    TicksType = NDArray[np.float64]
+
+    def build_ohlcva_bars(
+        self, symbol_name: str, ticks: TicksType, timeframe: int
+    ) -> None:
+        assert (
+            ticks.shape[1] == 3
+        ), "Input ticks array must have shape (N, 3) with columns [timestamp, bid, ask]."
+
+        folder = os.path.join(self.cache_path, symbol_name, str(timeframe))
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        timestamps = ticks[:, 0]
+        bids = ticks[:, 1]
+        asks = ticks[:, 2]
+
+        file_name = os.path.join(folder, "test.npz")
+        if os.path.exists(folder):
+            data = np.load(file_name)
+            ohlcv = data["ohlcv"]
+            utc_datetime = datetime.strptime("2024-01-01", "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
+            target_timestamp = utc_datetime.timestamp()
+            index = np.searchsorted(ohlcv[:, 0], target_timestamp, side="right")
+            first = ohlcv[0, 0]  # First timestamp in OHLCV
+            last = ohlcv[-1, 0]  # Last timestamp in OHLCV
+            dt = datetime.fromtimestamp(ohlcv[index, 0], tz=timezone.utc)            
+            open = ohlcv[index, 1]          
+            print(str(dt))
+            pass
+
+        start_time = timestamps[0]
+        bar_indices = np.floor((timestamps - start_time) / timeframe).astype(int)
+        unique_bars, bar_starts = np.unique(  # type:ignore
+            bar_indices, return_index=True
+        )
+
+        # Create OHLCV array
+        ohlcv = np.empty((len(unique_bars), 7), dtype=np.float64)  # type:ignore
+        prev_dt = datetime.min
+        for i, start in enumerate(bar_starts):  # type:ignore
+            end = (  # type:ignore
+                bar_starts[i + 1]
+                if i + 1 < len(bar_starts)  # type:ignore
+                else len(timestamps)  # type:ignore
+            )
+            ohlcv[i, 0] = timestamps[start]  # Timestamp
+            ohlcv[i, 1] = bids[start]  # Open bid
+            ohlcv[i, 2] = np.max(bids[start:end])  # High
+            ohlcv[i, 3] = np.min(bids[start:end])  # Low
+            ohlcv[i, 4] = bids[end - 1]  # Close
+            ohlcv[i, 5] = end - start  # Volume (number of ticks in the bar)
+            ohlcv[i, 6] = asks[start]  # Open ask
+            dt = datetime.fromtimestamp(ohlcv[i, 0], tz=timezone.utc)
+            if dt.date() != prev_dt.date():
+                print(dt.strftime("%Y-%m-%d"))
+            prev_dt = dt
+            pass
+
+        np.savez_compressed(file_name, ohlcv=ohlcv)
+        pass
+
+    def create_symbols_and_bars(self):
+        for symbol in self.symbol_dictionary.values():
+            symbol.init_datarate()
+            for bars in symbol.bars_dictonary:
+                print("Creating " + symbol.name + " bars with timeframe " + str(bars))
+                self.build_ohlcva_bars(symbol.name, symbol.rate_data, bars)
+
     def load_symbol(
         self,
         symbol_name: str,
@@ -1696,13 +1791,15 @@ class KitaApi:
             self, symbol_name, quote_provider, trade_provider, str_time_zone
         )
 
-        self.symbol_dictionary[symbol_name] = symbol
         quote_provider.init_symbol(self, symbol)
         trade_provider.init_symbol(self, symbol)
-
-        symbol.init_datarate()
+        self.symbol_dictionary[symbol_name] = symbol
         return "", symbol
 
+    # endregion
+
+    # Trading API
+    # region
     def close_trade(
         self,
         pos: Position,
@@ -2324,13 +2421,13 @@ class KitaApi:
         self.avg_open_duration_sum: list[timedelta] = [timedelta.min] * 1
         self.open_duration_count: list[int] = [0] * 1  # arrays because of by reference
         self.max_open_duration: list[timedelta] = [timedelta.min] * 1
-        self.StartUtc = self.StartUtc.replace(tzinfo=timezone.utc)
-        self.EndUtc = self.EndUtc.replace(tzinfo=timezone.utc)
-        self.robot.on_start()  # type: ignore
+
+        self.robot.on_init()  # type: ignore
+        self.create_symbols_and_bars()
 
     def tick(self):
         # Update quote, bars, indicators, account, bot
-        # 1st tick must update all bars and Indicators which have been inized in on_start()
+        # 1st tick must update all bars and Indicators which have been inized in on_init()
         for symbol in self.symbol_dictionary.values():
 
             # Update quote, bars, indicators which are bound to this symbol
