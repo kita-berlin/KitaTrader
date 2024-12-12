@@ -7,6 +7,7 @@ import csv
 import traceback
 import pytz
 import locale
+import glob
 from abc import ABC, abstractmethod
 from numpy.typing import NDArray
 from typing import TypeVar, Iterable, Iterator
@@ -46,7 +47,7 @@ class Bar:
         low: float = 0,
         close: float = 0,
         volume: float = 0,
-        open_spread: float = 0,
+        open_ask: float = 0,
     ):
         self.open_time = open_time
         self.open_price = open
@@ -56,7 +57,7 @@ class Bar:
         self.low_price = low
         self.close_price = close
         self.volume = volume
-        self.open_spread = open_spread
+        self.open_ask = open_ask
 
 
 class Quote:
@@ -491,7 +492,7 @@ class ConcreteAsset(Asset):
 
 class IIndicator(ABC):
     _isLastBar: bool = False
-    _index: int = 0
+    index: int = 0
 
     @property
     def is_last_bar(self) -> bool:
@@ -581,6 +582,10 @@ class DataSeries(Iterable[float]):
         """Set the value at a specific index in the data series."""
         if index < 0:
             index += len(self.data)
+        
+        if index == len(self.data):
+            self.append(0)
+
         if index >= len(self.data) or index < 0:
             raise IndexError("Index out of range")
         self.data[index] = value
@@ -610,16 +615,16 @@ class DataSeries(Iterable[float]):
         """Append a new value to the DataSeries."""
         self.data = np.append(self.data, value)
 
-    # def update_indicators(self, index: int, isNewBar: bool):
-    #     """Update indicators based on the current index."""
-    #     for indi in self.indicator_list:
-    #         while indi._index <= index:
-    #             indi.is_last_bar = indi._index == index
-    #             indi.calculate(indi._index)
-    #             if indi.is_last_bar:
-    #                 break
-    #             else:
-    #                 indi._index += 1
+    def update_indicators(self, index: int, isNewBar: bool):
+        """Update indicators based on the current index."""
+        for indi in self.indicator_list:
+            while indi.index <= index:
+                indi.is_last_bar = indi.index == index
+                indi.calculate(indi.index)
+                if indi.is_last_bar:
+                    break
+                else:
+                    indi.index += 1
 
 
 class StandardDeviation(IIndicator):
@@ -724,48 +729,46 @@ class SimpleMovingAverage(MovingAverage, IIndicator):
 
 
 class Indicators:
-    indicator_list = []
-
     def __init__(self):
         pass
 
+    @staticmethod
     def moving_average(
-        self,
         source: DataSeries,
         periods: int = 14,
         ma_type: MovingAverageType = MovingAverageType.Simple,
-    ) -> MovingAverage:
+    ) -> tuple[str, MovingAverage]:
         if MovingAverageType.Simple == ma_type:
             indicator = SimpleMovingAverage(source, periods)
             # if MovingAverageType...
 
             source.indicator_list.append(indicator)
-            return indicator
+            return "", indicator
         return None  # type: ignore
         pass
 
+    @staticmethod
     def standard_deviation(
-        self,
         source: DataSeries,
         periods: int = 14,
         ma_type: MovingAverageType = MovingAverageType.Simple,
-    ) -> StandardDeviation:
+    ) -> tuple[str, StandardDeviation]:
         indicator = StandardDeviation(source, periods, ma_type)
         source.indicator_list.append(indicator)
-        return indicator
+        return "", indicator
         pass
 
+    @staticmethod
     def bollinger_bands(
-        self,
         source: DataSeries,
         periods: int = 20,
         standard_deviations: float = 2.0,
         ma_type: MovingAverageType = MovingAverageType.Simple,
         shift: int = 0,
-    ) -> BollingerBands:
+    ) -> tuple[str, BollingerBands]:
         indicator = BollingerBands(source, periods, standard_deviations, ma_type, shift)
         source.indicator_list.append(indicator)
-        return indicator
+        return "", indicator
 
     # Hide
     # region
@@ -1033,11 +1036,6 @@ class Bars:
     chart_time_array = []
     # endregion
 
-    # forward declarations
-    def is_new_bar_get(
-        self, seconds: int, time: datetime, prevTime: datetime
-    ) -> bool: ...
-
     def __init__(self, timeframe_seconds: int, symbol_name: str):
         self.timeframe_seconds = timeframe_seconds
         self.symbol_name = symbol_name
@@ -1053,59 +1051,53 @@ class Bars:
             self.tick_volumes = DataSeries()
             # self.line_colors = np.array([])
 
-    pass
+    # forward declarations
+    def is_new_bar_get(
+        self, seconds: int, time: datetime, prevTime: datetime
+    ) -> bool: ...
 
-    ######################################
-    def update_bar(self, quote: Bar) -> None:
+    def on_tick(self, bar: Bar) -> None:
         self.is_new_bar = False
 
         # do we have to build a new bar ?
-        # epoc_dt = quote.open_time.timestamp() // 60
+        # epoc_dt = bar.open_time.timestamp() // 60
         # tf_minutes = self.timeframe_seconds // 60
         # tf_modulo = epoc_dt % tf_minutes
         if (
             0 == self.open_times.count
             or 0 == self.timeframe_seconds
             or self.is_new_bar_get(
-                self.timeframe_seconds, quote.open_time, self.open_times.data[-1]
+                self.timeframe_seconds, bar.open_time, self.open_times.data[-1]
             )
         ):
             self.open_times.data = np.append(
-                self.open_times.data, np.datetime64(quote.open_time, "D")
+                self.open_times.data, np.datetime64(bar.open_time, "D")
             )
-            self.open_prices.data = np.append(self.open_prices.data, quote.open_price)
-            self.open_asks.data = np.append(self.open_asks.data, quote.open_spread)
+            self.open_prices.data = np.append(self.open_prices.data, bar.open_price)
+            self.open_asks.data = np.append(self.open_asks.data, bar.open_ask)
             if 0 != self.timeframe_seconds:
-                self.high_prices.data = np.append(
-                    self.high_prices.data, quote.open_price
-                )
-                self.low_prices.data = np.append(self.low_prices.data, quote.open_price)
+                self.high_prices.data = np.append(self.high_prices.data, bar.open_price)
+                self.low_prices.data = np.append(self.low_prices.data, bar.open_price)
                 self.close_prices.data = np.append(
-                    self.close_prices.data, quote.open_price
+                    self.close_prices.data, bar.open_price
                 )
                 self.tick_volumes.data = np.append(self.tick_volumes.data, 0)
                 # self.line_colors = np.append(self.line_colors, "green")
 
             self.is_new_bar = True
         else:
-            self.high_prices.data[-1] = max(self.high_prices.data[-1], quote.high_price)
-            self.low_prices.data[-1] = min(self.low_prices.data[-1], quote.low_price)
-            self.close_prices.data[-1] = quote.close_price
-            self.tick_volumes.data[-1] += 1 if 0 == quote.volume else quote.volume
-            # self.line_colors[-1] = (
-            #     "green"
-            #     if self.close_prices.data[-1] > self.open_prices.data[-1]
-            #     else "red"
-            # )
+            self.high_prices.data[-1] = max(self.high_prices.data[-1], bar.high_price)
+            self.low_prices.data[-1] = min(self.low_prices.data[-1], bar.low_price)
+            self.close_prices.data[-1] = bar.close_price
+            self.tick_volumes.data[-1] += 1 if 0 == bar.volume else bar.volume
 
-        # self.open_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
-        # self.high_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
-        # self.low_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
-        # self.close_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
-        # self.tick_volumes.update_indicators(self.open_times.count - 1, self.is_new_bar)
-        # self.open_asks.update_indicators(self.open_times.count - 1, self.is_new_bar)
+        self.open_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
+        self.high_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
+        self.low_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
+        self.close_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
+        self.tick_volumes.update_indicators(self.open_times.count - 1, self.is_new_bar)
+        self.open_asks.update_indicators(self.open_times.count - 1, self.is_new_bar)
 
-    pass
     """
     @property
     def median_prices(self) -> DataSeries:
@@ -1287,6 +1279,7 @@ class Symbol:
 
     # Members
     # region
+    TicksType = NDArray[np.float64]
     api: KitaApi = None  # type: ignore
     name: str = ""
     bars_dictonary: dict[int, Bars] = {}
@@ -1416,20 +1409,95 @@ class Symbol:
             self.bars_dictonary[timeframe_seconds] = new_bars
         return "", self.bars_dictonary[timeframe_seconds]
 
+    def build_ohlcva_bars(
+        self, symbol_name: str, ticks: TicksType, timeframe: int
+    ) -> None:
+        assert (
+            ticks.shape[1] == 3
+        ), "Input ticks array must have shape (N, 3) with columns [timestamp, bid, ask]."
+
+        timestamps = ticks[:, 0]
+        bids = ticks[:, 1]
+        asks = ticks[:, 2]
+
+        folder = os.path.join(self.api.cache_path, f"{self.name}")
+        file_name = os.path.join(folder, "test.npz")
+        """
+        if os.path.exists(folder):
+            data = np.load(file_name)
+            ohlcva = data["ohlcva"]
+            utc_datetime = datetime.strptime("2024-01-01", "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
+            target_timestamp = utc_datetime.timestamp()
+            index = np.searchsorted(ohlcva[:, 0], target_timestamp, side="right")
+            first = ohlcva[0, 0]  # type:ignore
+            last = ohlcva[-1, 0]  # type:ignore
+            dt = datetime.fromtimestamp(ohlcva[index, 0], tz=timezone.utc)
+            open = ohlcva[index, 1]  # type:ignore
+            print(str(dt))
+            pass
+        """
+        start_time = timestamps[0]
+        bar_indices = np.floor((timestamps - start_time) / timeframe).astype(int)
+        unique_bars, bar_starts = np.unique(  # type:ignore
+            bar_indices, return_index=True
+        )
+
+        # Create OHLCVA array
+        ohlcva = np.empty((len(unique_bars), 7), dtype=np.float64)  # type:ignore
+        prev_dt = datetime.min
+        for i, start in enumerate(bar_starts):  # type:ignore
+            end = (  # type:ignore
+                bar_starts[i + 1]
+                if i + 1 < len(bar_starts)  # type:ignore
+                else len(timestamps)  # type:ignore
+            )
+            ohlcva[i, 0] = timestamps[start]  # Timestamp
+            ohlcva[i, 1] = bids[start]  # Open bid
+            ohlcva[i, 2] = np.max(bids[start:end])  # High
+            ohlcva[i, 3] = np.min(bids[start:end])  # Low
+            ohlcva[i, 4] = bids[end - 1]  # Close
+            ohlcva[i, 5] = end - start  # Volume (number of ticks in the bar)
+            ohlcva[i, 6] = asks[start]  # Open ask
+            dt = datetime.fromtimestamp(ohlcva[i, 0], tz=timezone.utc)
+            if dt.date() != prev_dt.date():
+                print(dt.strftime("%Y-%m-%d"))
+            prev_dt = dt
+            pass
+
+        np.savez_compressed(file_name, ohlcva=ohlcva)
+        pass
+
+    def init_indis_bars_datarate(self) -> str:
+        error = self.init_datarate()
+        if "" == error:
+            for bars in self.bars_dictonary:
+                print(
+                    "Creating "
+                    + self.name
+                    + " bars with "
+                    + str(bars)
+                    + " seconds timeframe"
+                )
+                self.build_ohlcva_bars(self.name, self.rate_data, bars)
+
+        return ""
+
     def init_datarate(self) -> str:
-        folder = os.path.join(self.api.cache_path, f"{self.name}", "Ticks")
+        folder = os.path.join(self.api.cache_path, f"{self.name}")
         if not os.path.exists(os.path.dirname(folder)):
             os.makedirs(folder)
 
         # load and cache all possible tick data
         if datetime.min == self.api.TickDataStartUtc:
             print("Finding first quote of " + self.name)
-            error, start_dt, quote = self.quote_provider.find_first_day()  # type:ignore
+            error, start_dt, day = self.quote_provider.find_first_day()  # type:ignore
             if "" != error:
-                return error
+                return error, None  # type:ignore
             self.api.TickDataStartUtc = start_dt
 
-        self.api.TickDataStartUtc = run_utc = self.api.TickDataStartUtc.replace(
+        self.api.TickDataStartUtc = start_utc = self.api.TickDataStartUtc.replace(
             tzinfo=timezone.utc
         )
 
@@ -1441,89 +1509,65 @@ class Symbol:
         self.initial_tz_dt = self.api.BacktestStartUtc.astimezone(
             self.time_zone
         ) + timedelta(hours=self.normalized_hours_offset)
-        self.end_tz_dt = (
-            (
-                self.api.TickDataEndUtc.replace(
-                    hour=0, minute=0, second=0, microsecond=0
-                )
-                - timedelta(seconds=1)
-            )
-        ).astimezone(self.time_zone) + timedelta(hours=self.normalized_hours_offset)
+        end_utc = self.api.TickDataEndUtc.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(seconds=1)
 
-        is_get_next_day_running = False
-        day_utc = run_utc
-        day = []
-        error = ""
-        run_utc -= timedelta(days=1)
-
-        print("Generating daily tick arrays for " + self.name)
-        while True:
-            run_utc += timedelta(days=1)
-            # always update numpy tick data until today's data
-            if run_utc.date() == datetime.now().date():
-                return self.concat_npz(folder)
-
-            path = os.path.join(
-                folder,
-                f"{run_utc.year:04}{run_utc.month:02}{run_utc.day:02}ticks" + ".npz",
-            )
-            if os.path.exists(path):
-                is_get_next_day_running = False
-                continue
-
-            # create .npz files
-            if not is_get_next_day_running:
-                error, day_utc, day = self.quote_provider.get_day_at_utc(run_utc)
-                is_get_next_day_running = True
-
-            if "" != error:
-                return error
-
-            path = os.path.join(
-                folder,
-                f"{day_utc.year:04}{day_utc.month:02}{day_utc.day:02}ticks",
-            )
-
-            if 0 == len(day):
-                day = np.empty((0, 3), dtype=np.float64)
-
-            print(self.name + " " + day_utc.strftime("%Y-%m-%d"))
-            np.savez_compressed(path, np.array(day, dtype=np.float64))
-            error, day_utc, day = self.quote_provider.get_next_day()
-
-    def concat_npz(self, folder: str):
-        print("Concatenating tick arrays")
-        # Convert yyyymmdd dates to comparable integers
-        start_date_int = int(self.api.TickDataStartUtc.strftime("%Y%m%d"))
-        end_date_int = int(self.api.TickDataEndUtc.strftime("%Y%m%d"))
-
-        # List all .npz files in the folder
-        files = [f for f in os.listdir(folder) if f.endswith("ticks.npz")]
-
-        # Filter files based on date range and sort
-        filtered_files = sorted(
-            [
-                os.path.join(folder, f)
-                for f in files
-                if start_date_int <= int(f[:8]) <= end_date_int
-            ]
+        self.end_tz_dt = end_utc.astimezone(self.time_zone) + timedelta(
+            hours=self.normalized_hours_offset
         )
 
-        # Load and concatenate arrays
-        arrays: list[tuple[float, float, float]] = []
-        prev_dt = datetime.min
-        for file in filtered_files:
-            data = np.load(file)["arr_0"]
-            if 0 != data.shape[0]:
-                dt = datetime.fromtimestamp(data[0][0], tz=timezone.utc)
-                if dt.year != prev_dt.year:
-                    print(dt.strftime("%Y-%m-%d"))
-                arrays.append(data)
-                prev_dt = dt
+        # check and exit if full time window ticks are in the ticks file
+        start_s = start_utc.strftime("%Y%m%d")
+        end_s = end_utc.strftime("%Y%m%d")
+        file_name = "Ticks_" + start_s + "_" + end_s + ".h5"
+        path = os.path.join(folder, file_name)
+        if os.path.exists(path):
+            print("Loading " + file_name)
+            with h5py.File(path, "r") as hdf:
+                self.rate_data = np.array(hdf["ticks"])
+            return ""
 
-        # Concatenate all arrays
-        self.rate_data = np.concatenate(arrays, axis=0)  # type: ignore
-        return ""
+        # test if start date fits; if yes, append new ticks
+        start_path = os.path.join(folder, "Ticks_" + start_s + "*.h5")
+        start_matching = glob.glob(start_path)
+        if start_matching:
+            # todo: append missing ticks to self.rate_data
+            pass
+
+        print("Generating daily tick arrays for " + self.name)
+        error, day_utc, day = self.quote_provider.get_day_at_utc(start_utc)
+        if "" != error:
+            return error
+
+        error = ""
+        self.rate_data = np.empty((0, 3), dtype=np.float64)
+        day_utc -= timedelta(days=1)
+        while True:
+            day_utc += timedelta(days=1)
+            # Stop when reaching today
+            if day_utc.date() >= datetime.now().date():
+                if len(day) > 0:
+                    self.rate_data = np.vstack([self.rate_data, day])
+                    # self.on_tick() # create bars and indicators
+
+                # save as hpf5 file
+                with h5py.File(path, "w") as f:
+                    f.create_dataset(  # type:ignore
+                        "ticks",
+                        data=self.rate_data,  # Pass the full NumPy array
+                        chunks=(50_000, 3),  # Define an optimal chunk size for I/O
+                        compression="gzip",  # Enable compression for space efficiency
+                    )
+
+                print(f"Saved all tick data to {path}")
+                return ""
+
+            print(self.name + " " + day_utc.strftime("%Y-%m-%d"))
+            if len(day) > 0:
+                self.rate_data = np.vstack([self.rate_data, day])
+                # self.on_tick() # create bars and indicators
+            error, day_utc, day = self.quote_provider.get_next_day()
 
     def on_tick(self) -> str:
         self.timestamp = self.rate_data[self.rate_data_index][0]
@@ -1536,6 +1580,17 @@ class Symbol:
         self.rate_data_index += 1
         if self.rate_data_index >= len(self.rate_data):
             return "End reached"
+
+        for bars in self.bars_dictonary.values():
+            quote_as_bar = Bar()
+            quote_as_bar.open_time = quote_as_bar.high_time = quote_as_bar.low_time = (
+                self.time
+            )
+            quote_as_bar.open_price = quote_as_bar.high_price = (
+                quote_as_bar.low_price
+            ) = quote_as_bar.close_price = self.bid
+            quote_as_bar.open_ask = self.ask
+            bars.on_tick(quote_as_bar)
 
         return ""
 
@@ -1708,76 +1763,9 @@ class KitaApi:
 
     # Algo API
     # region
-    TicksType = NDArray[np.float64]
-
-    def build_ohlcva_bars(
-        self, symbol_name: str, ticks: TicksType, timeframe: int
-    ) -> None:
-        assert (
-            ticks.shape[1] == 3
-        ), "Input ticks array must have shape (N, 3) with columns [timestamp, bid, ask]."
-
-        folder = os.path.join(self.cache_path, symbol_name, str(timeframe))
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-
-        timestamps = ticks[:, 0]
-        bids = ticks[:, 1]
-        asks = ticks[:, 2]
-
-        file_name = os.path.join(folder, "test.npz")
-        if os.path.exists(folder):
-            data = np.load(file_name)
-            ohlcv = data["ohlcv"]
-            utc_datetime = datetime.strptime("2024-01-01", "%Y-%m-%d").replace(
-                tzinfo=timezone.utc
-            )
-            target_timestamp = utc_datetime.timestamp()
-            index = np.searchsorted(ohlcv[:, 0], target_timestamp, side="right")
-            first = ohlcv[0, 0]  # First timestamp in OHLCV
-            last = ohlcv[-1, 0]  # Last timestamp in OHLCV
-            dt = datetime.fromtimestamp(ohlcv[index, 0], tz=timezone.utc)            
-            open = ohlcv[index, 1]          
-            print(str(dt))
-            pass
-
-        start_time = timestamps[0]
-        bar_indices = np.floor((timestamps - start_time) / timeframe).astype(int)
-        unique_bars, bar_starts = np.unique(  # type:ignore
-            bar_indices, return_index=True
-        )
-
-        # Create OHLCV array
-        ohlcv = np.empty((len(unique_bars), 7), dtype=np.float64)  # type:ignore
-        prev_dt = datetime.min
-        for i, start in enumerate(bar_starts):  # type:ignore
-            end = (  # type:ignore
-                bar_starts[i + 1]
-                if i + 1 < len(bar_starts)  # type:ignore
-                else len(timestamps)  # type:ignore
-            )
-            ohlcv[i, 0] = timestamps[start]  # Timestamp
-            ohlcv[i, 1] = bids[start]  # Open bid
-            ohlcv[i, 2] = np.max(bids[start:end])  # High
-            ohlcv[i, 3] = np.min(bids[start:end])  # Low
-            ohlcv[i, 4] = bids[end - 1]  # Close
-            ohlcv[i, 5] = end - start  # Volume (number of ticks in the bar)
-            ohlcv[i, 6] = asks[start]  # Open ask
-            dt = datetime.fromtimestamp(ohlcv[i, 0], tz=timezone.utc)
-            if dt.date() != prev_dt.date():
-                print(dt.strftime("%Y-%m-%d"))
-            prev_dt = dt
-            pass
-
-        np.savez_compressed(file_name, ohlcv=ohlcv)
-        pass
-
-    def create_symbols_and_bars(self):
+    def create_symbols_bars_indis(self):
         for symbol in self.symbol_dictionary.values():
             symbol.init_datarate()
-            for bars in symbol.bars_dictonary:
-                print("Creating " + symbol.name + " bars with timeframe " + str(bars))
-                self.build_ohlcva_bars(symbol.name, symbol.rate_data, bars)
 
     def load_symbol(
         self,
@@ -2065,14 +2053,14 @@ class KitaApi:
 
         # orgComment;123456,aaa,+-ppp     meaning:
         # openAskInPts,openSpreadInPts
-        openBid, open_spread = 0, 0
+        openBid, open_ask = 0, 0
         if lp.comment is not None:  # type: ignore
             bid_asks = lp.comment.split(";")
             if len(bid_asks) >= 2:
                 bid_asks = bid_asks[1].split(",")
                 if len(bid_asks) == 2:
                     i_ask = KitaApi.string_to_integer(bid_asks[0])
-                    open_spread = round(lp.symbol.point_size * i_ask, lp.symbol.digits)
+                    open_ask = round(lp.symbol.point_size * i_ask, lp.symbol.digits)
                     # open_bid = lp.symbol.point_size * (
                     #     i_ask - KitaApi.string_to_integer(bid_asks[1])
                     # )
@@ -2116,7 +2104,7 @@ class KitaApi:
                 continue
             elif change_part == "OpenAsks":
                 self.logger.add_text(
-                    KitaApi.double_to_string(open_spread, lp.symbol.digits)
+                    KitaApi.double_to_string(open_ask, lp.symbol.digits)
                     if lp.trade_type == TradeType.Buy
                     else ""
                 )
@@ -2131,7 +2119,7 @@ class KitaApi:
             elif change_part == "OpenSpreadPoints":
                 self.logger.add_text(
                     KitaApi.double_to_string(
-                        self.i_price((open_spread - openBid), lp.symbol.point_size), 0
+                        self.i_price((open_ask - openBid), lp.symbol.point_size), 0
                     )
                 )
                 continue
@@ -2391,7 +2379,7 @@ class KitaApi:
         pass
     """
 
-    def start(self):
+    def init(self):
         self.account: Account = Account(self)
         self.account.balance = self.AccountInitialBalance
         self.account.leverage = self.AccountLeverage
@@ -2423,7 +2411,10 @@ class KitaApi:
         self.max_open_duration: list[timedelta] = [timedelta.min] * 1
 
         self.robot.on_init()  # type: ignore
-        self.create_symbols_and_bars()
+        self.create_symbols_bars_indis()
+
+    def start(self):
+        self.robot.on_start()  # type: ignore
 
     def tick(self):
         # Update quote, bars, indicators, account, bot

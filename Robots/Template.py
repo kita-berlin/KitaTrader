@@ -1,7 +1,7 @@
 ﻿import talib  # type: ignore
 from math import sqrt
 from KitaApiEnums import *
-from KitaApi import KitaApi, Symbol
+from KitaApi import KitaApi, Symbol, Indicators
 from Api.CoFu import *
 from Constants import *
 from TradePaper import TradePaper
@@ -37,23 +37,18 @@ class Template(KitaApi):
     ###################################
     def on_init(self) -> None:
 
-        # default backtest time window; can be overridden befor calling on_start
+        # 1. Define default backtest time window
         self.BacktestStartUtc = datetime.strptime("1.1.2024", "%d.%m.%Y")
         self.BacktestEndUtc = datetime.max  # means latest possible
 
-        # Possible quote_providers
+        # 2. Define quote_provider(s)
         # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
         quote_provider = Dukascopy("", datarate=0)
         # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", datarate=0),
         # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", datarate=0)
         # quote_provider = QuoteCsv("G:\\Meine Ablage", datarate=0)
 
-        # Demo to show all available symbols
-        i = 0
-        for symbol_name in quote_provider.symbols:
-            i = i + 1
-            print(str(i) + ": " + symbol_name)
-
+        # 3. Define symbol(s); at least one symbol must be defined
         error, self.nzdcad_symbol = self.load_symbol(
             "NZDCAD",
             quote_provider,
@@ -68,11 +63,28 @@ class Template(KitaApi):
             print(error)
             exit()
 
-        # Example how to use bars
+        # 4. Define one or more bars (optional)
         error, self.m1_bars = self.nzdcad_symbol.load_bars(Constants.SEC_PER_MINUTE)
         if "" != error:
             print(error)
             exit()
+
+        # 5. Define kita indicators (optional)
+        self.time_period = 1
+        error, self.sma = Indicators.moving_average(
+            source=self.m1_bars.close_prices,
+            periods=self.time_period,
+            ma_type=MovingAverageType.Simple,
+        )
+        if "" != error:
+            print(error)
+            exit()
+
+        # Demo to show all available symbols
+        i = 0
+        for symbol_name in quote_provider.symbols:
+            i = i + 1
+            print(str(i) + ": " + symbol_name)
 
     def on_start(self) -> None:
         # Members to be re-initialized on each new start
@@ -83,14 +95,12 @@ class Template(KitaApi):
         ta_funcs = talib.get_functions()  # type:ignore
         print(ta_funcs)  # type:ignore
 
-        self.time_period = 1
+        """
         talib.SMA(  # type:ignore
             self.m1_bars.close_prices.data[-self.time_period :],  # type:ignore
             timeperiod=self.time_period,
         )[-1]
-        pass
 
-        """
         my_sma = self.Sma.Result.Last(0)
 
         ta_sd = talib.STDDEV(
@@ -117,7 +127,11 @@ class Template(KitaApi):
     ###################################
     def on_tick(self, symbol: Symbol):
         if symbol.time.date() != symbol.prev_time.date():
-            print(symbol.time.strftime("%Y-%m-%d %H:%M:%S"), ", ", symbol.time.strftime("%A"))
+            print(
+                symbol.time.strftime("%Y-%m-%d %H:%M:%S"),
+                ", ",
+                symbol.time.strftime("%A"),
+            )
 
     ###################################
     def on_stop(self):

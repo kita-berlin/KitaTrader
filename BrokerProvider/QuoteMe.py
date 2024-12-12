@@ -132,7 +132,7 @@ class QuoteMe(QuoteProvider):
             struct.unpack("<L", self.file_handle.read(4))[0]  # type: ignore
             * self.market_values.point_size
         )
-        quote.open_spread = round(open_ask - quote.open_price, self.market_values.digits)
+        quote.open_ask = round(open_ask - quote.open_price, self.market_values.digits)
         """
         return "", quote
 

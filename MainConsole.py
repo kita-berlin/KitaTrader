@@ -33,19 +33,24 @@ class MainConsole:
         self.robot.Direction = TradeDirection.Mode1
         # endregion
 
-        # 3. Start the platform and the robot
+        # 3. Initialize the platform and the robot
+        # region
+        self.robot.init()  # type: ignore
+        # endregion
+
+        # 4. Start the platform and the robot
         # region
         self.robot.start()  # type: ignore
         # endregion
 
-        # 4. loop over the give time range
+        # 5. loop over the give time range
         # region
         while True:
             if self.robot.tick():
                 break
         # endregion
 
-        # 5. Stop the robot and the platform
+        # 6. Stop the robot and the platform
         # region
         self.robot.stop()
         # endregion
