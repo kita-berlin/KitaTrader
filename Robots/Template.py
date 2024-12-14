@@ -1,4 +1,5 @@
 ﻿import talib  # type: ignore
+import time
 from math import sqrt
 from KitaApiEnums import *
 from KitaApi import KitaApi, Symbol, Indicators
@@ -32,6 +33,7 @@ class Template(KitaApi):
         super().__init__()  # Importatnt, do not delete
 
     sqrt252: float = sqrt(252)
+    prev_time: float = 0
     # endregion
 
     ###################################
@@ -86,7 +88,7 @@ class Template(KitaApi):
             i = i + 1
             print(str(i) + ": " + symbol_name)
 
-    def on_start(self) -> None:
+    def on_start(self, symbol: Symbol) -> None:
         # Members to be re-initialized on each new start
         # region
         # endregion
@@ -127,11 +129,15 @@ class Template(KitaApi):
     ###################################
     def on_tick(self, symbol: Symbol):
         if symbol.time.date() != symbol.prev_time.date():
+            diff = (time.perf_counter() - self.prev_time)
             print(
                 symbol.time.strftime("%Y-%m-%d %H:%M:%S"),
                 ", ",
                 symbol.time.strftime("%A"),
+                ", ",
+                f"{diff:.3f}"
             )
+            self.prev_time = time.perf_counter()
 
     ###################################
     def on_stop(self):

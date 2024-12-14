@@ -9,7 +9,6 @@ import pytz
 import locale
 import glob
 from abc import ABC, abstractmethod
-from numpy.typing import NDArray
 from typing import TypeVar, Iterable, Iterator
 from datetime import datetime, timedelta, tzinfo, timezone
 
@@ -528,13 +527,13 @@ class IIndicator(ABC):
 
 class TimeSeries(Iterable[datetime]):
     def __init__(self):
-        self.data = np.array([], dtype="datetime64[D]")
+        self.data: list[datetime] = []
 
     def __getitem__(self, index: int) -> datetime:
-        return self.data[index].astype(datetime)  # Convert numpy.datetime64 to datetime
+        return self.data[index]
 
     def __iter__(self) -> Iterator[datetime]:
-        return (item.astype(datetime) for item in self.data)  # Generator for iteration
+        return iter(self.data)  # Generator for iteration
 
     @property
     def last_value(self) -> datetime:  # Gets the last value of this time series.
@@ -573,7 +572,7 @@ class TimeSeries(Iterable[datetime]):
 class DataSeries(Iterable[float]):
     def __init__(self):
         self.indicator_list: list[IIndicator] = []
-        self.data: NDArray[np.float64] = np.empty((0, 3), dtype=np.float64)
+        self.data: list[float] = []
 
     def __getitem__(self, index: int) -> float:
         if index < 0:
@@ -588,7 +587,7 @@ class DataSeries(Iterable[float]):
             index += len(self.data)
 
         if index == len(self.data):
-            self.append(0)
+            self.data.append(0)
 
         if index >= len(self.data) or index < 0:
             raise IndexError("Index out of range")
@@ -619,8 +618,8 @@ class DataSeries(Iterable[float]):
         """Append a new value to the DataSeries."""
         np.append(self.data, value)
 
+    # Update indicators based on the current index.
     def update_indicators(self, index: int, isNewBar: bool):
-        """Update indicators based on the current index."""
         for indi in self.indicator_list:
             while indi.index <= index:
                 indi.is_last_bar = indi.index == index
@@ -1064,29 +1063,21 @@ class Bars:
         self.is_new_bar = False
 
         # do we have to build a new bar ?
-        # epoc_dt = bar.open_time.timestamp() // 60
-        # tf_minutes = self.timeframe_seconds // 60
-        # tf_modulo = epoc_dt % tf_minutes
         if (
-            0 == self.open_times.count
-            or 0 == self.timeframe_seconds
-            or self.is_new_bar_get(
+            0 == self.open_times.count  # on init
+            or 0 == self.timeframe_seconds  # tick data rate
+            or self.is_new_bar_get(  # new bar ?
                 self.timeframe_seconds, bar.open_time, self.open_times.data[-1]
             )
         ):
-            self.open_times.data = np.append(
-                self.open_times.data, np.datetime64(bar.open_time, "D")
-            )
-            self.open_prices.data = np.append(self.open_prices.data, bar.open_price)
-            self.open_asks.data = np.append(self.open_asks.data, bar.open_ask)
+            self.open_times.data.append(bar.open_time)
+            self.open_prices.data.append(bar.open_price)
+            self.open_asks.data.append(bar.open_ask)
             if 0 != self.timeframe_seconds:
-                self.high_prices.data = np.append(self.high_prices.data, bar.open_price)
-                self.low_prices.data = np.append(self.low_prices.data, bar.open_price)
-                self.close_prices.data = np.append(
-                    self.close_prices.data, bar.open_price
-                )
-                self.tick_volumes.data = np.append(self.tick_volumes.data, 0)
-                # self.line_colors = np.append(self.line_colors, "green")
+                self.high_prices.data.append(bar.open_price)
+                self.low_prices.data.append(bar.open_price)
+                self.close_prices.data.append(bar.open_price)
+                self.tick_volumes.data.append(0)
 
             self.is_new_bar = True
         else:
@@ -1283,7 +1274,7 @@ class Symbol:
     bars_dictonary: dict[int, Bars] = {}
     time: datetime = datetime.min
     prev_time: datetime = datetime.min
-    initial_tz_dt: datetime = datetime.min
+    start_tz_dt: datetime = datetime.min
     end_tz_dt: datetime = datetime.min
     bid: float = 0
     ask: float = 0
@@ -1425,8 +1416,8 @@ class Symbol:
             utc_datetime = datetime.strptime("2024-01-01", "%Y-%m-%d").replace(
                 tzinfo=timezone.utc
             )
-            target_timestamp = utc_datetime.timestamp()
-            index = np.searchsorted(ohlcva[:, 0], target_timestamp, side="right")
+            start_timestamp = utc_datetime.timestamp()
+            index = np.searchsorted(ohlcva[:, 0], start_timestamp, side="right")
             first = ohlcva[0, 0]  # type:ignore
             last = ohlcva[-1, 0]  # type:ignore
             dt = datetime.fromtimestamp(ohlcva[index, 0], tz=timezone.utc)
@@ -1482,11 +1473,12 @@ class Symbol:
                 + str(bars)
                 + " seconds timeframe"
             )
-            self.build_ohlcva_bars(self.name, self.rate_data, bars)
+            # self.build_ohlcva_bars(self.name, self.rate_data, bars)
+        self.on_tick() # set time, bid, ask for on_start
         return ""
 
     def load_datarate(self) -> str:
-        print("Loading " + self.name)
+        print("Loading " + self.name + " quotes")
         folder = os.path.join(self.api.cache_path, f"{self.name}")
         pattern = os.path.join(folder, self.dataset_name + "*.h5")
         file_exists = glob.glob(pattern)  # type: ignore
@@ -1496,16 +1488,32 @@ class Symbol:
             end_timestamp = self.api.BacktestEndUtc.timestamp()
 
             with h5py.File(file_exists[0], "r") as hdf:
-                # Assuming timestamps are stored in the first dimension of "dataset"
                 dataset = hdf[self.dataset_name]  # Main dataset
-                timestamps = dataset[:, 0]  # type: ignore
 
-                # Find indices for the start and end timestamps
-                start_idx = np.searchsorted(timestamps, start_timestamp, side="left")  # type: ignore
-                end_idx = np.searchsorted(timestamps, end_timestamp, side="right")  # type: ignore
+                # find start_timestamp for BacktestStartUtc
+                start, end = 0, dataset.shape[0] - 1  # type: ignore
+                # Continue until there are only two elements left
+                while start < end - 1:
+                    middle = (start + end) // 2  # type: ignore
+                    middle_timestamp = dataset[middle, 0]  # type: ignore
+                    if middle_timestamp < start_timestamp:  # type: ignore
+                        start = middle  # type: ignore
+                    else:
+                        end = middle  # type: ignore
+
+                # start_timestamp found, now find end_timestamp for BacktestEndUtc
+                start_idx = start  # type: ignore
+                end = dataset.shape[0] - 1  # type: ignore
+                while start < end - 1:
+                    middle = (start + end) // 2  # type: ignore
+                    middle_timestamp = dataset[middle, 0]  # type: ignore
+                    if middle_timestamp < end_timestamp:  # type: ignore
+                        start = middle  # type: ignore
+                    else:
+                        end = middle  # type: ignore
 
                 # Slice and load data between the indices
-                self.rate_data = dataset[start_idx:end_idx, :]  # type: ignore
+                self.rate_data = dataset[start_idx:end, :]  # type: ignore
 
                 return ""
         else:
@@ -1538,25 +1546,34 @@ class Symbol:
         else:
             self.api.TickDataEndUtc += timedelta(days=1)
 
-        self.api.TickDataEndUtc = self.api.TickDataEndUtc.replace(tzinfo=timezone.utc)
-        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(
-            tzinfo=timezone.utc
-        )
-        self.api.BacktestEndUtc = self.api.BacktestEndUtc.replace(tzinfo=timezone.utc)
+        if datetime.max == self.api.BacktestEndUtc:
+            self.api.BacktestEndUtc = datetime.now()
+        else:
+            self.api.BacktestEndUtc += timedelta(days=1)
 
-        # set symbol's local time zone
-        self.initial_tz_dt = self.api.BacktestStartUtc.astimezone(
-            self.time_zone
-        ) + timedelta(hours=self.normalized_hours_offset)
+        self.api.TickDataEndUtc = self.api.TickDataEndUtc.replace(tzinfo=timezone.utc)
         end_utc = self.api.TickDataEndUtc.replace(
             hour=0, minute=0, second=0, microsecond=0
         ) - timedelta(seconds=1)
-        self.end_tz_dt = end_utc.astimezone(self.time_zone) + timedelta(
+
+        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(
+            tzinfo=timezone.utc
+        )
+        self.api.BacktestEndUtc.replace(hour=23, minute=59, second=59).replace(
+            tzinfo=timezone.utc
+        )
+
+        # set symbol's local time zone
+        self.start_tz_dt = self.api.BacktestStartUtc.astimezone(
+            self.time_zone
+        ) + timedelta(hours=self.normalized_hours_offset)
+
+        self.end_tz_dt = self.api.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
             hours=self.normalized_hours_offset
         )
 
         # data read loop
-        print("Generating quotes for " + self.name)
+        print("Generating " + self.name + " quotes")
         run_utc = start_utc
         error = ""
         pattern = os.path.join(folder, self.dataset_name + "*.h5")
@@ -1637,21 +1654,17 @@ class Symbol:
         self.bid = self.rate_data[self.rate_data_index][1]
         self.ask = self.rate_data[self.rate_data_index][2]
 
-        self.rate_data_index += 1
-        if self.rate_data_index >= len(self.rate_data):
+        if self.rate_data_index + 1 >= len(self.rate_data):
             return "End reached"
 
-        for bars in self.bars_dictonary.values():
-            quote_as_bar = Bar()
-            quote_as_bar.open_time = quote_as_bar.high_time = quote_as_bar.low_time = (
-                self.time
-            )
-            quote_as_bar.open_price = quote_as_bar.high_price = (
-                quote_as_bar.low_price
-            ) = quote_as_bar.close_price = self.bid
-            quote_as_bar.open_ask = self.ask
-            bars.on_tick(quote_as_bar)
+        # for bars in self.bars_dictonary.values():
+        #     bar = Bar()
+        #     bar.open_time = bar.high_time = bar.low_time = self.time
+        #     bar.open_price = bar.high_price = bar.low_price = bar.close_price = self.bid
+        #     bar.open_ask = self.ask
+        #     bars.on_tick(bar)
 
+        self.rate_data_index += 1
         return ""
 
 
@@ -2474,7 +2487,8 @@ class KitaApi:
         self.create_symbols_bars_indis()
 
     def start(self):
-        self.robot.on_start()  # type: ignore
+        for symbol in self.symbol_dictionary.values():
+            self.robot.on_start(symbol)  # type: ignore
 
     def tick(self):
         # Update quote, bars, indicators, account, bot
@@ -2549,7 +2563,7 @@ class KitaApi:
         trading_days = 0
         for symbol in self.symbol_dictionary.values():
             trading_days = (  # 365 - 2*52 = 261 - 9 holidays = 252
-                (symbol.time - symbol.initial_tz_dt).days / 365.0 * 252.0
+                (symbol.time - symbol.start_tz_dt).days / 365.0 * 252.0
             )
             break
 
