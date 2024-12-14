@@ -3,8 +3,10 @@ import struct
 import requests
 from datetime import datetime, timedelta
 from lzma import LZMADecompressor, FORMAT_AUTO  # type: ignore
-from KitaApi import QuoteProvider, KitaApi, Symbol
+from KitaApi import QuoteProvider, KitaApi, Symbol, QuoteType, QuotesType
 
+# Instead of numpy arrays we are using QuotesType] as a temporary container 
+# and later convert it to a NumPy array to avoid frequent memory reallocations.
 
 class Dukascopy(QuoteProvider):
     provider_name = "Dukascopy"
@@ -30,8 +32,8 @@ class Dukascopy(QuoteProvider):
         if not os.path.exists(self.cache_path):
             os.makedirs(self.cache_path)
 
-    def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, list[list[float]]]:
-        day: list[list[float]] = []
+    def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, QuotesType]:
+        day_data: QuotesType = []
         self.last_utc = run_utc = utc.replace(hour=0, minute=0, second=0, microsecond=0)
 
         while True:
@@ -54,15 +56,15 @@ class Dukascopy(QuoteProvider):
                     return str(e), self.last_utc, None  # type: ignore
 
             if len(data) > 0:
-                day += self._get_hour(run_utc, data)
+                day_data += self._get_hour(run_utc, data)
 
             run_utc += timedelta(hours=1)
             if run_utc.date() > utc.date():
                 break
 
-        return "", self.last_utc, day
+        return "", self.last_utc, day_data
 
-    def find_first_day(self) -> tuple[str, datetime, list[list[float]]]:
+    def find_first_day(self) -> tuple[str, datetime, QuotesType]:
         start_date = datetime(2000, 1, 1)
         end_date = datetime.now()
 
@@ -78,17 +80,13 @@ class Dukascopy(QuoteProvider):
 
         return self.get_day_at_utc(end_date)
 
-    def get_next_day(self) -> tuple[str, datetime, list[list[float]]]:
-        self.last_utc += timedelta(days=1)
-        return self.get_day_at_utc(self.last_utc)
-
-    def _get_hour(self, hour_base_time: datetime, data: bytes) -> list[list[float]]:
-        hour: list[list[float]] = []
+    def _get_hour(self, hour_base_time: datetime, data: bytes) -> QuotesType:
+        hour: QuotesType = []
         current_index: int = 0
         hour_base_timestamp = hour_base_time.timestamp()
 
         while True:
-            quote: list[float] = []
+            quote: QuoteType = []
             # Python timestamp is microseconds since 1.1.1970
             # Ducascopy timedelta is milliseconds since hour start
             timestamp: float = (

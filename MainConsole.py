@@ -11,10 +11,10 @@ class MainConsole:
         self.robot = Template()  # The robot to be used
         self.robot.robot = self.robot  # type:ignore
 
-        self.robot.TickDataStartUtc = datetime.min  # means earliest possible
-        #self.robot.TickDataStartUtc = datetime.strptime("1.11.2023", "%d.%m.%Y")
+        #self.robot.TickDataStartUtc = datetime.min  # means earliest possible
+        self.robot.TickDataStartUtc = datetime.strptime("3.1.2006", "%d.%m.%Y")
         self.robot.TickDataEndUtc = datetime.max  # means latest possible
-        # self.robot.TickDataEndUtc = datetime.strptime("30.06.2024", "%d.%m.%Y")
+        #self.robot.TickDataEndUtc = datetime.strptime("10.01.2006", "%d.%m.%Y")
 
         self.robot.RunningMode = RunMode.SilentBacktesting
 

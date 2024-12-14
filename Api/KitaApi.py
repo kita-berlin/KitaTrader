@@ -26,6 +26,10 @@ from KitaApiEnums import (
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
+# QuoteType: A list of 3 floats with timestamp, bid, ask
+QuoteType = list[float]
+# QuotesType: A list of single QuoteType
+QuotesType = list[QuoteType]
 
 
 # Due to circular import problmes with separated classe, we define them here
@@ -569,7 +573,7 @@ class TimeSeries(Iterable[datetime]):
 class DataSeries(Iterable[float]):
     def __init__(self):
         self.indicator_list: list[IIndicator] = []
-        self.data: NDArray[np.float64] = np.array([], dtype=np.float64)
+        self.data: NDArray[np.float64] = np.empty((0, 3), dtype=np.float64)
 
     def __getitem__(self, index: int) -> float:
         if index < 0:
@@ -582,7 +586,7 @@ class DataSeries(Iterable[float]):
         """Set the value at a specific index in the data series."""
         if index < 0:
             index += len(self.data)
-        
+
         if index == len(self.data):
             self.append(0)
 
@@ -613,7 +617,7 @@ class DataSeries(Iterable[float]):
 
     def append(self, value: float):
         """Append a new value to the DataSeries."""
-        self.data = np.append(self.data, value)
+        np.append(self.data, value)
 
     def update_indicators(self, index: int, isNewBar: bool):
         """Update indicators based on the current index."""
@@ -1222,15 +1226,10 @@ class QuoteProvider(ABC):
     def init_symbol(self, api: KitaApi, symbol: Symbol): ...
 
     @abstractmethod
-    def get_day_at_utc(
-        self, utc: datetime
-    ) -> tuple[str, datetime, list[list[float]]]: ...
+    def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, QuotesType]: ...
 
     @abstractmethod
-    def find_first_day(self) -> tuple[str, datetime, list[list[float]]]: ...
-
-    @abstractmethod
-    def get_next_day(self) -> tuple[str, datetime, list[list[float]]]: ...
+    def find_first_day(self) -> tuple[str, datetime, QuotesType]: ...
 
 
 class TradeProvider(ABC):
@@ -1279,7 +1278,6 @@ class Symbol:
 
     # Members
     # region
-    TicksType = NDArray[np.float64]
     api: KitaApi = None  # type: ignore
     name: str = ""
     bars_dictonary: dict[int, Bars] = {}
@@ -1313,9 +1311,9 @@ class Symbol:
     currency_base: str = ""
     currency_quote: str = ""
     dynamic_leverage: list[LeverageTier] = []
-    datarate_timestamp: NDArray[np.float64] = np.array([], dtype=np.float64)
-    rate_data: NDArray[np.float64] = np.array([], dtype=np.float64)
+    rate_data: QuotesType = []
     rate_data_index: int = 0
+    dataset_name = "Ticks"
 
     @property
     def point_size(self) -> float:
@@ -1410,18 +1408,16 @@ class Symbol:
         return "", self.bars_dictonary[timeframe_seconds]
 
     def build_ohlcva_bars(
-        self, symbol_name: str, ticks: TicksType, timeframe: int
+        self, symbol_name: str, quotes: QuotesType, timeframe: int
     ) -> None:
-        assert (
-            ticks.shape[1] == 3
-        ), "Input ticks array must have shape (N, 3) with columns [timestamp, bid, ask]."
-
-        timestamps = ticks[:, 0]
-        bids = ticks[:, 1]
-        asks = ticks[:, 2]
+        print("Creating Bars " + str(timeframe))
+        np_quotes = np.array(quotes, dtype=np.float64)
+        timestamps = np_quotes[:, 0]
+        bids = np_quotes[:, 1]
+        asks = np_quotes[:, 2]
 
         folder = os.path.join(self.api.cache_path, f"{self.name}")
-        file_name = os.path.join(folder, "test.npz")
+        file_name = os.path.join(folder, "Bars_" + str(timeframe) + ".npz")
         """
         if os.path.exists(folder):
             data = np.load(file_name)
@@ -1458,7 +1454,7 @@ class Symbol:
             ohlcva[i, 2] = np.max(bids[start:end])  # High
             ohlcva[i, 3] = np.min(bids[start:end])  # Low
             ohlcva[i, 4] = bids[end - 1]  # Close
-            ohlcva[i, 5] = end - start  # Volume (number of ticks in the bar)
+            ohlcva[i, 5] = end - start  # Volume (number of np_quotes in the bar)
             ohlcva[i, 6] = asks[start]  # Open ask
             dt = datetime.fromtimestamp(ohlcva[i, 0], tz=timezone.utc)
             if dt.date() != prev_dt.date():
@@ -1471,103 +1467,167 @@ class Symbol:
 
     def init_indis_bars_datarate(self) -> str:
         error = self.init_datarate()
-        if "" == error:
-            for bars in self.bars_dictonary:
-                print(
-                    "Creating "
-                    + self.name
-                    + " bars with "
-                    + str(bars)
-                    + " seconds timeframe"
-                )
-                self.build_ohlcva_bars(self.name, self.rate_data, bars)
+        if "" != error:
+            return error
 
+        error = self.load_datarate()
+        if "" != error:
+            return error
+
+        for bars in self.bars_dictonary:
+            print(
+                "Creating "
+                + self.name
+                + " bars with "
+                + str(bars)
+                + " seconds timeframe"
+            )
+            self.build_ohlcva_bars(self.name, self.rate_data, bars)
         return ""
 
+    def load_datarate(self) -> str:
+        print("Loading " + self.name)
+        folder = os.path.join(self.api.cache_path, f"{self.name}")
+        pattern = os.path.join(folder, self.dataset_name + "*.h5")
+        file_exists = glob.glob(pattern)  # type: ignore
+
+        if len(file_exists) > 0:
+            start_timestamp = self.api.BacktestStartUtc.timestamp()
+            end_timestamp = self.api.BacktestEndUtc.timestamp()
+
+            with h5py.File(file_exists[0], "r") as hdf:
+                # Assuming timestamps are stored in the first dimension of "dataset"
+                dataset = hdf[self.dataset_name]  # Main dataset
+                timestamps = dataset[:, 0]  # type: ignore
+
+                # Find indices for the start and end timestamps
+                start_idx = np.searchsorted(timestamps, start_timestamp, side="left")  # type: ignore
+                end_idx = np.searchsorted(timestamps, end_timestamp, side="right")  # type: ignore
+
+                # Slice and load data between the indices
+                self.rate_data = dataset[start_idx:end_idx, :]  # type: ignore
+
+                return ""
+        else:
+            return pattern + " not found"
+
     def init_datarate(self) -> str:
+        # make sure folder exists
         folder = os.path.join(self.api.cache_path, f"{self.name}")
         if not os.path.exists(os.path.dirname(folder)):
             os.makedirs(folder)
 
-        # load and cache all possible tick data
+        # find first quote if all data is requested
         if datetime.min == self.api.TickDataStartUtc:
             print("Finding first quote of " + self.name)
-            error, start_dt, day = self.quote_provider.find_first_day()  # type:ignore
+            error, start_dt, day_data = (
+                self.quote_provider.find_first_day()
+            )  # type:ignore
             if "" != error:
                 return error, None  # type:ignore
             self.api.TickDataStartUtc = start_dt
 
+        # set time zone awareness
         self.api.TickDataStartUtc = start_utc = self.api.TickDataStartUtc.replace(
             tzinfo=timezone.utc
         )
 
+        # max is up to yesterday because data might not be completed for today
         if datetime.max == self.api.TickDataEndUtc:
             self.api.TickDataEndUtc = datetime.now()
-        self.api.TickDataEndUtc = self.api.TickDataEndUtc.replace(tzinfo=timezone.utc)
+        else:
+            self.api.TickDataEndUtc += timedelta(days=1)
 
-        # Convert start and end datetimes to symbols time zone
+        self.api.TickDataEndUtc = self.api.TickDataEndUtc.replace(tzinfo=timezone.utc)
+        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(
+            tzinfo=timezone.utc
+        )
+        self.api.BacktestEndUtc = self.api.BacktestEndUtc.replace(tzinfo=timezone.utc)
+
+        # set symbol's local time zone
         self.initial_tz_dt = self.api.BacktestStartUtc.astimezone(
             self.time_zone
         ) + timedelta(hours=self.normalized_hours_offset)
         end_utc = self.api.TickDataEndUtc.replace(
             hour=0, minute=0, second=0, microsecond=0
         ) - timedelta(seconds=1)
-
         self.end_tz_dt = end_utc.astimezone(self.time_zone) + timedelta(
             hours=self.normalized_hours_offset
         )
 
-        # check and exit if full time window ticks are in the ticks file
-        start_s = start_utc.strftime("%Y%m%d")
-        end_s = end_utc.strftime("%Y%m%d")
-        file_name = "Ticks_" + start_s + "_" + end_s + ".h5"
-        path = os.path.join(folder, file_name)
-        if os.path.exists(path):
-            print("Loading " + file_name)
-            with h5py.File(path, "r") as hdf:
-                self.rate_data = np.array(hdf["ticks"])
-            return ""
-
-        # test if start date fits; if yes, append new ticks
-        start_path = os.path.join(folder, "Ticks_" + start_s + "*.h5")
-        start_matching = glob.glob(start_path)
-        if start_matching:
-            # todo: append missing ticks to self.rate_data
-            pass
-
-        print("Generating daily tick arrays for " + self.name)
-        error, day_utc, day = self.quote_provider.get_day_at_utc(start_utc)
-        if "" != error:
-            return error
-
+        # data read loop
+        print("Generating quotes for " + self.name)
+        run_utc = start_utc
         error = ""
-        self.rate_data = np.empty((0, 3), dtype=np.float64)
-        day_utc -= timedelta(days=1)
+        pattern = os.path.join(folder, self.dataset_name + "*.h5")
+        file_exists = glob.glob(pattern)  # type: ignore
+        filename_split = ""
+        if len(file_exists) > 0:
+            filename_split = os.path.splitext(os.path.basename(file_exists[0]))[
+                0
+            ].split("_")
+            # start new data collecting at end of existing file
+            run_utc = datetime.strptime(filename_split[2], "%Y%m%d") + timedelta(days=1)
+        new_data: QuotesType = []
+
         while True:
-            day_utc += timedelta(days=1)
             # Stop when reaching today
-            if day_utc.date() >= datetime.now().date():
-                if len(day) > 0:
-                    self.rate_data = np.vstack([self.rate_data, day])
-                    # self.on_tick() # create bars and indicators
+            if run_utc.date() >= self.api.TickDataEndUtc.date():
+                new_numpy = np.array(new_data, dtype="float64")
+                run_utc -= timedelta(days=1)
 
-                # save as hpf5 file
-                with h5py.File(path, "w") as f:
-                    f.create_dataset(  # type:ignore
-                        "ticks",
-                        data=self.rate_data,  # Pass the full NumPy array
-                        chunks=(50_000, 3),  # Define an optimal chunk size for I/O
-                        compression="gzip",  # Enable compression for space efficiency
+                if 0 == len(file_exists):
+                    new_filename = os.path.join(
+                        folder,
+                        self.dataset_name
+                        + "_"
+                        + start_utc.strftime("%Y%m%d")
+                        + "_"
+                        + end_utc.strftime("%Y%m%d")
+                        + ".h5",
                     )
+                    with h5py.File(new_filename, "w") as hdf:
+                        hdf.create_dataset(  # type: ignore
+                            self.dataset_name,
+                            data=new_numpy,
+                            maxshape=(None, new_numpy.shape[1]),
+                            chunks=(50_000, new_numpy.shape[1]),
+                            compression="gzip",  # Enable compression for space efficiency
+                        )
+                else:
+                    if len(new_data) > 0:
+                        with h5py.File(file_exists[0], "a") as hdf:
+                            if self.dataset_name in hdf:
+                                dataset = hdf[self.dataset_name]
+                                old_size = dataset.shape[0]  # type: ignore
+                                new_size = old_size + new_numpy.shape[0]  # type: ignore
+                                dataset.resize((new_size, *dataset.shape[1:]))  # type: ignore
+                                dataset[old_size:new_size, :] = new_numpy  # type: ignore
 
-                print(f"Saved all tick data to {path}")
+                        new_filename = os.path.join(
+                            folder,
+                            self.dataset_name
+                            + "_"
+                            + filename_split[1]
+                            + "_"
+                            + end_utc.strftime("%Y%m%d")
+                            + ".h5",
+                        )
+
+                        os.rename(file_exists[0], new_filename)
                 return ""
 
-            print(self.name + " " + day_utc.strftime("%Y-%m-%d"))
-            if len(day) > 0:
-                self.rate_data = np.vstack([self.rate_data, day])
-                # self.on_tick() # create bars and indicators
-            error, day_utc, day = self.quote_provider.get_next_day()
+            print(self.name + " " + run_utc.strftime("%Y-%m-%d"))
+            error, run_utc, day_data = self.quote_provider.get_day_at_utc(run_utc)
+            if "" != error:
+                return error
+
+            # if daily data exits, append it to new_data
+            if len(day_data) > 0:
+                new_data.extend(day_data)
+
+            # do next day_data
+            run_utc += timedelta(days=1)
 
     def on_tick(self) -> str:
         self.timestamp = self.rate_data[self.rate_data_index][0]
@@ -1765,7 +1825,7 @@ class KitaApi:
     # region
     def create_symbols_bars_indis(self):
         for symbol in self.symbol_dictionary.values():
-            symbol.init_datarate()
+            symbol.init_indis_bars_datarate()
 
     def load_symbol(
         self,

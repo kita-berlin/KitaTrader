@@ -30,10 +30,6 @@ class QuoteCsv(QuoteProvider):
         return None  # type: ignore
         pass
 
-    def get_next_day(self) -> tuple[str, Quote]:
-        return None  # type: ignore
-        pass
-
     def read_quote(self) -> tuple[str, Quote]:
         return None  # type: ignore
         pass

@@ -72,7 +72,7 @@ class QuoteMe(QuoteProvider):
 
         return quote
 
-    def get_next_day(self) -> tuple[str, Quote]:
+    def _get_next_day(self) -> tuple[str, Quote]:
         quote = self.read_quote()
         if None == quote:  # type: ignore
             self.last_utc += timedelta(days=1)
