@@ -39,18 +39,14 @@ class Template(KitaApi):
     ###################################
     def on_init(self) -> None:
 
-        # 1. Define default backtest time window
-        self.BacktestStartUtc = datetime.strptime("1.1.2023", "%d.%m.%Y")
-        self.BacktestEndUtc = datetime.max  # means latest possible
-
-        # 2. Define quote_provider(s)
+        # 1. Define quote_provider(s)
         # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
         quote_provider = Dukascopy("", datarate=0)
         # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", datarate=0),
         # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", datarate=0)
         # quote_provider = QuoteCsv("G:\\Meine Ablage", datarate=0)
 
-        # 3. Define symbol(s); at least one symbol must be defined
+        # 2. Define symbol(s); at least one symbol must be defined
         error, self.nzdcad_symbol = self.load_symbol(
             "NZDCAD",
             quote_provider,

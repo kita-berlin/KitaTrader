@@ -153,7 +153,9 @@ class RunMode(Enum):
     #
     # Summary:
     #     The cBot is running in the Optimization mode.
-    Optimization = 3
+    BruteForceOptimization = 3
+    GeneticOptimization = 4
+    WalkForwardOptimization = 5
 
 
 class TradeType(Enum):
