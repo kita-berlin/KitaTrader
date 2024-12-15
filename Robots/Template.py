@@ -40,7 +40,7 @@ class Template(KitaApi):
     def on_init(self) -> None:
 
         # 1. Define default backtest time window
-        self.BacktestStartUtc = datetime.strptime("1.1.2024", "%d.%m.%Y")
+        self.BacktestStartUtc = datetime.strptime("1.1.2023", "%d.%m.%Y")
         self.BacktestEndUtc = datetime.max  # means latest possible
 
         # 2. Define quote_provider(s)

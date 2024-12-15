@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import math
 import numpy as np
+import pandas as pd
 import h5py  # type:ignore
 import csv
 import traceback
@@ -27,6 +28,11 @@ from KitaApiEnums import (
 T = TypeVar("T", float, int)
 # QuoteType: A list of 3 floats with timestamp, bid, ask
 QuoteType = list[float]
+# NumpyQuoteType = [
+#     ("timestamp", "datetime64[ns]"),
+#     ("bid", "float64"),
+#     ("ask", "float64"),
+# ]
 # QuotesType: A list of single QuoteType
 QuotesType = list[QuoteType]
 
@@ -1474,7 +1480,26 @@ class Symbol:
                 + " seconds timeframe"
             )
             # self.build_ohlcva_bars(self.name, self.rate_data, bars)
-        self.on_tick() # set time, bid, ask for on_start
+
+            # Create a DataFrame
+            df = pd.DataFrame(self.rate_data, columns=["timestamp", "bid", "ask"])
+
+            # Convert timestamp from seconds since epoch to pandas datetime
+            df["datetime"] = pd.to_datetime(df["timestamp"], unit="s")  # type:ignore
+            df.set_index("datetime", inplace=True)  # type:ignore
+
+            # Resample to 1-minute intervals and calculate OHLC
+            bid_ohlc = df["bid"].resample("1min").ohlc()  # type:ignore
+            ask_ohlc = df["ask"].resample("1min").ohlc()  # type:ignore
+
+            # Merge bid and ask OHLC data
+            ohlc = pd.concat({"bid": bid_ohlc, "ask": ask_ohlc}, axis=1)
+
+            # Display the result
+            print(ohlc)
+            pass
+
+        self.on_tick()  # set time, bid, ask for on_start
         return ""
 
     def load_datarate(self) -> str:
@@ -1514,7 +1539,6 @@ class Symbol:
 
                 # Slice and load data between the indices
                 self.rate_data = dataset[start_idx:end, :]  # type: ignore
-
                 return ""
         else:
             return pattern + " not found"
@@ -1590,6 +1614,7 @@ class Symbol:
         while True:
             # Stop when reaching today
             if run_utc.date() >= self.api.TickDataEndUtc.date():
+                # Create the structured NumPy array
                 new_numpy = np.array(new_data, dtype="float64")
                 run_utc -= timedelta(days=1)
 
@@ -1607,11 +1632,20 @@ class Symbol:
                         hdf.create_dataset(  # type: ignore
                             self.dataset_name,
                             data=new_numpy,
-                            maxshape=(None, new_numpy.shape[1]),
-                            chunks=(50_000, new_numpy.shape[1]),
+                            maxshape=(None),
+                            chunks=(50_000),
                             compression="gzip",  # Enable compression for space efficiency
                         )
                 else:
+                    new_filename = os.path.join(
+                        folder,
+                        self.dataset_name
+                        + "_"
+                        + filename_split[1]
+                        + "_"
+                        + end_utc.strftime("%Y%m%d")
+                        + ".h5",
+                    )
                     if len(new_data) > 0:
                         with h5py.File(file_exists[0], "a") as hdf:
                             if self.dataset_name in hdf:
@@ -1621,17 +1655,7 @@ class Symbol:
                                 dataset.resize((new_size, *dataset.shape[1:]))  # type: ignore
                                 dataset[old_size:new_size, :] = new_numpy  # type: ignore
 
-                        new_filename = os.path.join(
-                            folder,
-                            self.dataset_name
-                            + "_"
-                            + filename_split[1]
-                            + "_"
-                            + end_utc.strftime("%Y%m%d")
-                            + ".h5",
-                        )
-
-                        os.rename(file_exists[0], new_filename)
+                    os.rename(file_exists[0], new_filename)
                 return ""
 
             print(self.name + " " + run_utc.strftime("%Y-%m-%d"))
@@ -2509,25 +2533,25 @@ class KitaApi:
 
             # do max/min calcs
             # region
-            self.max(self.max_margin, self.account.margin)
-            if self.max(self.same_time_open, len(self.positions)):
-                self.same_time_open_date_time = symbol.time
-                self.same_time_open_count = len(self.history)
+            # self.max(self.max_margin, self.account.margin)
+            # if self.max(self.same_time_open, len(self.positions)):
+            #     self.same_time_open_date_time = symbol.time
+            #     self.same_time_open_count = len(self.history)
 
-            self.max(self.max_balance, self.account.balance)
-            if self.max(
-                self.max_balance_drawdown_value,
-                self.max_balance[0] - self.account.balance,
-            ):
-                self.max_balance_drawdown_time = symbol.time
-                self.max_balance_drawdown_count = len(self.history)
+            # self.max(self.max_balance, self.account.balance)
+            # if self.max(
+            #     self.max_balance_drawdown_value,
+            #     self.max_balance[0] - self.account.balance,
+            # ):
+            #     self.max_balance_drawdown_time = symbol.time
+            #     self.max_balance_drawdown_count = len(self.history)
 
-            self.max(self.max_equity, self.account.equity)
-            if self.max(
-                self.max_equity_drawdown_value, self.max_equity[0] - self.account.equity
-            ):
-                self.max_equity_drawdown_time = symbol.time
-                self.max_equity_drawdown_count = len(self.history)
+            # self.max(self.max_equity, self.account.equity)
+            # if self.max(
+            #     self.max_equity_drawdown_value, self.max_equity[0] - self.account.equity
+            # ):
+            #     self.max_equity_drawdown_time = symbol.time
+            #     self.max_equity_drawdown_count = len(self.history)
             # endregion
 
             symbol.prev_time = symbol.time
