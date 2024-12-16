@@ -3,7 +3,7 @@ import os
 import math
 import numpy as np
 import pandas as pd
-import h5py  # type:ignore
+import sqlite3  # type:ignore
 import csv
 import traceback
 import pytz
@@ -28,6 +28,7 @@ from KitaApiEnums import (
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
 # QuoteType: A list of 3 floats with timestamp, bid, ask
+# QuoteType = list[float]
 QuoteType = list[float]
 QuotesType = list[QuoteType]
 NumpyQuotesType = NDArray[np.float64]
@@ -1271,7 +1272,7 @@ class Symbol:
 
     # Members
     # region
-    api: KitaApi = None  # type: ignore
+    api: KitaApi
     name: str = ""
     bars_dictonary: dict[int, Bars] = {}
     time: datetime = datetime.min
@@ -1304,7 +1305,7 @@ class Symbol:
     currency_base: str = ""
     currency_quote: str = ""
     dynamic_leverage: list[LeverageTier] = []
-    rate_data: QuotesType = []
+    rate_data = pd.DataFrame(columns=["datetime", "bid", "ask"])
     rate_data_index: int = 0
     ticks_dataset_name = "Ticks"
     bars_dataset_name = "Bars"
@@ -1403,60 +1404,57 @@ class Symbol:
 
     def init_and_load_datarate_and_bars(self) -> str:
         # make sure rate data in the cache folder are up to date
-        error = self.init_datarate_and_bars()
+        error = self.init_datarate()
         if "" != error:
             return error
 
         # load the backtesting specific time window data range
-        error = self.load_datarate_and_bars()
-        if "" != error:
-            return error
+        self.rate_data = self.load_datarate()
+        self.init_bars()
 
         self.on_tick()  # set initaial time, bid, ask for on_start()
         return ""
 
-    def load_datarate_and_bars(self) -> str:
+    def load_datarate(self) -> pd.DataFrame:
         print("Loading " + self.name + " quotes")
         folder = os.path.join(self.api.cache_path, f"{self.name}")
-        pattern = os.path.join(folder, self.ticks_dataset_name + "*.h5")
+        pattern = os.path.join(folder, self.name + "_*." + self.ticks_dataset_name)
         file_exists = glob.glob(pattern)  # type: ignore
 
         if len(file_exists) > 0:
-            start_timestamp = self.api.BacktestStartUtc.timestamp()
-            end_timestamp = self.api.BacktestEndUtc.timestamp()
+            conn = sqlite3.connect(file_exists[0])
+            # SQL query to select rows within the datetime range
+            query = """
+            SELECT datetime, bid, ask
+            FROM Ticks
+            WHERE datetime BETWEEN ? AND ?;
+            """
 
-            with h5py.File(file_exists[0], "r") as hdf:
-                dataset = hdf[self.ticks_dataset_name]  # Main dataset
+            # Use pandas to read the query result into a DataFrame
+            df = pd.read_sql_query(  # type:ignore
+                query,
+                conn,
+                params=(
+                    datetime.timestamp(self.api.BacktestStartUtc),
+                    datetime.timestamp(self.api.BacktestEndUtc),
+                ),
+            )
 
-                # find start_timestamp for BacktestStartUtc
-                start, end = 0, dataset.shape[0] - 1  # type: ignore
-                # Continue until there are only two elements left
-                while start < end - 1:
-                    middle = (start + end) // 2  # type: ignore
-                    middle_timestamp = dataset[middle, 0]  # type: ignore
-                    if middle_timestamp < start_timestamp:  # type: ignore
-                        start = middle  # type: ignore
-                    else:
-                        end = middle  # type: ignore
+            # Close the database connection
+            conn.close()
 
-                # start_timestamp found, now find end_timestamp for BacktestEndUtc
-                start_idx = start  # type: ignore
-                end = dataset.shape[0] - 1  # type: ignore
-                while start < end - 1:
-                    middle = (start + end) // 2  # type: ignore
-                    middle_timestamp = dataset[middle, 0]  # type: ignore
-                    if middle_timestamp < end_timestamp:  # type: ignore
-                        start = middle  # type: ignore
-                    else:
-                        end = middle  # type: ignore
+            print(f"Converting {self.name} datetimes")
+            # Convert the datetime column to a proper datetime type
+            df["datetime"] = pd.to_datetime(  # type:ignore
+                df["datetime"], unit="s"  # type:ignore
+            )
+            df.set_index(  # type:ignore
+                "datetime", inplace=True
+            )  # Set as DatetimeIndex
 
-                # Slice and load data between the indices
-                self.rate_data = dataset[start_idx:end, :]  # type: ignore
-                return ""
-        else:
-            return pattern + " not found"
+        return df  # type:ignore
 
-    def init_datarate_and_bars(self) -> str:
+    def init_datarate(self) -> str:
         # make sure folder exists
         folder = os.path.join(self.api.cache_path, f"{self.name}")
         if not os.path.exists(os.path.dirname(folder)):
@@ -1490,10 +1488,6 @@ class Symbol:
             self.api.BacktestEndUtc += timedelta(days=1)
 
         self.api.AllDataEndUtc = self.api.AllDataEndUtc.replace(tzinfo=timezone.utc)
-        end_utc = self.api.AllDataEndUtc.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) - timedelta(seconds=1)
-
         self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(
             tzinfo=timezone.utc
         )
@@ -1515,67 +1509,45 @@ class Symbol:
         print(f"Collecting {self.name} quotes from quote provider")
         run_utc = start_utc
         error = ""
-        pattern = os.path.join(folder, self.ticks_dataset_name + "*.h5")
+        pattern = os.path.join(folder, self.name + f"_*.{self.ticks_dataset_name}")
         file_exists = glob.glob(pattern)  # type: ignore
         filename_split = ""
-        if len(file_exists) > 0:
-            filename_split = os.path.splitext(os.path.basename(file_exists[0]))[
-                0
-            ].split("_")
-            # start new data collecting at end of existing file
-            run_utc = datetime.strptime(filename_split[2], "%Y%m%d") + timedelta(days=1)
-        new_data: QuotesType = []
+        is_sql_open = False
 
+        if 0 == len(file_exists):
+            sql_file = os.path.join(
+                folder,
+                self.name
+                + "_"
+                + start_utc.strftime("%Y%m%d")
+                + "_"
+                + (start_utc - timedelta(days=1)).strftime("%Y%m%d.")
+                + self.ticks_dataset_name,
+            )
+        else:
+            sql_file = file_exists[0]
+
+        filename_split = os.path.splitext(os.path.basename(sql_file))[0].split("_")
+
+        # start new data collecting at end of existing file
+        run_utc = datetime.strptime(filename_split[2], "%Y%m%d") + timedelta(days=1)
         while True:
             # Stop when AllDataEndUtc is reached
             if run_utc.date() >= self.api.AllDataEndUtc.date():
-                # Create the NumPy array from the new_data: list[list[float]]
-                new_numpy: NumpyQuotesType = np.array(new_data, dtype="float64")
-                run_utc -= timedelta(days=1)
+                if is_sql_open:
+                    conn.commit()  # type:ignore
+                    conn.close()  # type:ignore
 
-                if 0 == len(file_exists):
                     new_filename = os.path.join(
                         folder,
-                        self.ticks_dataset_name
-                        + "_"
-                        + start_utc.strftime("%Y%m%d")
-                        + "_"
-                        + end_utc.strftime("%Y%m%d")
-                        + ".h5",
-                    )
-
-                    with h5py.File(new_filename, "w") as hdf:
-                        hdf.create_dataset(  # type: ignore
-                            self.ticks_dataset_name,
-                            data=new_numpy,
-                            maxshape=(None, new_numpy.shape[1]),
-                            chunks=(50_000, new_numpy.shape[1]),
-                            compression="gzip",  # Enable compression for space efficiency
-                        )
-                else:
-                    new_filename = os.path.join(
-                        folder,
-                        self.ticks_dataset_name
+                        self.name
                         + "_"
                         + filename_split[1]
                         + "_"
-                        + end_utc.strftime("%Y%m%d")
-                        + ".h5",
+                        + (run_utc - timedelta(days=1)).strftime("%Y%m%d.")
+                        + self.ticks_dataset_name,
                     )
-
-                    if len(new_data) > 0:
-                        with h5py.File(file_exists[0], "a") as hdf:
-                            if self.ticks_dataset_name in hdf:
-                                dataset = hdf[self.ticks_dataset_name]
-                                old_size = dataset.shape[0]  # type: ignore
-                                new_size = old_size + new_numpy.shape[0]  # type: ignore
-                                dataset.resize((new_size, *dataset.shape[1:]))  # type: ignore
-                                dataset[old_size:new_size, :] = new_numpy  # type: ignore
-
-                        os.rename(file_exists[0], new_filename)
-
-                self.update_bars(new_filename, start_utc, end_utc, new_numpy)
-
+                    os.rename(sql_file, new_filename)
                 return ""
 
             print(self.name + " " + run_utc.strftime("%Y-%m-%d"))
@@ -1585,84 +1557,73 @@ class Symbol:
 
             # if daily data exits, append it to new_data
             if len(day_data) > 0:
-                new_data.extend(day_data)
+                if not is_sql_open:
+                    conn = sqlite3.connect(sql_file)
+                    # Create the table schema explicitly for smaller file size
+                    conn.execute(
+                        f"""
+                    CREATE TABLE IF NOT EXISTS {self.ticks_dataset_name} (
+                        datetime INTEGER,  -- Optimized as INTEGER for Unix timestamps
+                        bid REAL,               -- Optimized as REAL for floating-point values
+                        ask REAL                -- Optimized as REAL for floating-point values
+                    );
+                    """
+                    )
+
+                    # Set WAL mode (only once per database)
+                    conn.execute("PRAGMA journal_mode=WAL;")
+                    is_sql_open = True
+
+                df = pd.DataFrame(day_data, columns=["datetime", "bid", "ask"])
+                df = df.astype(  # type:ignore
+                    {"datetime": "int64", "bid": "float64", "ask": "float64"}
+                )
+                df.to_sql(
+                    self.ticks_dataset_name,
+                    conn,  # type:ignore
+                    if_exists="append",
+                    index=False,
+                    dtype={
+                        "datetime": "INTEGER",
+                        "bid": "REAL",
+                        "ask": "REAL",
+                    },
+                )
 
             # do next day_data
             run_utc += timedelta(days=1)
 
-    def update_bars(
+    def init_bars(
         self,
-        ticks_filename: str,
-        start_utc: datetime,
-        end_utc: datetime,
-        quotes: NumpyQuotesType,
     ):
-        if 0 == len(quotes):
-            print(f"Loading {self.name} quotes")
-            with h5py.File(ticks_filename, "r") as hdf:
-                quotes = hdf[self.ticks_dataset_name][:]  # type:ignore
+        for timeframe in self.bars_dictonary:
+            print(f"Generating {self.name} {timeframe} seconds OHLC bars")
+            tf = f"{timeframe}s"
+            bars = self.bars_dictonary[timeframe]
 
-        # Create a pandas DataFrame from the quotes
-        df = pd.DataFrame(quotes, columns=["timestamp", "bid", "ask"])
-
-        # Convert timestamp from seconds since epoch to pandas datetime
-        print(f"Converting {self.name} timestamps")
-        df["datetime"] = pd.to_datetime(df["timestamp"], unit="s")  # type:ignore
-        df.set_index("datetime", inplace=True)  # type:ignore
-
-        for bars in self.bars_dictonary:
-            tf = f"{bars}s"
-
-            print(f"Generating {self.name} {bars} seconds OHLC bars")
             # Resample bid OHLC
-            bid_ohlc = df["bid"].resample(tf).ohlc()  # type:ignore
-
-            print(f"Generating {self.name} open ask prices")
-            # Resample and get only the open value of ask
-            ask_open = df["ask"].resample(tf).first()  # type:ignore
-
-            # Merge bid OHLC and ask open data
-            ohlc = pd.concat(
-                {"bid": bid_ohlc, "ask_open": ask_open}, axis=1  # type:ignore
+            resampled = self.rate_data["bid"].resample(tf)  # type:ignore
+            bid_ohlc = resampled.ohlc()  # type:ignore
+            bars.open_times.data = bid_ohlc.index.tolist()  # type:ignore
+            bars.open_prices.data = bid_ohlc["open"].tolist()
+            bars.high_prices.data = bid_ohlc["high"].tolist()
+            bars.low_prices.data = bid_ohlc["low"].tolist()
+            bars.close_prices.data = bid_ohlc["close"].tolist()
+            bars.open_asks.data = (
+                self.rate_data["ask"].resample(tf).first()  # type:ignore
             )
-
-            print(f"Generating {self.name} tick volumes")
-            # Add tick count as volume
-            ohlc["volume"] = df["bid"].resample(tf).count()
-
-            # Convert datetime index to Unix timestamps (int64)
-            ohlc.index = ohlc.index.astype("int64") // 10**9  # type:ignore
-
-            # Convert the OHLC DataFrame to a structured NumPy array
-            ohlc_numpy = ohlc.to_records(index=True)  # type:ignore
-
-            print(f"Storing {self.name} {bars} seconds OHLCVA bars")
-            new_filename = os.path.join(
-                os.path.join(self.api.cache_path, f"{self.name}"),
-                self.bars_dataset_name
-                + "_"
-                + start_utc.strftime("%Y%m%d")
-                + "_"
-                + end_utc.strftime("%Y%m%d")
-                + ".h5",
+            bars.tick_volumes.data = (
+                self.rate_data["bid"].resample(tf).size().tolist()  # type:ignore
             )
-
-            with h5py.File(new_filename, "w") as hdf:
-                hdf.create_dataset(  # type:ignore
-                    self.bars_dataset_name,
-                    data=ohlc_numpy,
-                    maxshape=(None,),  # Allow unlimited rows
-                    chunks=(50_000,),  # Define chunk size for better performance
-                    compression="gzip",  # Optional compression for space efficiency
-                )
+            pass
 
     def on_tick(self) -> str:
-        self.timestamp = self.rate_data[self.rate_data_index][0]
-        self.time = datetime.fromtimestamp(self.timestamp, tz=timezone.utc).astimezone(
-            self.time_zone
-        ) + timedelta(hours=self.normalized_hours_offset)
-        self.bid = self.rate_data[self.rate_data_index][1]
-        self.ask = self.rate_data[self.rate_data_index][2]
+        time = self.rate_data[self.rate_data_index]["datetime"]  # type:ignore
+        self.time = time.astimezone(self.time_zone) + timedelta(  # type:ignore
+            hours=self.normalized_hours_offset
+        )
+        self.bid = self.rate_data[self.rate_data_index]["bid"]
+        self.ask = self.rate_data[self.rate_data_index]["ask"]
 
         if self.rate_data_index + 1 >= len(self.rate_data):
             return "End reached"
@@ -1813,11 +1774,10 @@ class KitaApi:
     # region
     # These parameters can be set by the startup module like MainConsole.py
     # If not set from there, the given default values will be used
-    AllDataStartUtc: datetime = datetime.min
-    AllDataEndUtc: datetime = datetime.max  # means latest possible
-    # AllDataEndUtc = datetime.strptime("10.01.2006", "%d.%m.%Y") # just for debugging purposes
-    BacktestStartUtc: datetime = datetime.min
-    BacktestEndUtc: datetime = datetime.max
+    AllDataStartUtc: datetime
+    AllDataEndUtc: datetime = datetime.max
+    BacktestStartUtc: datetime
+    BacktestEndUtc: datetime
     RunningMode: RunMode = RunMode.SilentBacktesting
     CachePath: str = ""
     AccountInitialBalance: float = 10000.0
@@ -2420,45 +2380,6 @@ class KitaApi:
 
     # Methods
     # region
-
-    # def update_chart_text_and_bars(self):
-    """
-        self.BalanceValue.text = "{:.2f}".format(self.account.balance)
-        self.EquityValue.text = "{:.2f}".format(self.account.equity)
-        self.DatetimeValue.text = self.time.strftime("%d-%m-%Y %H:%M:%S")
-        self.MaxEqDdValue.text = "{:.2f}".format(self.MaxEquityDrawdownValue[0])
-
-        if self.bin_settings.is_visual_mode:
-            if len(self.chart.x) != self.bin_settings.bars_in_chart:
-                self.chart.x = np.arange(self.bin_settings.bars_in_chart)
-                self.chart.x_open = self.chart.x - 0.4
-                self.chart.x_close = self.chart.x + 0.4
-            pass
-
-            self.bars.ChartTimeArray = self.bars.open_times.data[
-                -self.bin_settings.bars_in_chart :
-            ]
-            self.chart.source.data = {
-                "x": self.chart.x,
-                "x_open": self.chart.x_open,
-                "x_close": self.chart.x_close,
-                "lineColors": self.bars.LineColors[
-                    -self.bin_settings.bars_in_chart :
-                ],
-                "times": self.bars.ChartTimeArray,
-                "opens": self.bars.OpenPrices.data[
-                    -self.bin_settings.bars_in_chart :
-                ],
-                "highs": self.bars.HighPrices.data[
-                    -self.bin_settings.bars_in_chart :
-                ],
-                "lows": self.bars.LowPrices.data[-self.bin_settings.bars_in_chart :],
-                "closes": self.bars.ClosePrices.data[
-                    -self.bin_settings.bars_in_chart :
-                ],
-            }
-        pass
-    """
 
     def init(self):
         self.account: Account = Account(self)

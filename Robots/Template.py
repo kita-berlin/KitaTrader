@@ -55,7 +55,7 @@ class Template(KitaApi):
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "New York normalized time")
-            "America/New_York:Normalized",
+            #"America/New_York:Normalized",
         )
         if "" != error:
             print(error)

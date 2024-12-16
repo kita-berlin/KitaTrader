@@ -12,7 +12,7 @@ class MainConsole:
         self.robot.robot = self.robot  # type:ignore
 
         #self.robot.AllDataStartUtc = datetime.min  # means earliest possible what the source can provide
-        self.robot.AllDataStartUtc = datetime.strptime("3.1.2006", "%d.%m.%Y")
+        self.robot.AllDataStartUtc = datetime.strptime("3.1.2024", "%d.%m.%Y")
 
         # Platform mode how the robot will be used by the platform
         # Other possibilities are (not yet implemented): RealTime (live trading),
@@ -29,8 +29,8 @@ class MainConsole:
         # 2. Set the parameters for the robot
         # region
         # Define the backtest time window
-        self.robot.BacktestStartUtc = datetime.strptime("1.1.2023", "%d.%m.%Y")
-        self.robot.BacktestEndUtc = datetime.max  # means latest possible
+        self.robot.BacktestStartUtc = datetime.strptime("1.3.2024", "%d.%m.%Y")
+        self.robot.BacktestEndUtc = datetime.strptime("29.10.2024", "%d.%m.%Y")
         # self.robot.Parameter1 = 1.3
         # self.robot.Parameter2 = 0.29
         # Both (means long and short trades will be done)
