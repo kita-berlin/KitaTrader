@@ -26,7 +26,7 @@ class QuoteCsv(QuoteProvider):
         return None  # type: ignore
         pass
 
-    def find_first_day(self) -> tuple[str, Quote]:
+    def get_first_day(self) -> tuple[str, Quote]:
         return None  # type: ignore
         pass
 

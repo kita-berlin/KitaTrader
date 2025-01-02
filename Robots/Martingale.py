@@ -100,7 +100,7 @@ class Martingale(KitaApi):
             print(str(i) + ": " + symbol_name)
 
         # error, symbol =
-        self.load_symbol(
+        self.request_symbol(
             "NZDCAD",
             quote_provider,
             # Paper trading
@@ -113,28 +113,28 @@ class Martingale(KitaApi):
 
         # Example how to use bars
         # if "" == error:
-        #     error, m1_bars = symbol.load_bars(Constants.SEC_PER_MINUTE)
+        #     error, m1_bars = symbol.request_bars(Constants.SEC_PER_MINUTE)
         #     m1_bars.count
 
         """ example how to use indicators
-        self.time_period = 14
-        self.indi_bars = self.market_data.load_bars(SEC_PER_HOUR, self.symbol.name)
+        self.sma_period = 14
+        self.indi_bars = self.market_data.request_bars(SEC_PER_HOUR, self.symbol.name)
         
         self.sma = indicators.moving_average(
             source =self.indi_bars.close_prices,
-            periods =self.time_period,
+            periods =self.sma_period,
             ma_type =MovingAverageType.Simple,
         )
 
         self.sd = indicators.standard_deviation(
             source =self.indi_bars.close_prices,
-            periods =self.time_period,
+            periods =self.sma_period,
             ma_type =MovingAverageType.Simple,
         )
 
         self.bb_indi:indicators.bollinger_bands = indicators.bollinger_bands(
             source =self.indi_bars.close_prices,
-            periods =self.time_period,
+            periods =self.sma_period,
             standard_deviations =2,
             ma_type =MovingAverageType.Simple,
             shift =0,
@@ -151,18 +151,18 @@ class Martingale(KitaApi):
     def on_tick(self, symbol: Symbol):
         """example how to use own indicators and ta-lib
         ta_sma = talib.SMA(
-            self.indi_bars.close_prices.data[-self.time_period :], timeperiod =self.time_period
+            self.indi_bars.close_prices.data[-self.sma_period :], timeperiod =self.sma_period
         )[-1]
         my_sma = self.Sma.Result.Last(0)
 
         ta_sd = talib.STDDEV(
-            self.indi_bars.close_prices.data[-self.time_period :], timeperiod =self.time_period
+            self.indi_bars.close_prices.data[-self.sma_period :], timeperiod =self.sma_period
         )[-1]
         my_sd = self.Sd.Result.Last(0)
 
         taUpperArray, taMiddleArray, ta_lower_array = talib.BBANDS(
-            self.indi_bars.close_prices.data[-self.time_period :],
-            timeperiod =self.time_period,
+            self.indi_bars.close_prices.data[-self.sma_period :],
+            timeperiod =self.sma_period,
             nbdevup =2,
             nbdevdn =2,
             matype =MA_Type.SMA

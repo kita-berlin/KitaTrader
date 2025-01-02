@@ -9,12 +9,14 @@ import traceback
 import pytz
 import locale
 import glob
+import re
 from abc import ABC, abstractmethod
 from typing import TypeVar, Iterable, Iterator
 from numpy.typing import NDArray
 from datetime import datetime, timedelta, tzinfo, timezone
-
-# from Constants import Constants
+from pathlib import Path
+from bisect import bisect_left
+from zipfile import ZipFile
 from KitaApiEnums import (
     TradeType,
     MovingAverageType,
@@ -1031,13 +1033,13 @@ class Bars:
 
     timeframe_seconds: int  # Get the timeframe in seconds.#
     symbol_name: str  # Gets the symbol name.#
+    open_times: TimeSeries  # Gets the open bar time data.#
     open_prices: DataSeries  # Gets the Open price bars data.#
     high_prices: DataSeries  # Gets the High price bars data.#
     low_prices: DataSeries  # Gets the Low price bars data.#
     close_prices: DataSeries  # Gets the Close price bars data.#
     tick_volumes: DataSeries  # Gets the tick volumes data.#
     open_asks: DataSeries  # The ask value at open time (open_prices are bids)
-    open_times: TimeSeries  # Gets the open bar time data.#
     is_new_bar: bool = False
     chart_time_array = []
     # endregion
@@ -1152,6 +1154,13 @@ class QuoteProvider(ABC):
     symbol: Symbol
     assets_path: str
     symbols: Symbols
+    provider_name: str
+    bar_folder: dict[int, str] = {
+        0: "tick",
+        60: "minute",
+        3600: "hour",
+        86400: "daily",
+    }
 
     def __init__(self, parameter: str, assets_path: str, datarate: int):
         self.parameter = parameter
@@ -1223,7 +1232,7 @@ class QuoteProvider(ABC):
     def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, QuotesType]: ...
 
     @abstractmethod
-    def find_first_day(self) -> tuple[str, datetime, QuotesType]: ...
+    def get_first_day(self) -> tuple[str, datetime, QuotesType]: ...
 
 
 class TradeProvider(ABC):
@@ -1305,7 +1314,7 @@ class Symbol:
     currency_base: str = ""
     currency_quote: str = ""
     dynamic_leverage: list[LeverageTier] = []
-    rate_data = pd.DataFrame(columns=["datetime", "bid", "ask"])
+    tick_data = pd.DataFrame(columns=["datetime", "bid", "ask"])
     rate_data_index: int = 0
     ticks_dataset_name = "Ticks"
     bars_dataset_name = "Bars"
@@ -1396,67 +1405,34 @@ class Symbol:
     def volume_in_units_to_quantity(self, volume: float) -> float:
         return volume / self.lot_size
 
-    def load_bars(self, timeframe_seconds: int) -> tuple[str, Bars]:
+    def request_bars(self, timeframe_seconds: int, lookback: int) -> tuple[str, Bars]:
         if timeframe_seconds not in self.bars_dictonary:
             new_bars = Bars(timeframe_seconds, self.name)
             self.bars_dictonary[timeframe_seconds] = new_bars
         return "", self.bars_dictonary[timeframe_seconds]
 
-    def init_and_load_datarate_and_bars(self) -> str:
-        # make sure rate data in the cache folder are up to date
-        error = self.init_datarate()
-        if "" != error:
-            return error
+    def load_datarate_and_bars(self) -> str:
+        self.set_tz_awareness()
 
-        # load the backtesting specific time window data range
-        self.rate_data = self.load_datarate()
-        self.init_bars()
+        # check if ticks for data rate are rquested and load them
+        if 0 == self.quote_provider.datarate:
+            # get ticks from quote provider
+            error = self._load_ticks()
+            if "" != error:
+                return error
 
-        self.on_tick()  # set initaial time, bid, ask for on_start()
+        # check if any bars are requested and load them
+        if len(self.bars_dictonary) > 0:
+            self.bars_dictonary = dict(sorted(self.bars_dictonary.items()))
+            for key in self.bars_dictonary:
+                self._load_bars(key)
+
+        self.on_tick()  # set initial time, bid, ask for on_start()
         return ""
 
-    def load_datarate(self) -> pd.DataFrame:
-        print("Loading " + self.name + " quotes")
-        folder = os.path.join(self.api.cache_path, f"{self.name}")
-        pattern = os.path.join(folder, self.name + "_*." + self.ticks_dataset_name)
-        file_exists = glob.glob(pattern)  # type: ignore
-
-        if len(file_exists) > 0:
-            conn = sqlite3.connect(file_exists[0])
-            # SQL query to select rows within the datetime range
-            query = """
-            SELECT datetime, bid, ask
-            FROM Ticks
-            WHERE datetime BETWEEN ? AND ?;
-            """
-
-            # Use pandas to read the query result into a DataFrame
-            df = pd.read_sql_query(  # type:ignore
-                query,
-                conn,
-                params=(
-                    datetime.timestamp(self.api.BacktestStartUtc),
-                    datetime.timestamp(self.api.BacktestEndUtc),
-                ),
-            )
-
-            # Close the database connection
-            conn.close()
-
-            print(f"Converting {self.name} datetimes")
-            # Convert the datetime column to a proper datetime type
-            df["datetime"] = pd.to_datetime(  # type:ignore
-                df["datetime"], unit="s"  # type:ignore
-            )
-            df.set_index(  # type:ignore
-                "datetime", inplace=True
-            )  # Set as DatetimeIndex
-
-        return df  # type:ignore
-
-    def init_datarate(self) -> str:
+    def _load_ticks(self) -> str:
         # make sure folder exists
-        folder = os.path.join(self.api.cache_path, f"{self.name}")
+        folder = os.path.join(self.api.CachePath, f"{self.name}")
         if not os.path.exists(os.path.dirname(folder)):
             os.makedirs(folder)
 
@@ -1464,46 +1440,15 @@ class Symbol:
         if datetime.min == self.api.AllDataStartUtc:
             print("Finding first quote of " + self.name)
             error, start_dt, day_data = (
-                self.quote_provider.find_first_day()
+                self.quote_provider.get_first_day()
             )  # type:ignore
             if "" != error:
                 return error, None  # type:ignore
             self.api.AllDataStartUtc = start_dt
 
-        # set time zone awareness etc.
-        # region
         self.api.AllDataStartUtc = start_utc = self.api.AllDataStartUtc.replace(
             tzinfo=timezone.utc
         )
-
-        # max is up to yesterday because data might not be completed for today
-        if datetime.max == self.api.AllDataEndUtc:
-            self.api.AllDataEndUtc = datetime.now()
-        else:
-            self.api.AllDataEndUtc += timedelta(days=1)
-
-        if datetime.max == self.api.BacktestEndUtc:
-            self.api.BacktestEndUtc = datetime.now()
-        else:
-            self.api.BacktestEndUtc += timedelta(days=1)
-
-        self.api.AllDataEndUtc = self.api.AllDataEndUtc.replace(tzinfo=timezone.utc)
-        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(
-            tzinfo=timezone.utc
-        )
-        self.api.BacktestEndUtc.replace(hour=23, minute=59, second=59).replace(
-            tzinfo=timezone.utc
-        )
-
-        # set symbol's local time zone
-        self.start_tz_dt = self.api.BacktestStartUtc.astimezone(
-            self.time_zone
-        ) + timedelta(hours=self.normalized_hours_offset)
-
-        self.end_tz_dt = self.api.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
-            hours=self.normalized_hours_offset
-        )
-        # endregion
 
         # data read loop
         print(f"Collecting {self.name} quotes from quote provider")
@@ -1593,16 +1538,106 @@ class Symbol:
             # do next day_data
             run_utc += timedelta(days=1)
 
-    def init_bars(
-        self,
-    ):
+    def set_tz_awareness(self):
+        self.api.AllDataStartUtc = self.api.AllDataStartUtc.replace(tzinfo=timezone.utc)
+
+        # max is up to yesterday because data might not be completed for today
+        if datetime.max == self.api.AllDataEndUtc:
+            self.api.AllDataEndUtc = datetime.now()
+        else:
+            self.api.AllDataEndUtc += timedelta(days=1)
+        self.api.AllDataEndUtc = self.api.AllDataEndUtc.replace(tzinfo=timezone.utc)
+
+        if datetime.max == self.api.BacktestEndUtc:
+            self.api.BacktestEndUtc = datetime.now().replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ) - timedelta(seconds=1)
+        else:
+            self.api.BacktestEndUtc += timedelta(days=1)
+
+        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(
+            tzinfo=timezone.utc
+        )
+        self.api.BacktestEndUtc = self.api.BacktestEndUtc.replace(tzinfo=timezone.utc)
+
+        # set symbol's local time zones
+        self.start_tz_dt = self.api.BacktestStartUtc.astimezone(
+            self.time_zone
+        ) + timedelta(hours=self.normalized_hours_offset)
+
+        self.end_tz_dt = self.api.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
+            hours=self.normalized_hours_offset
+        )
+
+    def _load_bars(self, key: int):
         for timeframe in self.bars_dictonary:
             print(f"Generating {self.name} {timeframe} seconds OHLC bars")
-            tf = f"{timeframe}s"
+
+            # path to the download folder for this timeframe and symbol
+            folder = os.path.join(
+                self.api.CachePath,
+                self.quote_provider.provider_name,
+                self.quote_provider.bar_folder[timeframe],
+                f"{self.name}",
+            )
+            # file name example: 20140101_quote.zip
+            # yyyyMMdd_quote.zip
+            pattern = re.compile(r"(\d{8})_quote\.zip")
+
+            # List and filter files matching the pattern
+            files: list[tuple[datetime, str]] = []
+            for file in Path(folder).iterdir():
+                match = pattern.match(file.name)
+                if match:
+                    date_str = match.group(1)
+                    file_date = datetime.strptime(date_str, "%Y%m%d").replace(
+                        tzinfo=pytz.UTC
+                    )
+                    files.append((file_date, file.name))
+
+            # Sort files by date
+            files.sort()
+
+            # Extract just the dates for binary search
+            dates = [file_date for file_date, _ in files]
+
+            # Perform binary search
+            start_idx = bisect_left(dates, self.api.robot.BacktestStartUtc)
             bars = self.bars_dictonary[timeframe]
 
+            # line example: 0,1.65753,1.65753,1.65719,1.65736,0,1.65791,1.65791,1.65732,1.65776,0
+            # Bid OHLC, Volume, Ask OHLC, Volume
+            # Loop over the files starting from `start_idx`
+            for file_date, file_name in files[start_idx:]:
+                if file_date > self.api.robot.BacktestEndUtc:
+                    break
+
+                # Path to the zip file
+                zip_path = os.path.join(folder, file_name)
+
+                # Unzip and load data from CSV
+                with ZipFile(zip_path, "r") as zip_file:
+                    for csv_file_name in zip_file.namelist():
+                        with zip_file.open(csv_file_name) as csv_file:
+                            # Read and decode CSV file contents
+                            decoded = csv_file.read().decode("utf-8")
+                            reader = csv.reader(decoded.splitlines())
+                            for row in reader:
+                                bars.open_times.data.append(
+                                    file_date + +timedelta(microseconds=int(row[0]))
+                                )
+                                bars.open_prices.data.append(float(row[1]))
+                                bars.high_prices.data.append(float(row[2]))
+                                bars.low_prices.data.append(float(row[3]))
+                                bars.close_prices.data.append(float(row[4]))
+                                bars.tick_volumes.data.append(int(row[5]))
+                                bars.open_asks.data.append(float(row[6]))
+
+            tf = f"{timeframe}s"
+
+        """
             # Resample bid OHLC
-            resampled = self.rate_data["bid"].resample(tf)  # type:ignore
+            resampled = self.tick_data["bid"].resample(tf)  # type:ignore
             bid_ohlc = resampled.ohlc()  # type:ignore
             bars.open_times.data = bid_ohlc.index.tolist()  # type:ignore
             bars.open_prices.data = bid_ohlc["open"].tolist()
@@ -1610,25 +1645,21 @@ class Symbol:
             bars.low_prices.data = bid_ohlc["low"].tolist()
             bars.close_prices.data = bid_ohlc["close"].tolist()
             bars.open_asks.data = (
-                self.rate_data["ask"].resample(tf).first()  # type:ignore
+                self.tick_data["ask"].resample(tf).first()  # type:ignore
             )
             bars.tick_volumes.data = (
-                self.rate_data["bid"].resample(tf).size().tolist()  # type:ignore
+                self.tick_data["bid"].resample(tf).size().tolist()  # type:ignore
             )
-            pass
+        """
 
     def on_tick(self) -> str:
-        time = self.rate_data[self.rate_data_index]["datetime"]  # type:ignore
-        self.time = time.astimezone(self.time_zone) + timedelta(  # type:ignore
-            hours=self.normalized_hours_offset
-        )
-        self.bid = self.rate_data[self.rate_data_index]["bid"]
-        self.ask = self.rate_data[self.rate_data_index]["ask"]
-
-        if self.rate_data_index + 1 >= len(self.rate_data):
-            return "End reached"
+        time = self.tick_data.index[self.rate_data_index]  # type:ignore
+        self.bid = self.tick_data.iloc[self.rate_data_index]["bid"]
+        self.ask = self.tick_data.iloc[self.rate_data_index]["ask"]
 
         self.rate_data_index += 1
+        if self.rate_data_index >= len(self.tick_data):
+            return "End reached"
         return ""
 
 
@@ -1788,40 +1819,11 @@ class KitaApi:
     # Members
     # region
     robot: KitaApi
-    cache_path: str
     logger: PyLogger = None  # type:ignore
     # endregion
 
     def __init__(self):
-        app_data = os.environ.get("APPDATA")
-        self.cache_path = os.path.join(str(app_data), "KiTa", "Cache")
-
         pass
-
-    # Internal API
-    # region
-    def create_symbols_bars_indis(self):
-        for symbol in self.symbol_dictionary.values():
-            symbol.init_and_load_datarate_and_bars()
-
-    def load_symbol(
-        self,
-        symbol_name: str,
-        quote_provider: QuoteProvider,
-        trade_provider: TradeProvider,
-        str_time_zone: str = "utc",
-    ) -> tuple[str, Symbol]:
-
-        symbol = Symbol(
-            self, symbol_name, quote_provider, trade_provider, str_time_zone
-        )
-
-        quote_provider.init_symbol(self, symbol)
-        trade_provider.init_symbol(self, symbol)
-        self.symbol_dictionary[symbol_name] = symbol
-        return "", symbol
-
-    # endregion
 
     # Trading API
     # region
@@ -1920,6 +1922,32 @@ class KitaApi:
             pass
 
         return trade_result
+
+    # endregion
+
+    # Internal API
+    # region
+    def request_symbol(
+        self,
+        symbol_name: str,
+        quote_provider: QuoteProvider,
+        trade_provider: TradeProvider,
+        str_time_zone: str = "utc",
+    ) -> tuple[str, Symbol]:
+
+        symbol = Symbol(
+            self, symbol_name, quote_provider, trade_provider, str_time_zone
+        )
+
+        quote_provider.init_symbol(self, symbol)
+        trade_provider.init_symbol(self, symbol)
+        self.symbol_dictionary[symbol_name] = symbol
+
+        # check if datarate is not ticks but bars
+        if quote_provider.datarate > 0:
+            symbol.request_bars(quote_provider.datarate, 0)
+
+        return "", symbol
 
     # endregion
 
@@ -2412,8 +2440,12 @@ class KitaApi:
         self.open_duration_count: list[int] = [0] * 1  # arrays because of by reference
         self.max_open_duration: list[timedelta] = [timedelta.min] * 1
 
+        # call robot's OnInit
         self.robot.on_init()  # type: ignore
-        self.create_symbols_bars_indis()
+
+        # load bars and data rate
+        for symbol in self.symbol_dictionary.values():
+            symbol.load_datarate_and_bars()
 
     def start(self):
         for symbol in self.symbol_dictionary.values():

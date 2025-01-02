@@ -1,5 +1,6 @@
 ﻿import talib  # type: ignore
 import time
+import numpy as np
 from math import sqrt
 from KitaApiEnums import *
 from KitaApi import KitaApi, Symbol, Indicators
@@ -41,39 +42,39 @@ class Template(KitaApi):
 
         # 1. Define quote_provider(s)
         # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
-        quote_provider = Dukascopy("", datarate=0)
+        quote_provider = Dukascopy("", datarate=Constants.SEC_PER_MINUTE)
         # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", datarate=0),
         # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", datarate=0)
         # quote_provider = QuoteCsv("G:\\Meine Ablage", datarate=0)
 
         # 2. Define symbol(s); at least one symbol must be defined
-        error, self.nzdcad_symbol = self.load_symbol(
-            "NZDCAD",
+        error, self.nzdcad_symbol = self.request_symbol(
+            "GBP_USD",
             quote_provider,
             # Paper trading
             TradePaper(""),
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "New York normalized time")
-            #"America/New_York:Normalized",
+            "America/New_York:Normalized",
         )
         if "" != error:
             print(error)
             exit()
 
         # 4. Define one or more bars (optional)
-        error, self.m1_bars = self.nzdcad_symbol.load_bars(Constants.SEC_PER_MINUTE)
-        if "" != error:
-            print(error)
-            exit()
+        self.sma_period = 1
+        error, self.h1_bars = self.nzdcad_symbol.request_bars(Constants.SEC_PER_HOUR, 0)
+        error, self.d1_bars = self.nzdcad_symbol.request_bars(Constants.SEC_PER_DAY, 0)
+        error, self.m1_bars = self.nzdcad_symbol.request_bars(Constants.SEC_PER_MINUTE, self.sma_period)
 
         # 5. Define kita indicators (optional)
-        self.time_period = 1
         error, self.sma = Indicators.moving_average(
             source=self.m1_bars.close_prices,
-            periods=self.time_period,
+            periods=self.sma_period,
             ma_type=MovingAverageType.Simple,
         )
+
         if "" != error:
             print(error)
             exit()
@@ -93,22 +94,24 @@ class Template(KitaApi):
         ta_funcs = talib.get_functions()  # type:ignore
         print(ta_funcs)  # type:ignore
 
-        """
-        talib.SMA(  # type:ignore
-            self.m1_bars.close_prices.data[-self.time_period :],  # type:ignore
-            timeperiod=self.time_period,
+        np_close = np.array(self.m1_bars.close_prices.data)
+        ta_sma = talib.SMA(  # type:ignore
+            np_close[-self.sma_period :],  # type:ignore
+            timeperiod=self.sma_period,
         )[-1]
+        print("")
 
+        """
         my_sma = self.Sma.Result.Last(0)
 
         ta_sd = talib.STDDEV(
-            self.indi_bars.close_prices.data[-self.time_period :], timeperiod =self.time_period
+            self.indi_bars.close_prices.data[-self.sma_period :], timeperiod =self.sma_period
         )[-1]
         my_sd = self.Sd.Result.Last(0)
 
         taUpperArray, taMiddleArray, ta_lower_array = talib.BBANDS(
-            self.indi_bars.close_prices.data[-self.time_period :],
-            timeperiod =self.time_period,
+            self.indi_bars.close_prices.data[-self.sma_period :],
+            timeperiod =self.sma_period,
             nbdevup =2,
             nbdevdn =2,
             matype =MA_Type.SMA
@@ -125,13 +128,13 @@ class Template(KitaApi):
     ###################################
     def on_tick(self, symbol: Symbol):
         if symbol.time.date() != symbol.prev_time.date():
-            diff = (time.perf_counter() - self.prev_time)
+            diff = time.perf_counter() - self.prev_time
             print(
                 symbol.time.strftime("%Y-%m-%d %H:%M:%S"),
                 ", ",
                 symbol.time.strftime("%A"),
                 ", ",
-                f"{diff:.3f}"
+                f"{diff:.3f}",
             )
             self.prev_time = time.perf_counter()
 

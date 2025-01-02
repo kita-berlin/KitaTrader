@@ -26,7 +26,7 @@ class BrokerMt5(QuoteProvider, TradeProvider):
     def get_day_at_utc(self, dt: datetime) -> tuple[str, Quote]:
         return None  # type: ignore
 
-    def find_first_day(self) -> tuple[str, Quote]:
+    def get_first_day(self) -> tuple[str, Quote]:
         return None  # type: ignore
 
     def read_quote(self) -> tuple[str, Quote]:

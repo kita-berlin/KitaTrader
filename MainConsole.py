@@ -11,13 +11,17 @@ class MainConsole:
         self.robot = Template()  # Define here which robot should be used
         self.robot.robot = self.robot  # type:ignore
 
-        #self.robot.AllDataStartUtc = datetime.min  # means earliest possible what the source can provide
-        self.robot.AllDataStartUtc = datetime.strptime("3.1.2024", "%d.%m.%Y")
+        # self.robot.AllDataStartUtc = datetime.min means earliest possible what the source can provide
+        # End datetime always is yesterday. Cannot be today because today's data are not complete yet
+        self.robot.AllDataStartUtc = datetime.strptime("3.1.2006", "%d.%m.%Y")
 
         # Platform mode how the robot will be used by the platform
         # Other possibilities are (not yet implemented): RealTime (live trading),
         # VisualBacktesting, BruteForceOptimization, GeneticOptimization, WalkForwardOptimization
         self.robot.RunningMode = RunMode.SilentBacktesting
+
+        # The path where the robot can store data
+        self.robot.CachePath = "..\\QuantConnect\\MyLean\\MyData\\cfd"
 
         # Paper trading initial account settings
         self.robot.AccountInitialBalance = 10000
@@ -29,8 +33,9 @@ class MainConsole:
         # 2. Set the parameters for the robot
         # region
         # Define the backtest time window
-        self.robot.BacktestStartUtc = datetime.strptime("1.3.2024", "%d.%m.%Y")
-        self.robot.BacktestEndUtc = datetime.strptime("29.10.2024", "%d.%m.%Y")
+        self.robot.BacktestStartUtc = datetime.strptime("1.12.2024", "%d.%m.%Y")
+        #self.robot.BacktestEndUtc = datetime.strptime("10.12.2024", "%d.%m.%Y")
+        self.robot.BacktestEndUtc = datetime.max
         # self.robot.Parameter1 = 1.3
         # self.robot.Parameter2 = 0.29
         # Both (means long and short trades will be done)

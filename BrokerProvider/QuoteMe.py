@@ -55,7 +55,7 @@ class QuoteMe(QuoteProvider):
 
         return quote
 
-    def find_first_day(self) -> tuple[str, Quote]:
+    def get_first_day(self) -> tuple[str, Quote]:
         symbol_timeframe_path = os.path.join(self.symbol_path, "m1")
 
         # Get all filenames in the directory

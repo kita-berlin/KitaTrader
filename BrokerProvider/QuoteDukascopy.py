@@ -10,25 +10,25 @@ from KitaApi import QuoteProvider, KitaApi, Symbol, QuoteType, QuotesType
 
 class Dukascopy(QuoteProvider):
     provider_name = "Dukascopy"
-    assets_file_name: str = "Assets_Dukascopy_Live.csv"
+    _assets_file_name: str = "Assets_Dukascopy_Live.csv"
 
-    WebRoot = "http://www.dukascopy.com/datafeed"
-    headers = {
+    _web_root = "http://www.dukascopy.com/datafeed"
+    _headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like\
 		Gecko) Chrome/102.0.5005.61 Safari/537.36"
     }
-    last_hour_base_timestamp: float = 0
+    _last_hour_base_timestamp: float = 0
 
     def __init__(self, parameter: str, datarate: int):
-        assets_path = os.path.join("Files", self.assets_file_name)
+        assets_path = os.path.join("Files", self._assets_file_name)
         QuoteProvider.__init__(self, parameter, assets_path, datarate)
         self.requests = requests.Session()
-        self.requests.headers.update(self.headers)
+        self.requests.headers.update(self._headers)
 
     def init_symbol(self, api: KitaApi, symbol: Symbol):
         self.api = api
         self.symbol = symbol
-        self.cache_path = os.path.join(api.cache_path, self.provider_name)
+        self.cache_path = os.path.join(api.CachePath, "cache")
         if not os.path.exists(self.cache_path):
             os.makedirs(self.cache_path)
 
@@ -37,7 +37,7 @@ class Dukascopy(QuoteProvider):
         self.last_utc = run_utc = utc.replace(hour=0, minute=0, second=0, microsecond=0)
 
         while True:
-            url = self._get_url(self.WebRoot, run_utc, self.symbol.name)
+            url = self._get_url(self._web_root, run_utc, self.symbol.name)
             path = self._get_file_name(self.cache_path, run_utc, self.symbol.name)
             if os.path.exists(path):
                 with open(path, "rb") as file:
@@ -64,13 +64,13 @@ class Dukascopy(QuoteProvider):
 
         return "", self.last_utc, day_data
 
-    def find_first_day(self) -> tuple[str, datetime, QuotesType]:
+    def get_first_day(self) -> tuple[str, datetime, QuotesType]:
         start_date = datetime(2000, 1, 1)
         end_date = datetime.now()
 
         while (end_date - start_date).days > 1:
             mid_date = start_date + (end_date - start_date) / 2
-            url = self._get_url(Dukascopy.WebRoot, mid_date, self.symbol.name)
+            url = self._get_url(Dukascopy._web_root, mid_date, self.symbol.name)
             try:
                 response = self.requests.get(url, stream=True)
                 response.raise_for_status()
