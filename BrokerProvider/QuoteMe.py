@@ -2,7 +2,7 @@ import os
 import struct
 import pytz
 from datetime import datetime, timedelta
-from KitaApi import Quote, QuoteProvider, KitaApi, Symbol
+from KitaApi import QuotesType, QuoteProvider, KitaApi, Symbol
 
 
 class QuoteMe(QuoteProvider):
@@ -23,7 +23,7 @@ class QuoteMe(QuoteProvider):
         self.symbol = symbol
         self.symbol_path = os.path.join(self.parameter, self.symbol.name)
 
-    def get_day_at_utc(self, dt: datetime) -> tuple[str, Quote]:
+    def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, QuotesType]:
         self.bars_filename = os.path.join(
             self.symbol_path,
             "m1",
@@ -55,7 +55,7 @@ class QuoteMe(QuoteProvider):
 
         return quote
 
-    def get_first_day(self) -> tuple[str, Quote]:
+    def get_first_day(self) -> tuple[str, QuotesType]:
         symbol_timeframe_path = os.path.join(self.symbol_path, "m1")
 
         # Get all filenames in the directory
@@ -72,7 +72,7 @@ class QuoteMe(QuoteProvider):
 
         return quote
 
-    def _get_next_day(self) -> tuple[str, Quote]:
+    def _get_next_day(self) -> tuple[str, QuotesType]:
         quote = self.read_quote()
         if None == quote:  # type: ignore
             self.last_utc += timedelta(days=1)
@@ -83,7 +83,7 @@ class QuoteMe(QuoteProvider):
         else:
             return quote
 
-    def read_quote(self) -> tuple[str, Quote]:
+    def read_quote(self) -> tuple[str, QuotesType]:
         quote = Quote()
 
         dt_data = self.file_handle.read(8)  # type: ignore

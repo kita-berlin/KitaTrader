@@ -1,6 +1,7 @@
 from Api.CoFu import *
 from KitaApiEnums import *
-from Template import Template
+#from Template import Template
+from Downloader import Downloader
 
 
 class MainConsole:
@@ -8,7 +9,7 @@ class MainConsole:
 
         # 1. Set the parameters of the platform
         # region
-        self.robot = Template()  # Define here which robot should be used
+        self.robot = Downloader()  # Define here which robot should be used
         self.robot.robot = self.robot  # type:ignore
 
         # self.robot.AllDataStartUtc = datetime.min means earliest possible what the source can provide
@@ -33,13 +34,11 @@ class MainConsole:
         # 2. Set the parameters for the robot
         # region
         # Define the backtest time window
-        self.robot.BacktestStartUtc = datetime.strptime("1.12.2024", "%d.%m.%Y")
+        self.robot.BacktestStartUtc = datetime.strptime("1.1.2024", "%d.%m.%Y")
         #self.robot.BacktestEndUtc = datetime.strptime("10.12.2024", "%d.%m.%Y")
         self.robot.BacktestEndUtc = datetime.max
         # self.robot.Parameter1 = 1.3
         # self.robot.Parameter2 = 0.29
-        # Both (means long and short trades will be done)
-        self.robot.Direction = TradeDirection.Both
         # endregion
 
         # 3. Initialize the platform and the robot

@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from KitaApi import QuoteProvider, Quote, KitaApi, Symbol
+from KitaApi import QuoteProvider, QuotesType, KitaApi, Symbol
 
 
 class QuoteCsv(QuoteProvider):
@@ -22,14 +22,14 @@ class QuoteCsv(QuoteProvider):
         self.symbol_path = os.path.join(self.parameter, self.symbol.name)
         pass
 
-    def get_day_at_utc(self, dt: datetime) -> tuple[str, Quote]:
+    def get_day_at_utc(self, dt: datetime) -> tuple[str, QuotesType]:
         return None  # type: ignore
         pass
 
-    def get_first_day(self) -> tuple[str, Quote]:
+    def get_first_day(self) -> tuple[str, QuotesType]:
         return None  # type: ignore
         pass
 
-    def read_quote(self) -> tuple[str, Quote]:
+    def read_quote(self) -> tuple[str, QuotesType]:
         return None  # type: ignore
         pass

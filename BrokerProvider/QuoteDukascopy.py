@@ -3,10 +3,11 @@ import struct
 import requests
 from datetime import datetime, timedelta
 from lzma import LZMADecompressor, FORMAT_AUTO  # type: ignore
-from KitaApi import QuoteProvider, KitaApi, Symbol, QuoteType, QuotesType
+from KitaApi import QuoteProvider, KitaApi, Symbol, QuotesType
 
-# Instead of numpy arrays we are using QuotesType] as a temporary container 
+# Instead of numpy arrays we are using QuotesType] as a temporary container
 # and later convert it to a NumPy array to avoid frequent memory reallocations.
+
 
 class Dukascopy(QuoteProvider):
     provider_name = "Dukascopy"
@@ -37,7 +38,7 @@ class Dukascopy(QuoteProvider):
         self.last_utc = run_utc = utc.replace(hour=0, minute=0, second=0, microsecond=0)
 
         while True:
-            url = self._get_url(self._web_root, run_utc, self.symbol.name)
+            url = self._get_url(self._web_root, run_utc, self.symbol.broker_symbol_name)
             path = self._get_file_name(self.cache_path, run_utc, self.symbol.name)
             if os.path.exists(path):
                 with open(path, "rb") as file:
@@ -70,7 +71,7 @@ class Dukascopy(QuoteProvider):
 
         while (end_date - start_date).days > 1:
             mid_date = start_date + (end_date - start_date) / 2
-            url = self._get_url(Dukascopy._web_root, mid_date, self.symbol.name)
+            url = self._get_url(Dukascopy._web_root, mid_date, self.symbol.broker_symbol_name)
             try:
                 response = self.requests.get(url, stream=True)
                 response.raise_for_status()
@@ -78,7 +79,7 @@ class Dukascopy(QuoteProvider):
             except requests.RequestException:
                 start_date = mid_date
 
-        return self.get_day_at_utc(end_date)
+        return self.get_day_at_utc(end_date + timedelta(days=1))
 
     def _get_hour(self, hour_base_time: datetime, data: bytes) -> QuotesType:
         hour: QuotesType = []
@@ -86,29 +87,20 @@ class Dukascopy(QuoteProvider):
         hour_base_timestamp = hour_base_time.timestamp()
 
         while True:
-            quote: QuoteType = []
             # Python timestamp is microseconds since 1.1.1970
             # Ducascopy timedelta is milliseconds since hour start
-            timestamp: float = (
-                hour_base_timestamp
-                + struct.unpack_from(">I", data, current_index)[0] / 1e3
-            )
+            timestamp: float = hour_base_timestamp + struct.unpack_from(">I", data, current_index)[0] / 1e3
 
             ask = round(
-                struct.unpack_from(">I", data, current_index + 4)[0]
-                * self.symbol.point_size,
+                struct.unpack_from(">I", data, current_index + 4)[0] * self.symbol.point_size,
                 self.symbol.digits,
             )
             bid = round(
-                struct.unpack_from(">I", data, current_index + 8)[0]
-                * self.symbol.point_size,
+                struct.unpack_from(">I", data, current_index + 8)[0] * self.symbol.point_size,
                 self.symbol.digits,
             )
 
-            quote.append(timestamp)
-            quote.append(bid)
-            quote.append(ask)
-            hour.append(quote)
+            hour.append((hour_base_time + timedelta(milliseconds=timestamp), bid, ask))
             current_index += 20
             if current_index >= len(data):
                 break

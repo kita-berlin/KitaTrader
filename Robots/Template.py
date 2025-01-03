@@ -48,7 +48,7 @@ class Template(KitaApi):
         # quote_provider = QuoteCsv("G:\\Meine Ablage", datarate=0)
 
         # 2. Define symbol(s); at least one symbol must be defined
-        error, self.nzdcad_symbol = self.request_symbol(
+        error, self.gbpusd_symbol = self.request_symbol(
             "GBP_USD",
             quote_provider,
             # Paper trading
@@ -64,9 +64,9 @@ class Template(KitaApi):
 
         # 4. Define one or more bars (optional)
         self.sma_period = 1
-        error, self.h1_bars = self.nzdcad_symbol.request_bars(Constants.SEC_PER_HOUR, 0)
-        error, self.d1_bars = self.nzdcad_symbol.request_bars(Constants.SEC_PER_DAY, 0)
-        error, self.m1_bars = self.nzdcad_symbol.request_bars(Constants.SEC_PER_MINUTE, self.sma_period)
+        error, self.h1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_HOUR, 0)
+        error, self.d1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_DAY, 0)
+        error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, self.sma_period)
 
         # 5. Define kita indicators (optional)
         error, self.sma = Indicators.moving_average(

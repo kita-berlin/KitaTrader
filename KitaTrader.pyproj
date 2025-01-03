@@ -29,6 +29,7 @@
     <Content Include="Files\Assets_Dukascopy_Live.csv" />
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
     <Content Include="BrokerProvider\QuoteTradeMt5.py" />
+    <Content Include="pyproject.toml" />
     <Content Include="typings\MetaTrader5\__init__.pyi" />
   </ItemGroup>
   <ItemGroup>
@@ -49,6 +50,7 @@
     <Compile Include="BrokerProvider\QuoteCsv.py" />
     <Compile Include="BrokerProvider\TradePaper.py" />
     <Compile Include="BrokerProvider\QuoteMe.py" />
+    <Compile Include="Robots\Downloader.py" />
     <Compile Include="Robots\Template.py" />
     <Compile Include="Robots\Martingale.py" />
     <Compile Include="Robots\Ultron.py" />

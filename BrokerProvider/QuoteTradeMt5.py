@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from KitaApi import QuoteProvider, TradeProvider, Quote, KitaApi, Symbol
+from KitaApi import QuotesType, QuoteProvider, TradeProvider, KitaApi, Symbol
 
 # import MetaTrader5 as mt5
 
@@ -23,13 +23,13 @@ class BrokerMt5(QuoteProvider, TradeProvider):
         self.cache_path = cache_path
         pass
 
-    def get_day_at_utc(self, dt: datetime) -> tuple[str, Quote]:
+    def get_day_at_utc(self, dt: datetime) -> tuple[str, QuotesType]:
         return None  # type: ignore
 
-    def get_first_day(self) -> tuple[str, Quote]:
+    def get_first_day(self) -> tuple[str, QuotesType]:
         return None  # type: ignore
 
-    def read_quote(self) -> tuple[str, Quote]:
+    def read_quote(self) -> tuple[str, QuotesType]:
         return None  # type: ignore
 
     def update_account(self):

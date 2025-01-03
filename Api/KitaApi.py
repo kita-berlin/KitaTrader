@@ -8,8 +8,8 @@ import csv
 import traceback
 import pytz
 import locale
-import glob
 import re
+from Constants import *
 from abc import ABC, abstractmethod
 from typing import TypeVar, Iterable, Iterator
 from numpy.typing import NDArray
@@ -29,9 +29,8 @@ from KitaApiEnums import (
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
-# QuoteType: A list of 3 floats with timestamp, bid, ask
-# QuoteType = list[float]
-QuoteType = list[float]
+# QuoteType: utc, bid, ask
+QuoteType = tuple[datetime, float, float]
 QuotesType = list[QuoteType]
 NumpyQuotesType = NDArray[np.float64]
 
@@ -68,13 +67,6 @@ class Bar:
         self.open_ask = open_ask
 
 
-class Quote:
-    def __init__(self, timestamp: float = 0, bid: float = 0, ask: float = 0):
-        self.timestamp = timestamp
-        self.bid = bid
-        self.ask = ask
-
-
 class PyLogger:
     HEADER_AND_SEVERAL_LINES: int = 0
     NO_HEADER: int = 1
@@ -97,9 +89,7 @@ class PyLogger:
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-        new_file = self.make_unique_logfile_name(
-            os.path.join(folder, os.path.basename(filename))
-        )
+        new_file = self.make_unique_logfile_name(os.path.join(folder, os.path.basename(filename)))
         ret_val = os.path.exists(new_file)
         try:
             self.log_stream_writer = open(new_file, "a" if append else "w")
@@ -548,9 +538,7 @@ class TimeSeries(Iterable[datetime]):
     def count(self) -> int:  # Gets the number of elements contained in the series.
         return len(self.data)
 
-    def last(
-        self, index: int
-    ) -> datetime:  # Access a value in the data series certain number of bars ago.
+    def last(self, index: int) -> datetime:  # Access a value in the data series certain number of bars ago.
         return self.data[self.count - index - 1]
 
     def get_index_by_exact_time(self, dateTime: datetime) -> int:
@@ -651,9 +639,7 @@ class StandardDeviation(IIndicator):
         pass
 
     def initialize(self):
-        self._movingAverage: MovingAverage = SimpleMovingAverage(
-            self.source, self.periods
-        )
+        self._movingAverage: MovingAverage = SimpleMovingAverage(self.source, self.periods)
 
     def calculate(self, index: int) -> None:
         num1: float = 0.0
@@ -1038,7 +1024,7 @@ class Bars:
     high_prices: DataSeries  # Gets the High price bars data.#
     low_prices: DataSeries  # Gets the Low price bars data.#
     close_prices: DataSeries  # Gets the Close price bars data.#
-    tick_volumes: DataSeries  # Gets the tick volumes data.#
+    volume: DataSeries  # Gets the tick volumes data.#
     open_asks: DataSeries  # The ask value at open time (open_prices are bids)
     is_new_bar: bool = False
     chart_time_array = []
@@ -1056,13 +1042,11 @@ class Bars:
             self.high_prices = DataSeries()
             self.low_prices = DataSeries()
             self.close_prices = DataSeries()
-            self.tick_volumes = DataSeries()
+            self.volume = DataSeries()
             # self.line_colors = np.array([])
 
     # forward declarations
-    def is_new_bar_get(
-        self, seconds: int, time: datetime, prevTime: datetime
-    ) -> bool: ...
+    def is_new_bar_get(self, seconds: int, time: datetime, prevTime: datetime) -> bool: ...
 
     def on_tick(self, bar: Bar) -> None:
         self.is_new_bar = False
@@ -1071,9 +1055,7 @@ class Bars:
         if (
             0 == self.open_times.count  # on init
             or 0 == self.timeframe_seconds  # tick data rate
-            or self.is_new_bar_get(  # new bar ?
-                self.timeframe_seconds, bar.open_time, self.open_times.data[-1]
-            )
+            or self.is_new_bar_get(self.timeframe_seconds, bar.open_time, self.open_times.data[-1])  # new bar ?
         ):
             self.open_times.data.append(bar.open_time)
             self.open_prices.data.append(bar.open_price)
@@ -1082,20 +1064,20 @@ class Bars:
                 self.high_prices.data.append(bar.open_price)
                 self.low_prices.data.append(bar.open_price)
                 self.close_prices.data.append(bar.open_price)
-                self.tick_volumes.data.append(0)
+                self.volume.data.append(0)
 
             self.is_new_bar = True
         else:
             self.high_prices.data[-1] = max(self.high_prices.data[-1], bar.high_price)
             self.low_prices.data[-1] = min(self.low_prices.data[-1], bar.low_price)
             self.close_prices.data[-1] = bar.close_price
-            self.tick_volumes.data[-1] += 1 if 0 == bar.volume else bar.volume
+            self.volume.data[-1] += 1 if 0 == bar.volume else bar.volume
 
         # self.open_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
         # self.high_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
         # self.low_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
         # self.close_prices.update_indicators(self.open_times.count - 1, self.is_new_bar)
-        # self.tick_volumes.update_indicators(self.open_times.count - 1, self.is_new_bar)
+        # self.volume.update_indicators(self.open_times.count - 1, self.is_new_bar)
         # self.open_asks.update_indicators(self.open_times.count - 1, self.is_new_bar)
 
     """
@@ -1213,7 +1195,7 @@ class QuoteProvider(ABC):
                     symbol.min_volume = float(line[9])
                     symbol.max_volume = 10000 * symbol.min_volume
                     symbol.commission = float(line[10])
-                    symbol.broker_symbol = line[11]
+                    symbol.broker_symbol_name = line[11]
                     symbol.symbol_leverage = float(line[12])
                     symbol.lot_size = float(line[13])
                     symbol.currency_base = line[14].strip()
@@ -1309,15 +1291,12 @@ class Symbol:
     max_volume: float = 0
     lot_size: float = 0
     commission: float = 0
-    broker_symbol: str = ""
     symbol_leverage: float = 0
     currency_base: str = ""
     currency_quote: str = ""
     dynamic_leverage: list[LeverageTier] = []
-    tick_data = pd.DataFrame(columns=["datetime", "bid", "ask"])
+    tick_data: QuotesType = []
     rate_data_index: int = 0
-    ticks_dataset_name = "Ticks"
-    bars_dataset_name = "Bars"
 
     @property
     def point_size(self) -> float:
@@ -1355,6 +1334,15 @@ class Symbol:
     def spread(self):
         return self.ask - self.bid
 
+    # Define aggregation for OHLCV
+    ohlcva_aggregation = {
+        "open": "first",  # First open price in the period
+        "high": "max",  # Maximum high price in the period
+        "low": "min",  # Minimum low price in the period
+        "close": "last",  # Last close price in the period
+        "volume": "sum",  # Sum of volumes in the period
+        "open_ask": "first",  # First open_ask value in the period
+    }
     # endregion
 
     def __init__(
@@ -1405,7 +1393,7 @@ class Symbol:
     def volume_in_units_to_quantity(self, volume: float) -> float:
         return volume / self.lot_size
 
-    def request_bars(self, timeframe_seconds: int, lookback: int) -> tuple[str, Bars]:
+    def request_bars(self, timeframe_seconds: int, lookback: int = 0) -> tuple[str, Bars]:
         if timeframe_seconds not in self.bars_dictonary:
             new_bars = Bars(timeframe_seconds, self.name)
             self.bars_dictonary[timeframe_seconds] = new_bars
@@ -1423,120 +1411,87 @@ class Symbol:
 
         # check if any bars are requested and load them
         if len(self.bars_dictonary) > 0:
-            self.bars_dictonary = dict(sorted(self.bars_dictonary.items()))
-            for key in self.bars_dictonary:
-                self._load_bars(key)
+            self._load_bars()
 
         self.on_tick()  # set initial time, bid, ask for on_start()
         return ""
 
     def _load_ticks(self) -> str:
-        # make sure folder exists
-        folder = os.path.join(self.api.CachePath, f"{self.name}")
-        if not os.path.exists(os.path.dirname(folder)):
-            os.makedirs(folder)
-
         # find first quote if all data is requested
-        if datetime.min == self.api.AllDataStartUtc:
+        if datetime.min.replace(tzinfo=timezone.utc) == self.api.AllDataStartUtc:
             print("Finding first quote of " + self.name)
-            error, start_dt, day_data = (
-                self.quote_provider.get_first_day()
-            )  # type:ignore
+            error, start_dt, day_data = self.quote_provider.get_first_day()  # type:ignore
             if "" != error:
                 return error, None  # type:ignore
             self.api.AllDataStartUtc = start_dt
 
-        self.api.AllDataStartUtc = start_utc = self.api.AllDataStartUtc.replace(
-            tzinfo=timezone.utc
-        )
+        self.api.AllDataStartUtc = self.api.AllDataStartUtc.replace(tzinfo=timezone.utc)
 
         # data read loop
-        print(f"Collecting {self.name} quotes from quote provider")
-        run_utc = start_utc
-        error = ""
-        pattern = os.path.join(folder, self.name + f"_*.{self.ticks_dataset_name}")
-        file_exists = glob.glob(pattern)  # type: ignore
-        filename_split = ""
-        is_sql_open = False
+        print(f"Loading {self.name} quotes from quote provider")
+        files: list[tuple[datetime, str]] = []
+        folder = os.path.join(
+            self.api.CachePath,
+            self.quote_provider.provider_name,
+            "tick",
+            f"{self.name}",
+        )
 
-        if 0 == len(file_exists):
-            sql_file = os.path.join(
-                folder,
-                self.name
-                + "_"
-                + start_utc.strftime("%Y%m%d")
-                + "_"
-                + (start_utc - timedelta(days=1)).strftime("%Y%m%d.")
-                + self.ticks_dataset_name,
-            )
-        else:
-            sql_file = file_exists[0]
+        # file name example: 20140101_quote.zip
+        # yyyyMMdd_quote.zip
+        # List and filter files matching the pattern
+        for file in Path(folder).iterdir():
+            match = re.compile(r"(\d{8})_quote\.zip").match(file.name)
+            if match:
+                date_str = match.group(1)
+                file_date = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=pytz.UTC)
+                files.append((file_date, file.name))
 
-        filename_split = os.path.splitext(os.path.basename(sql_file))[0].split("_")
+        files.sort()
+        # Extract just the dates for binary search
+        dates = [file_date for file_date, _ in files]
 
-        # start new data collecting at end of existing file
-        run_utc = datetime.strptime(filename_split[2], "%Y%m%d") + timedelta(days=1)
-        while True:
-            # Stop when AllDataEndUtc is reached
-            if run_utc.date() >= self.api.AllDataEndUtc.date():
-                if is_sql_open:
-                    conn.commit()  # type:ignore
-                    conn.close()  # type:ignore
+        # Perform binary search
+        start_idx = bisect_left(dates, self.api.robot.BacktestStartUtc)
 
-                    new_filename = os.path.join(
-                        folder,
-                        self.name
-                        + "_"
-                        + filename_split[1]
-                        + "_"
-                        + (run_utc - timedelta(days=1)).strftime("%Y%m%d.")
-                        + self.ticks_dataset_name,
-                    )
-                    os.rename(sql_file, new_filename)
-                return ""
+        # line example: 79212312,1.65616,1.65694
+        # milliseconds offset, bid, ask
+        # Loop over the files starting from start_idx
+        for file_date, file_name in files[start_idx:]:
+            print(self.name + " " + file_date.strftime("%Y-%m-%d"))
+            if file_date > self.api.robot.BacktestEndUtc:
+                break
 
-            print(self.name + " " + run_utc.strftime("%Y-%m-%d"))
-            error, run_utc, day_data = self.quote_provider.get_day_at_utc(run_utc)
-            if "" != error:
-                return error
+            # Path to the zip file
+            zip_path = os.path.join(folder, file_name)
 
-            # if daily data exits, append it to new_data
-            if len(day_data) > 0:
-                if not is_sql_open:
-                    conn = sqlite3.connect(sql_file)
-                    # Create the table schema explicitly for smaller file size
-                    conn.execute(
-                        f"""
-                    CREATE TABLE IF NOT EXISTS {self.ticks_dataset_name} (
-                        datetime INTEGER,  -- Optimized as INTEGER for Unix timestamps
-                        bid REAL,               -- Optimized as REAL for floating-point values
-                        ask REAL                -- Optimized as REAL for floating-point values
-                    );
-                    """
-                    )
+            # Unzip and load data from CSV
+            with ZipFile(zip_path, "r") as zip_file:
+                for csv_file_name in zip_file.namelist():
+                    with zip_file.open(csv_file_name) as csv_file:
+                        # Read and decode CSV file contents
+                        decoded = csv_file.read().decode("utf-8")
+                        reader = csv.reader(decoded.splitlines())
+                        for row in reader:
+                            tick = (
+                                (file_date + timedelta(milliseconds=int(row[0]))).replace(tzinfo=timezone.utc),
+                                float(row[1]),
+                                float(row[2]),
+                            )
+                            self.tick_data.append(tick)
 
-                    # Set WAL mode (only once per database)
-                    conn.execute("PRAGMA journal_mode=WAL;")
-                    is_sql_open = True
+        return ""
 
-                df = pd.DataFrame(day_data, columns=["datetime", "bid", "ask"])
-                df = df.astype(  # type:ignore
-                    {"datetime": "int64", "bid": "float64", "ask": "float64"}
-                )
-                df.to_sql(
-                    self.ticks_dataset_name,
-                    conn,  # type:ignore
-                    if_exists="append",
-                    index=False,
-                    dtype={
-                        "datetime": "INTEGER",
-                        "bid": "REAL",
-                        "ask": "REAL",
-                    },
-                )
+        """
+        # Get ticks from quote provider
+        error, run_utc, day_data = self.quote_provider.get_day_at_utc(run_utc)
+        if "" != error:
+            return error
 
-            # do next day_data
-            run_utc += timedelta(days=1)
+        # if daily data exits, append it to new_data
+        if len(day_data) > 0:
+            pass
+        """
 
     def set_tz_awareness(self):
         self.api.AllDataStartUtc = self.api.AllDataStartUtc.replace(tzinfo=timezone.utc)
@@ -1555,107 +1510,201 @@ class Symbol:
         else:
             self.api.BacktestEndUtc += timedelta(days=1)
 
-        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(
-            tzinfo=timezone.utc
-        )
+        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(tzinfo=timezone.utc)
         self.api.BacktestEndUtc = self.api.BacktestEndUtc.replace(tzinfo=timezone.utc)
 
         # set symbol's local time zones
-        self.start_tz_dt = self.api.BacktestStartUtc.astimezone(
-            self.time_zone
-        ) + timedelta(hours=self.normalized_hours_offset)
+        self.start_tz_dt = self.api.BacktestStartUtc.astimezone(self.time_zone) + timedelta(
+            hours=self.normalized_hours_offset
+        )
 
         self.end_tz_dt = self.api.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
             hours=self.normalized_hours_offset
         )
 
-    def _load_bars(self, key: int):
+    def _load_bars(self):
         for timeframe in self.bars_dictonary:
             print(f"Generating {self.name} {timeframe} seconds OHLC bars")
 
-            # path to the download folder for this timeframe and symbol
-            folder = os.path.join(
-                self.api.CachePath,
-                self.quote_provider.provider_name,
-                self.quote_provider.bar_folder[timeframe],
-                f"{self.name}",
+            if timeframe < Constants.SEC_PER_HOUR:
+                self._load_minute_bars(Constants.SEC_PER_MINUTE)  # load 1 minute bars
+
+                if Constants.SEC_PER_MINUTE != timeframe:
+                    self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
+
+            elif timeframe < Constants.SEC_PER_DAY:
+                self._load_hour_or_daily_bars(Constants.SEC_PER_HOUR)  # load 1 hour bars
+
+                if Constants.SEC_PER_HOUR != timeframe:
+                    self._resample(self.bars_dictonary[Constants.SEC_PER_HOUR], timeframe)
+
+            else:
+                self._load_hour_or_daily_bars(Constants.SEC_PER_DAY)  # load 1 day bars
+
+                if Constants.SEC_PER_DAY != timeframe:
+                    self._resample(self.bars_dictonary[Constants.SEC_PER_DAY], timeframe)
+
+    def _resample(self, source_bars: Bars, second_tf: int):
+        pd_tf = self._seconds_to_pandas_timeframe(second_tf)
+
+        # Resample bars to the desired timeframe using pandas resample
+        df = pd.DataFrame(
+            {
+                "time": source_bars.open_times.data,  # Assuming open_times.data is a list of datetime
+                "open": source_bars.open_prices.data,
+                "high": source_bars.high_prices.data,
+                "low": source_bars.low_prices.data,
+                "close": source_bars.close_prices.data,
+                "volume": source_bars.volume.data,
+                "open_ask": source_bars.open_asks.data,  # Include open ask if needed
+            }
+        )
+
+        # set time as the index
+        df["time"] = pd.to_datetime(df["time"])  # type:ignore
+        df.set_index("time", inplace=True)  # type:ignore
+
+        # resample
+        resampled_df = df.resample(pd_tf).apply(self.ohlcva_aggregation)  # type:ignore
+
+        # save resampled data to the target bars
+        target_bars = self.bars_dictonary[second_tf]
+        target_bars.open_times.data = resampled_df.index.tolist()  # type:ignore
+        target_bars.open_prices.data = resampled_df["open"].tolist()
+        target_bars.high_prices.data = resampled_df["high"].tolist()
+        target_bars.low_prices.data = resampled_df["low"].tolist()
+        target_bars.close_prices.data = resampled_df["close"].tolist()
+        target_bars.volume.data = resampled_df["volume"].tolist()
+        target_bars.open_asks.data = resampled_df["open_ask"].tolist()
+
+    def _seconds_to_pandas_timeframe(self, seconds: int) -> str:
+        if seconds % 60 != 0:
+            raise ValueError("The seconds value must be a multiple of 60.")
+
+        minutes = seconds // 60
+
+        if minutes < 60:
+            return f"{minutes}min"
+        else:
+            hours = minutes // 60
+            if hours < 24:
+                return f"{hours}H"
+            else:
+                days = hours // 24
+                return f"{days}D"
+
+    def _load_minute_bars(self, timeframe: int):
+        if self.bars_dictonary[timeframe].open_times.count > 0:
+            return
+
+        files: list[tuple[datetime, str]] = []
+        folder = os.path.join(
+            self.api.CachePath,
+            self.quote_provider.provider_name,
+            self.quote_provider.bar_folder[timeframe],
+            f"{self.name}",
+        )
+
+        # file name example: 20140101_quote.zip
+        # yyyyMMdd_quote.zip
+        # List and filter files matching the pattern
+        for file in Path(folder).iterdir():
+            match = re.compile(r"(\d{8})_quote\.zip").match(file.name)
+            if match:
+                date_str = match.group(1)
+                file_date = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=pytz.UTC)
+                files.append((file_date, file.name))
+
+        files.sort()
+        # Extract just the dates for binary search
+        dates = [file_date for file_date, _ in files]
+
+        # Perform binary search
+        start_idx = bisect_left(dates, self.api.robot.BacktestStartUtc)
+        bars = self.bars_dictonary[timeframe]
+
+        # line example: 0,1.65753,1.65753,1.65719,1.65736,0,1.65791,1.65791,1.65732,1.65776,0
+        # Bid OHLC, Volume, Ask OHLC, Volume
+        # Loop over the files starting from start_idx
+        for file_date, file_name in files[start_idx:]:
+            if file_date > self.api.robot.BacktestEndUtc:
+                break
+
+            # Path to the zip file
+            zip_path = os.path.join(folder, file_name)
+
+            # Unzip and load data from CSV
+            with ZipFile(zip_path, "r") as zip_file:
+                for csv_file_name in zip_file.namelist():
+                    with zip_file.open(csv_file_name) as csv_file:
+                        # Read and decode CSV file contents
+                        decoded = csv_file.read().decode("utf-8")
+                        reader = csv.reader(decoded.splitlines())
+                        for row in reader:
+                            bars.open_times.data.append(
+                                (file_date + timedelta(milliseconds=int(row[0]))).replace(tzinfo=timezone.utc)
+                            )
+                            bars.open_prices.data.append(float(row[1]))
+                            bars.high_prices.data.append(float(row[2]))
+                            bars.low_prices.data.append(float(row[3]))
+                            bars.close_prices.data.append(float(row[4]))
+                            bars.volume.data.append(int(row[5]))
+                            bars.open_asks.data.append(float(row[6]))
+
+    def _load_hour_or_daily_bars(self, timeframe: int):
+        # file name example: gbp_usd.zip
+        zipfile = os.path.join(
+            self.api.CachePath,
+            self.quote_provider.provider_name,
+            self.quote_provider.bar_folder[timeframe],
+            f"{self.name}.zip",
+        )
+
+        with ZipFile(zipfile, "r") as z:
+            # Assuming there's only one file in the zip archive
+            file_name = z.namelist()[0]
+            with z.open(file_name) as f:
+                # Read and decode the lines
+                lines = f.read().decode("utf-8").strip().split("\n")
+
+        # Perform binary search to find the start line
+        low, high = 0, len(lines) - 1
+        start_index = 0
+        while low <= high:
+            mid = (low + high) // 2
+            current_datetime = datetime.strptime(lines[mid].split(",")[0], "%Y%m%d %H:%M").replace(
+                tzinfo=timezone.utc
             )
-            # file name example: 20140101_quote.zip
-            # yyyyMMdd_quote.zip
-            pattern = re.compile(r"(\d{8})_quote\.zip")
+            if current_datetime < self.api.robot.BacktestStartUtc:
+                low = mid + 1
+            elif current_datetime > self.api.robot.BacktestStartUtc:
+                high = mid - 1
+            else:
+                start_index = mid
+                break
+        if low <= len(lines) - 1 and high < len(lines) - 1:
+            start_index = low
 
-            # List and filter files matching the pattern
-            files: list[tuple[datetime, str]] = []
-            for file in Path(folder).iterdir():
-                match = pattern.match(file.name)
-                if match:
-                    date_str = match.group(1)
-                    file_date = datetime.strptime(date_str, "%Y%m%d").replace(
-                        tzinfo=pytz.UTC
-                    )
-                    files.append((file_date, file.name))
+        # load bars from the start index up to the end datetime
+        bars = self.bars_dictonary[timeframe]
+        for i in range(start_index, len(lines)):
+            row = lines[i].split(",")
+            line_datetime = datetime.strptime(row[0], "%Y%m%d %H:%M").replace(tzinfo=timezone.utc)
+            if line_datetime > self.api.robot.BacktestEndUtc:
+                break
 
-            # Sort files by date
-            files.sort()
-
-            # Extract just the dates for binary search
-            dates = [file_date for file_date, _ in files]
-
-            # Perform binary search
-            start_idx = bisect_left(dates, self.api.robot.BacktestStartUtc)
-            bars = self.bars_dictonary[timeframe]
-
-            # line example: 0,1.65753,1.65753,1.65719,1.65736,0,1.65791,1.65791,1.65732,1.65776,0
-            # Bid OHLC, Volume, Ask OHLC, Volume
-            # Loop over the files starting from `start_idx`
-            for file_date, file_name in files[start_idx:]:
-                if file_date > self.api.robot.BacktestEndUtc:
-                    break
-
-                # Path to the zip file
-                zip_path = os.path.join(folder, file_name)
-
-                # Unzip and load data from CSV
-                with ZipFile(zip_path, "r") as zip_file:
-                    for csv_file_name in zip_file.namelist():
-                        with zip_file.open(csv_file_name) as csv_file:
-                            # Read and decode CSV file contents
-                            decoded = csv_file.read().decode("utf-8")
-                            reader = csv.reader(decoded.splitlines())
-                            for row in reader:
-                                bars.open_times.data.append(
-                                    file_date + +timedelta(microseconds=int(row[0]))
-                                )
-                                bars.open_prices.data.append(float(row[1]))
-                                bars.high_prices.data.append(float(row[2]))
-                                bars.low_prices.data.append(float(row[3]))
-                                bars.close_prices.data.append(float(row[4]))
-                                bars.tick_volumes.data.append(int(row[5]))
-                                bars.open_asks.data.append(float(row[6]))
-
-            tf = f"{timeframe}s"
-
-        """
-            # Resample bid OHLC
-            resampled = self.tick_data["bid"].resample(tf)  # type:ignore
-            bid_ohlc = resampled.ohlc()  # type:ignore
-            bars.open_times.data = bid_ohlc.index.tolist()  # type:ignore
-            bars.open_prices.data = bid_ohlc["open"].tolist()
-            bars.high_prices.data = bid_ohlc["high"].tolist()
-            bars.low_prices.data = bid_ohlc["low"].tolist()
-            bars.close_prices.data = bid_ohlc["close"].tolist()
-            bars.open_asks.data = (
-                self.tick_data["ask"].resample(tf).first()  # type:ignore
-            )
-            bars.tick_volumes.data = (
-                self.tick_data["bid"].resample(tf).size().tolist()  # type:ignore
-            )
-        """
+            bars.open_times.data.append(line_datetime)
+            bars.open_prices.data.append(float(row[1]))
+            bars.high_prices.data.append(float(row[2]))
+            bars.low_prices.data.append(float(row[3]))
+            bars.close_prices.data.append(float(row[4]))
+            bars.volume.data.append(int(row[5]))
+            bars.open_asks.data.append(float(row[6]))
 
     def on_tick(self) -> str:
-        time = self.tick_data.index[self.rate_data_index]  # type:ignore
-        self.bid = self.tick_data.iloc[self.rate_data_index]["bid"]
-        self.ask = self.tick_data.iloc[self.rate_data_index]["ask"]
+        self.time = self.tick_data[self.rate_data_index][0]
+        self.bid = self.tick_data[self.rate_data_index][1]
+        self.ask = self.tick_data[self.rate_data_index][2]
 
         self.rate_data_index += 1
         if self.rate_data_index >= len(self.tick_data):
@@ -1880,9 +1929,7 @@ class KitaApi:
         pos.volume_in_units = volume
         pos.quantity = volume / pos.symbol.lot_size
         pos.entry_time = pos.symbol.time
-        pos.entry_price = (
-            pos.symbol.ask if TradeType.Buy == trade_type else pos.symbol.bid
-        )
+        pos.entry_price = pos.symbol.ask if TradeType.Buy == trade_type else pos.symbol.bid
         pos.label = label
         pos.margin = volume * pos.entry_price / pos.symbol.leverage
         self.account.margin += pos.margin
@@ -1935,9 +1982,7 @@ class KitaApi:
         str_time_zone: str = "utc",
     ) -> tuple[str, Symbol]:
 
-        symbol = Symbol(
-            self, symbol_name, quote_provider, trade_provider, str_time_zone
-        )
+        symbol = Symbol(self, symbol_name, quote_provider, trade_provider, str_time_zone)
 
         quote_provider.init_symbol(self, symbol)
         trade_provider.init_symbol(self, symbol)
@@ -1953,14 +1998,10 @@ class KitaApi:
 
     # Long/Short and other arithmetic
     # region
-    def is_greater_or_equal_long(
-        self, long_not_short: bool, val1: float, val2: float
-    ) -> bool:
+    def is_greater_or_equal_long(self, long_not_short: bool, val1: float, val2: float) -> bool:
         return val1 >= val2 if long_not_short else val1 <= val2
 
-    def is_less_or_equal_long(
-        self, long_not_short: bool, val1: float, val2: float
-    ) -> bool:
+    def is_less_or_equal_long(self, long_not_short: bool, val1: float, val2: float) -> bool:
         return val1 <= val2 if long_not_short else val1 >= val2
 
     def is_greater_long(self, long_not_short: bool, val1: float, val2: float) -> bool:
@@ -1977,9 +2018,9 @@ class KitaApi:
         b_current: float,
         b_prev: float,
     ) -> bool:
-        return self.is_greater_or_equal_long(
-            long_not_short, a_current, b_current
-        ) and self.is_less_or_equal_long(long_not_short, a_prev, b_prev)
+        return self.is_greater_or_equal_long(long_not_short, a_current, b_current) and self.is_less_or_equal_long(
+            long_not_short, a_prev, b_prev
+        )
 
     def add_long(self, long_not_short: bool, val1: float, val2: float) -> float:
         return val1 + val2 if long_not_short else val1 - val2
@@ -2026,16 +2067,14 @@ class KitaApi:
 
         average = sum(vals) / len(vals)
         sd = math.sqrt(
-            sum((val - average) ** 2 for val in vals if not is_sortino or val < average)
-            / (len(vals) - 1)
+            sum((val - average) ** 2 for val in vals if not is_sortino or val < average) / (len(vals) - 1)
         )
         return average / sd if sd != 0 else float("nan")
 
     def standard_deviation(self, is_sortino: bool, vals: list[float]) -> float:
         average = sum(vals) / len(vals)
         return math.sqrt(
-            sum((val - average) ** 2 for val in vals if not is_sortino or val < average)
-            / (len(vals) - 1)
+            sum((val - average) ** 2 for val in vals if not is_sortino or val < average) / (len(vals) - 1)
         )
 
     def is_new_bar_get(self, seconds: int, time: datetime, prevTime: datetime) -> bool:
@@ -2134,9 +2173,7 @@ class KitaApi:
                     #     i_ask - KitaApi.string_to_integer(bid_asks[1])
                     # )
 
-        price_diff = (1 if lp.trade_type == TradeType.Buy else -1) * (
-            lp.closing_price - lp.entry_price
-        )
+        price_diff = (1 if lp.trade_type == TradeType.Buy else -1) * (lp.closing_price - lp.entry_price)
         point_diff = self.i_price(price_diff, lp.symbol.point_size)
         lot_digits = 1  # int(0.5 + math.log10(1 / lp.min_lots))
 
@@ -2161,9 +2198,7 @@ class KitaApi:
                 self.logger.add_text(KitaApi.double_to_string(lp.lots, lot_digits))
                 continue
             elif change_part == "OpenPrice":
-                self.logger.add_text(
-                    KitaApi.double_to_string(lp.entry_price, lp.symbol.digits)
-                )
+                self.logger.add_text(KitaApi.double_to_string(lp.entry_price, lp.symbol.digits))
                 continue
             elif change_part == "Swap":
                 self.logger.add_text(KitaApi.double_to_string(lp.swap, 2))
@@ -2173,23 +2208,17 @@ class KitaApi:
                 continue
             elif change_part == "OpenAsks":
                 self.logger.add_text(
-                    KitaApi.double_to_string(open_ask, lp.symbol.digits)
-                    if lp.trade_type == TradeType.Buy
-                    else ""
+                    KitaApi.double_to_string(open_ask, lp.symbol.digits) if lp.trade_type == TradeType.Buy else ""
                 )
                 continue
             elif change_part == "OpenBid":
                 self.logger.add_text(
-                    KitaApi.double_to_string(openBid, lp.symbol.digits)
-                    if lp.trade_type == TradeType.Sell
-                    else ""
+                    KitaApi.double_to_string(openBid, lp.symbol.digits) if lp.trade_type == TradeType.Sell else ""
                 )
                 continue
             elif change_part == "OpenSpreadPoints":
                 self.logger.add_text(
-                    KitaApi.double_to_string(
-                        self.i_price((open_ask - openBid), lp.symbol.point_size), 0
-                    )
+                    KitaApi.double_to_string(self.i_price((open_ask - openBid), lp.symbol.point_size), 0)
                 )
                 continue
             elif change_part == "CloseDate":
@@ -2199,44 +2228,30 @@ class KitaApi:
                 self.logger.add_text(lp.closing_time.strftime("%H:%M:%S"))
                 continue
             elif change_part == "Mode":
-                self.logger.add_text(
-                    "Short" if lp.trade_type == TradeType.Sell else "Long"
-                )
+                self.logger.add_text("Short" if lp.trade_type == TradeType.Sell else "Long")
                 continue
             elif change_part == "PointValue":
-                self.logger.add_text(
-                    KitaApi.double_to_string(
-                        self.get_money_from_1point_and_1lot(lp.symbol), 5
-                    )
-                )
+                self.logger.add_text(KitaApi.double_to_string(self.get_money_from_1point_and_1lot(lp.symbol), 5))
                 continue
             elif change_part == "ClosingPrice":
-                self.logger.add_text(
-                    KitaApi.double_to_string(lp.closing_price, lp.symbol.digits)
-                )
+                self.logger.add_text(KitaApi.double_to_string(lp.closing_price, lp.symbol.digits))
                 continue
             elif change_part == "Commission":
                 self.logger.add_text(KitaApi.double_to_string(lp.commissions, 2))
                 continue
             elif change_part == "Comm/Lot":
-                self.logger.add_text(
-                    KitaApi.double_to_string(lp.commissions / lp.lots, 2)
-                )
+                self.logger.add_text(KitaApi.double_to_string(lp.commissions / lp.lots, 2))
                 continue
             elif change_part == "CloseAsk":
                 self.logger.add_text(
-                    "{:.{}f}".format(
-                        self.get_bid_ask_price(lp.symbol, BidAsk.Ask), lp.symbol.digits
-                    )
+                    "{:.{}f}".format(self.get_bid_ask_price(lp.symbol, BidAsk.Ask), lp.symbol.digits)
                     if lp.trade_type == TradeType.Sell
                     else ""
                 )
                 continue
             elif change_part == "CloseBid":
                 self.logger.add_text(
-                    KitaApi.double_to_string(
-                        self.get_bid_ask_price(lp.symbol, BidAsk.Bid), lp.symbol.digits
-                    )
+                    KitaApi.double_to_string(self.get_bid_ask_price(lp.symbol, BidAsk.Bid), lp.symbol.digits)
                     if lp.trade_type == TradeType.Buy
                     else ""
                 )
@@ -2257,15 +2272,11 @@ class KitaApi:
                 self.logger.add_text(KitaApi.double_to_string(lp.balance, 2))
                 continue
             elif change_part == "Dur. d.h.self.s":
-                self.logger.add_text(
-                    str(lp.entry_time - lp.closing_time).rjust(11, " ")
-                )
+                self.logger.add_text(str(lp.entry_time - lp.closing_time).rjust(11, " "))
                 continue
             elif change_part == "Number":
                 self.logging_trade_count += 1
-                self.logger.add_text(
-                    KitaApi.integer_to_string(self.logging_trade_count)
-                )
+                self.logger.add_text(KitaApi.integer_to_string(self.logging_trade_count))
                 continue
             elif change_part == "Volume":
                 self.logger.add_text(KitaApi.double_to_string(lp.volume_in_units, 1))
@@ -2276,9 +2287,7 @@ class KitaApi:
             elif change_part == "DiffGross":
                 self.logger.add_text(
                     KitaApi.double_to_string(
-                        self.get_money_from_points_and_lot(
-                            lp.symbol, point_diff, lp.lots
-                        ),
+                        self.get_money_from_points_and_lot(lp.symbol, point_diff, lp.lots),
                         2,
                     )
                 )
@@ -2287,9 +2296,7 @@ class KitaApi:
                 self.logger.add_text(KitaApi.double_to_string(lp.net_profit, 2))
                 continue
             elif change_part == "NetProf/Lot":
-                self.logger.add_text(
-                    KitaApi.double_to_string(lp.net_profit / lp.lots, 2)
-                )
+                self.logger.add_text(KitaApi.double_to_string(lp.net_profit / lp.lots, 2))
                 continue
             elif change_part == "AccountMargin":
                 self.logger.add_text(KitaApi.double_to_string(lp.account_margin, 2))
@@ -2298,14 +2305,10 @@ class KitaApi:
                 self.logger.add_text(KitaApi.double_to_string(lp.trade_margin, 2))
                 continue
             elif change_part == "MaxEquityDrawdown":
-                self.logger.add_text(
-                    KitaApi.double_to_string(lp.max_equity_drawdown, 2)
-                )
+                self.logger.add_text(KitaApi.double_to_string(lp.max_equity_drawdown, 2))
                 continue
             elif change_part == "MaxTradeEquityDrawdownValue":
-                self.logger.add_text(
-                    KitaApi.double_to_string(lp.max_trade_equity_drawdown_value, 2)
-                )
+                self.logger.add_text(KitaApi.double_to_string(lp.max_trade_equity_drawdown_value, 2))
                 continue
             else:
                 pass
@@ -2376,9 +2379,7 @@ class KitaApi:
         return symbol.point_value * symbol.lot_size * points * lot
 
     @staticmethod
-    def get_money_from_points_and_volume(
-        symbol: Symbol, points: int, volume: float
-    ) -> float:
+    def get_money_from_points_and_volume(symbol: Symbol, points: int, volume: float) -> float:
         return symbol.point_value * points * volume / symbol.lot_size
 
     @staticmethod
@@ -2397,9 +2398,7 @@ class KitaApi:
         return money / (volume * symbol.point_value)
 
     @staticmethod
-    def get_lots_from_money_and_points(
-        symbol: Symbol, money: float, points: int, xProLot: float
-    ):
+    def get_lots_from_money_and_points(symbol: Symbol, money: float, points: int, xProLot: float):
         ret_val = abs(money / (points * symbol.point_value * symbol.lot_size + xProLot))
         ret_val = max(ret_val, symbol.min_volume)
         ret_val = min(ret_val, symbol.max_volume)
@@ -2533,40 +2532,22 @@ class KitaApi:
         else:
             annual_profit = net_profit / (trading_days / 252.0)
         total_trades = winning_trades + loosing_trades
-        annual_profit_percent = (
-            0
-            if total_trades == 0
-            else 100.0 * annual_profit / self.initial_account_balance
-        )
+        annual_profit_percent = 0 if total_trades == 0 else 100.0 * annual_profit / self.initial_account_balance
         loss = sum(x.net_profit for x in self.history if x.net_profit < 0)
         profit = sum(x.net_profit for x in self.history if x.net_profit >= 0)
         profit_factor = 0 if loosing_trades == 0 else abs(profit / loss)
-        max_current_equity_dd_percent = (
-            100 * self.max_equity_drawdown_value[0] / self.max_equity[0]
-        )
-        max_start_equity_dd_percent = (
-            100 * self.max_equity_drawdown_value[0] / self.initial_account_balance
-        )
-        calmar = (
-            0
-            if self.max_equity_drawdown_value[0] == 0
-            else annual_profit / self.max_equity_drawdown_value[0]
-        )
-        winning_ratio_percent = (
-            0 if total_trades == 0 else 100.0 * winning_trades / total_trades
-        )
+        max_current_equity_dd_percent = 100 * self.max_equity_drawdown_value[0] / self.max_equity[0]
+        max_start_equity_dd_percent = 100 * self.max_equity_drawdown_value[0] / self.initial_account_balance
+        calmar = 0 if self.max_equity_drawdown_value[0] == 0 else annual_profit / self.max_equity_drawdown_value[0]
+        winning_ratio_percent = 0 if total_trades == 0 else 100.0 * winning_trades / total_trades
 
         if 0 == trading_days:
             trades_per_month = 0
         else:
             trades_per_month = total_trades / (trading_days / 252.0) / 12.0
 
-        sharpe_ratio = self.sharpe_sortino(
-            False, [trade.net_profit for trade in self.history]
-        )
-        sortino_ratio = self.sharpe_sortino(
-            True, [trade.net_profit for trade in self.history]
-        )
+        sharpe_ratio = self.sharpe_sortino(False, [trade.net_profit for trade in self.history])
+        sortino_ratio = self.sharpe_sortino(True, [trade.net_profit for trade in self.history])
 
         # some proofs
         # percent_sharpe_ratio = self.sharpe_sortino(
@@ -2589,16 +2570,12 @@ class KitaApi:
             + KitaApi.double_to_string(profit + loss, 2)
             + ",,,,Long: "
             + KitaApi.double_to_string(
-                sum(
-                    x.net_profit for x in self.history if x.trade_type == TradeType.Buy
-                ),
+                sum(x.net_profit for x in self.history if x.trade_type == TradeType.Buy),
                 2,
             )
             + ",,,,Short:,"
             + KitaApi.double_to_string(
-                sum(
-                    x.net_profit for x in self.history if x.trade_type == TradeType.Sell
-                ),
+                sum(x.net_profit for x in self.history if x.trade_type == TradeType.Sell),
                 2,
             )
         )
@@ -2623,9 +2600,7 @@ class KitaApi:
             + (
                 "NaN"
                 if self.max_balance[0] == 0
-                else KitaApi.double_to_string(
-                    100 * self.max_balance_drawdown_value[0] / self.max_balance[0], 2
-                )
+                else KitaApi.double_to_string(100 * self.max_balance_drawdown_value[0] / self.max_balance[0], 2)
             )
         )
 
@@ -2641,43 +2616,27 @@ class KitaApi:
         )
 
         self.log_add_text_line(
-            "Max Current Equity Drawdown %: "
-            + KitaApi.double_to_string(max_current_equity_dd_percent, 2)
+            "Max Current Equity Drawdown %: " + KitaApi.double_to_string(max_current_equity_dd_percent, 2)
         )
 
         self.log_add_text_line(
-            "Max start Equity Drawdown %: "
-            + KitaApi.double_to_string(max_start_equity_dd_percent, 2)
+            "Max start Equity Drawdown %: " + KitaApi.double_to_string(max_start_equity_dd_percent, 2)
         )
 
         self.log_add_text_line(
-            "Profit Factor: "
-            + (
-                "-"
-                if loosing_trades == 0
-                else KitaApi.double_to_string(profit_factor, 2)
-            )
+            "Profit Factor: " + ("-" if loosing_trades == 0 else KitaApi.double_to_string(profit_factor, 2))
         )
 
-        self.log_add_text_line(
-            "Sharpe Ratio: " + KitaApi.double_to_string(sharpe_ratio, 2)
-        )
-        self.log_add_text_line(
-            "Sortino Ratio: " + KitaApi.double_to_string(sortino_ratio, 2)
-        )
+        self.log_add_text_line("Sharpe Ratio: " + KitaApi.double_to_string(sharpe_ratio, 2))
+        self.log_add_text_line("Sortino Ratio: " + KitaApi.double_to_string(sortino_ratio, 2))
 
         self.log_add_text_line("Calmar Ratio: " + KitaApi.double_to_string(calmar, 2))
-        self.log_add_text_line(
-            "Winning Ratio: " + KitaApi.double_to_string(winning_ratio_percent, 2)
-        )
+        self.log_add_text_line("Winning Ratio: " + KitaApi.double_to_string(winning_ratio_percent, 2))
+
+        self.log_add_text_line("Trades Per Month: " + KitaApi.double_to_string(trades_per_month, 2))
 
         self.log_add_text_line(
-            "Trades Per Month: " + KitaApi.double_to_string(trades_per_month, 2)
-        )
-
-        self.log_add_text_line(
-            "Average Annual Profit Percent: "
-            + KitaApi.double_to_string(annual_profit_percent, 2)
+            "Average Annual Profit Percent: " + KitaApi.double_to_string(annual_profit_percent, 2)
         )
 
         # if avg_open_duration_sum != 0:
@@ -2755,9 +2714,7 @@ class HedgePosition:
     @property
     def profit(self) -> float:
         return round(
-            self.main_position.net_profit
-            + self.freeze_position.net_profit
-            + self.freeze_profit_offset,
+            self.main_position.net_profit + self.freeze_position.net_profit + self.freeze_profit_offset,
             2,
         )
 
@@ -2805,13 +2762,9 @@ class HedgePosition:
 
             if self.main_position is not None:  # type: ignore
                 pass
-                self.main_margin_after_open = (
-                    self.symbol.trade_provider.account.margin  # type:ignore
-                )
+                self.main_margin_after_open = self.symbol.trade_provider.account.margin  # type:ignore
                 self.freeze_price_offset = inherited_freeze_price_offset
-                self.freeze_corrected_entry_price = (
-                    self.main_position.entry_price  # type:ignore
-                )
+                self.freeze_corrected_entry_price = self.main_position.entry_price  # type:ignore
 
         return self.main_position is not None  # type: ignore
 
@@ -2860,9 +2813,7 @@ class HedgePosition:
         result = False
         if self.freeze_position is not None:  # type: ignore
             self.freeze_profit_offset += self.freeze_position.net_profit
-            self.freeze_price_offset += (
-                self.freeze_position.current_price - self.freeze_position.entry_price
-            )
+            self.freeze_price_offset += self.freeze_position.current_price - self.freeze_position.entry_price
             result = self.bot.close_trade(
                 self.freeze_position,
                 self.freeze_margin_after_open,
@@ -2885,9 +2836,7 @@ class HedgePosition:
     ) -> bool:
         result = False
         if self.freeze_position is not None:  # type: ignore
-            self.freeze_price_offset += (
-                self.freeze_position.current_price - self.freeze_position.entry_price
-            )
+            self.freeze_price_offset += self.freeze_position.current_price - self.freeze_position.entry_price
             self.exchange()
             self.freeze_profit_offset += self.freeze_position.net_profit
             result = self.bot.close_trade(
