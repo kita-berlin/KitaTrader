@@ -1,16 +1,16 @@
 from Api.CoFu import *
-from KitaApiEnums import *
-#from Template import Template
-from Downloader import Downloader
+from Api.KitaApiEnums import *
+
+# from Template import Template
+# from Downloader import Downloader
+from Robots.Martingale import Martingale
 
 
 class MainConsole:
     def __init__(self):
-
         # 1. Set the parameters of the platform
         # region
-        self.robot = Downloader()  # Define here which robot should be used
-        self.robot.robot = self.robot  # type:ignore
+        self.robot = Martingale()  # Define here which robot should be used
 
         # self.robot.AllDataStartUtc = datetime.min means earliest possible what the source can provide
         # End datetime always is yesterday. Cannot be today because today's data are not complete yet
@@ -35,7 +35,7 @@ class MainConsole:
         # region
         # Define the backtest time window
         self.robot.BacktestStartUtc = datetime.strptime("1.1.2024", "%d.%m.%Y")
-        #self.robot.BacktestEndUtc = datetime.strptime("10.12.2024", "%d.%m.%Y")
+        # self.robot.BacktestEndUtc = datetime.strptime("10.12.2024", "%d.%m.%Y")
         self.robot.BacktestEndUtc = datetime.max
         # self.robot.Parameter1 = 1.3
         # self.robot.Parameter2 = 0.29

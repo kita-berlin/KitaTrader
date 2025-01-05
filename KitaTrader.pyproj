@@ -6,7 +6,8 @@
     <ProjectGuid>{636cf776-2a26-42ce-b92c-ad2db37c2232}</ProjectGuid>
     <ProjectHome />
     <StartupFile>MainConsole.py</StartupFile>
-    <SearchPath>Robots;Api;BrokerProvider</SearchPath>
+    <SearchPath>
+    </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
@@ -29,6 +30,7 @@
     <Content Include="Files\Assets_Dukascopy_Live.csv" />
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
     <Content Include="BrokerProvider\QuoteTradeMt5.py" />
+    <Content Include="MainNotebook.ipynb" />
     <Content Include="pyproject.toml" />
     <Content Include="typings\MetaTrader5\__init__.pyi" />
   </ItemGroup>
@@ -36,20 +38,45 @@
     <Folder Include="Api\" />
     <Folder Include="Files\" />
     <Folder Include="BrokerProvider\" />
+    <Folder Include="Indicators\" />
     <Folder Include="Robots\" />
     <Folder Include="typings\" />
     <Folder Include="typings\MetaTrader5\" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Api\Account.py" />
+    <Compile Include="Api\Asset.py" />
+    <Compile Include="Api\Bar.py" />
+    <Compile Include="Api\Bars.py" />
+    <Compile Include="Api\ConcreteAsset.py" />
+    <Compile Include="Api\DataSeries.py" />
+    <Compile Include="Api\HedgePosition.py" />
+    <Compile Include="Api\IIndicator.py" />
     <Compile Include="Api\KitaApi.py" />
     <Compile Include="Api\KitaApiEnums.py" />
     <Compile Include="Api\Constants.py" />
     <Compile Include="Api\CoFu.py" />
+    <Compile Include="Api\LeverageTier.py" />
+    <Compile Include="Api\LogParams.py" />
+    <Compile Include="Api\MarketHours.py" />
+    <Compile Include="Api\PendingOrder.py" />
+    <Compile Include="Api\Position.py" />
+    <Compile Include="Api\PyLogger.py" />
+    <Compile Include="Api\QuoteProvider.py" />
+    <Compile Include="Api\Symbol.py" />
+    <Compile Include="Api\TimeSeries.py" />
+    <Compile Include="Api\TradeProvider.py" />
+    <Compile Include="Api\TradeResult.py" />
+    <Compile Include="Api\TradingSession.py" />
     <Compile Include="BrokerProvider\QuoteDukascopy.py" />
+    <Compile Include="Indicators\BollingerBands.py" />
+    <Compile Include="Indicators\Indicators.py" />
+    <Compile Include="Indicators\MovingAverage.py" />
+    <Compile Include="Indicators\SimpleMovingAverage.py" />
+    <Compile Include="Indicators\StandardDeviation.py" />
     <Compile Include="MainConsole.py" />
     <Compile Include="BrokerProvider\QuoteCsv.py" />
     <Compile Include="BrokerProvider\TradePaper.py" />
-    <Compile Include="BrokerProvider\QuoteMe.py" />
     <Compile Include="Robots\Downloader.py" />
     <Compile Include="Robots\Template.py" />
     <Compile Include="Robots\Martingale.py" />

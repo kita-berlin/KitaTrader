@@ -72,3 +72,6 @@ class Constants:
     # / Add this offset to get Sunday
     # / </summary>
     EPOC_WEEKDAY_SEC_OFFSET: int = 3 * SEC_PER_DAY
+
+
+# end of file

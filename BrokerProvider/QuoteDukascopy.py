@@ -3,10 +3,8 @@ import struct
 import requests
 from datetime import datetime, timedelta
 from lzma import LZMADecompressor, FORMAT_AUTO  # type: ignore
-from KitaApi import QuoteProvider, KitaApi, Symbol, QuotesType
-
-# Instead of numpy arrays we are using QuotesType] as a temporary container
-# and later convert it to a NumPy array to avoid frequent memory reallocations.
+from Api.KitaApi import KitaApi, Symbol, QuotesType
+from Api.QuoteProvider import QuoteProvider
 
 
 class Dukascopy(QuoteProvider):
@@ -20,7 +18,7 @@ class Dukascopy(QuoteProvider):
     }
     _last_hour_base_timestamp: float = 0
 
-    def __init__(self, parameter: str, datarate: int):
+    def __init__(self, datarate: int, parameter: str = ""):
         assets_path = os.path.join("Files", self._assets_file_name)
         QuoteProvider.__init__(self, parameter, assets_path, datarate)
         self.requests = requests.Session()

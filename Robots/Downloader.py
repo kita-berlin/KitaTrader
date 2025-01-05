@@ -38,8 +38,8 @@ class Downloader(KitaApi):
 
     ###################################
     def on_init(self) -> None:
-        # self.robot.AllDataStartUtc = datetime.min  # load all you can get
-        self.robot.AllDataStartUtc = datetime.strptime("1.1.2014", "%d.%m.%Y")
+        self.robot.AllDataStartUtc = datetime.min  # load all you can get
+        # self.robot.AllDataStartUtc = datetime.strptime("1.1.2014", "%d.%m.%Y")
 
         # Define quote_provider(s)
         # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
@@ -59,11 +59,12 @@ class Downloader(KitaApi):
                 exit()
 
             # Define one or more bars (optional)
-            error, self.h1_bars = symbol.request_bars(Constants.SEC_PER_HOUR)
             error, self.h4_bars = symbol.request_bars(4 * Constants.SEC_PER_HOUR)
+            error, self.d3_bars = symbol.request_bars(3 * Constants.SEC_PER_DAY)
             error, self.d1_bars = symbol.request_bars(Constants.SEC_PER_DAY)
             error, self.m5_bars = symbol.request_bars(5 * Constants.SEC_PER_MINUTE)
             error, self.m1_bars = symbol.request_bars(Constants.SEC_PER_MINUTE)
+            error, self.h1_bars = symbol.request_bars(Constants.SEC_PER_HOUR)
 
     ###################################
     def on_start(self, symbol: Symbol) -> None:

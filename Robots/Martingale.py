@@ -1,16 +1,13 @@
 ﻿from math import sqrt
-from KitaApiEnums import *
-from KitaApi import KitaApi
-from Api.CoFu import *
-from Constants import *
-from KitaApi import Symbol, PyLogger
 from talib import MA_Type  # type: ignore
-
-from TradePaper import TradePaper
-from QuoteMe import QuoteMe  # type: ignore
-from QuoteDukascopy import Dukascopy  # type: ignore
-from QuoteTradeMt5 import BrokerMt5  # type: ignore
-from QuoteCsv import QuoteCsv  # type: ignore
+from Api.KitaApiEnums import *
+from Api.KitaApi import KitaApi
+from Api.CoFu import *
+from Api.Constants import Constants
+from Api.KitaApi import PyLogger
+from Api.Symbol import Symbol
+from BrokerProvider.TradePaper import TradePaper
+from BrokerProvider.QuoteDukascopy import Dukascopy
 
 
 class Martingale(KitaApi):
@@ -42,7 +39,6 @@ class Martingale(KitaApi):
 
     ###################################
     def on_init(self) -> None:
-
         # Members; We do declaration here so members will be reinized by 2nd++ on_init()
         # region
         self.is_long = True
@@ -86,60 +82,19 @@ class Martingale(KitaApi):
         self.log_flush()
         # endregion
 
-        # Possible quote_providers
-        # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
-        quote_provider = Dukascopy("", datarate=0)
-        # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", datarate=0),
-        # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", datarate=0)
-        # quote_provider = QuoteCsv("G:\\Meine Ablage", datarate=0)
-
-        # Demo to show all available symbols
-        i = 0
-        for symbol_name in quote_provider.symbols:
-            i = i + 1
-            print(str(i) + ": " + symbol_name)
-
-        # error, symbol =
-        self.request_symbol(
-            "NZDCAD",
-            quote_provider,
-            # Paper trading
-            TradePaper(""),
+        # request symbol to be used
+        error, _ = self.request_symbol(
+            "GBP_USD",  # symbol name
+            # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
+            Dukascopy(datarate=Constants.SEC_PER_MINUTE),
+            TradePaper(),  # Paper trading
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "New York normalized time")
             "America/New_York:Normalized",
         )
-
-        # Example how to use bars
-        # if "" == error:
-        #     error, m1_bars = symbol.request_bars(Constants.SEC_PER_MINUTE)
-        #     m1_bars.count
-
-        """ example how to use indicators
-        self.sma_period = 14
-        self.indi_bars = self.market_data.request_bars(SEC_PER_HOUR, self.symbol.name)
-        
-        self.sma = indicators.moving_average(
-            source =self.indi_bars.close_prices,
-            periods =self.sma_period,
-            ma_type =MovingAverageType.Simple,
-        )
-
-        self.sd = indicators.standard_deviation(
-            source =self.indi_bars.close_prices,
-            periods =self.sma_period,
-            ma_type =MovingAverageType.Simple,
-        )
-
-        self.bb_indi:indicators.bollinger_bands = indicators.bollinger_bands(
-            source =self.indi_bars.close_prices,
-            periods =self.sma_period,
-            standard_deviations =2,
-            ma_type =MovingAverageType.Simple,
-            shift =0,
-        )
-        """
+        if "" != error:
+            return
         # endregion
 
         if not self.is_train:
@@ -149,43 +104,13 @@ class Martingale(KitaApi):
 
     ###################################
     def on_tick(self, symbol: Symbol):
-        """example how to use own indicators and ta-lib
-        ta_sma = talib.SMA(
-            self.indi_bars.close_prices.data[-self.sma_period :], timeperiod =self.sma_period
-        )[-1]
-        my_sma = self.Sma.Result.Last(0)
-
-        ta_sd = talib.STDDEV(
-            self.indi_bars.close_prices.data[-self.sma_period :], timeperiod =self.sma_period
-        )[-1]
-        my_sd = self.Sd.Result.Last(0)
-
-        taUpperArray, taMiddleArray, ta_lower_array = talib.BBANDS(
-            self.indi_bars.close_prices.data[-self.sma_period :],
-            timeperiod =self.sma_period,
-            nbdevup =2,
-            nbdevdn =2,
-            matype =MA_Type.SMA
-        )
-        ta_upper = taUpperArray[-1]
-        ta_middle = taMiddleArray[-1]
-        ta_lower = taLowerArray[-1]
-
-        my_upper = self.bb_indi.Top.Last(0)
-        my_middle = self.bb_indi.Main.Last(0)
-        my_lower = self.bb_indi.Bottoself.Last(0)
-        """
-
         current_open = symbol.ask if self.is_long else symbol.bid
         current_close = symbol.bid if self.is_long else symbol.ask
         target_cash = current_repurchase_price = 0
 
         # Check spread
         is_spread = True
-        if (
-            symbol.spread < 0
-            or symbol.spread > 2 * symbol.avg_spread * symbol.point_size
-        ):
+        if symbol.spread < 0 or symbol.spread > 2 * symbol.avg_spread * symbol.point_size:
             is_spread = False
         is_trading_allowed = is_spread
 
@@ -193,7 +118,6 @@ class Martingale(KitaApi):
         if 0 == self.invest_count:
             self.cluster_profit = 0
             self.current_volume = self.initial_volume
-        pass
 
         # Calc some vars if some positions are open
         if self.invest_count >= 1:
@@ -220,10 +144,7 @@ class Martingale(KitaApi):
             # tp_price = self.add_long(self.is_long, self.avg_price, tp_value)
             tp_points = self.i_price(tp_value, symbol.point_size)
 
-            target_cash = self.get_money_from_points_and_volume(
-                symbol, tp_points, self.current_volume
-            )
-        pass
+            target_cash = self.get_money_from_points_and_volume(symbol, tp_points, self.current_volume)
 
         # Take Profit ?
         is_just_closed = False
@@ -275,7 +196,7 @@ class Martingale(KitaApi):
                 # und TakeProfitPercent aussehen?
                 # Das volume_to_add beeinflusst den Mischpreis (self.avg_price)
                 # und zieht ihn näher zum aktuellen Preis hin
-                pos = self.execute_market_order(
+                pos = symbol.trade_provider.execute_market_order(
                     TradeType.Buy if self.is_long else TradeType.Sell,
                     symbol.name,
                     symbol.normalize_volume_in_units(volume_to_add),
@@ -290,9 +211,7 @@ class Martingale(KitaApi):
                     print(
                         symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
                         + ("Long" if self.is_long else "Short")
-                        + "; {:.2f}".format(
-                            self.account.balance - self.initial_account_balance
-                        )
+                        + "; {:.2f}".format(self.account.balance - self.initial_account_balance)
                         # + "; {:.2f}".format(self.max_equity_drawdown_value[0])
                         # + "; {}".format(self.cluster_count)
                         # + "; {}".format(self.invest_count)
@@ -301,11 +220,12 @@ class Martingale(KitaApi):
                         # + "; {:.2f}".format(self.RebuyPercent)
                         # + "; {:.2f}".format(self.TakeProfitPercent)
                     )
-                    pass
-            else:
-                pass  # for debugging
 
-        # self.get_tick_fitness()  # calculate calmar
+    ###################################
+    def on_start(self, symbol: Symbol) -> None:
+        # Members to be re-initialized on each new start
+        # region
+        # endregion
         pass
 
     ###################################

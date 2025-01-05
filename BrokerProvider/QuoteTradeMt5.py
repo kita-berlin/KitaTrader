@@ -23,10 +23,10 @@ class BrokerMt5(QuoteProvider, TradeProvider):
         self.cache_path = cache_path
         pass
 
-    def get_day_at_utc(self, dt: datetime) -> tuple[str, QuotesType]:
+    def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, QuotesType]:
         return None  # type: ignore
 
-    def get_first_day(self) -> tuple[str, QuotesType]:
+    def get_first_day(self) -> tuple[str, datetime, QuotesType]:
         return None  # type: ignore
 
     def read_quote(self) -> tuple[str, QuotesType]:

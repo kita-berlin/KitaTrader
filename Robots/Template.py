@@ -42,17 +42,15 @@ class Template(KitaApi):
 
         # 1. Define quote_provider(s)
         # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
-        quote_provider = Dukascopy("", datarate=Constants.SEC_PER_MINUTE)
-        # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", datarate=0),
-        # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", datarate=0)
-        # quote_provider = QuoteCsv("G:\\Meine Ablage", datarate=0)
+        quote_provider = Dukascopy(datarate=Constants.SEC_PER_MINUTE)
+        # quote_provider = BrokerMt5( datarate=0, "62060378, pepperstone_uk-Demo, tFue0y*akr")
+        # quote_provider = QuoteCsv(datarate=0, "G:\\Meine Ablage")
 
         # 2. Define symbol(s); at least one symbol must be defined
         error, self.gbpusd_symbol = self.request_symbol(
             "GBP_USD",
             quote_provider,
-            # Paper trading
-            TradePaper(""),
+            TradePaper(""),  # Paper trading
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "New York normalized time")

@@ -1,4 +1,9 @@
+from datetime import datetime
 from enum import Enum
+
+
+QuoteType = tuple[datetime, float, float]  # utc, bid, ask
+QuotesType = list[QuoteType]
 
 
 class TradeStates(Enum):
@@ -420,3 +425,6 @@ class ProportionalAmountType(Enum):
     """
 
     # end of file
+
+
+# end of file

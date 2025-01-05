@@ -7,7 +7,7 @@ class QuoteCsv(QuoteProvider):
     provider_name = "QuoteCsv"
     assets_file_name: str = "Assets_QuoteCsv.csv"
 
-    def __init__(self, parameter: str, datarate: int):
+    def __init__(self, datarate: int, parameter: str = ""):
         assets_path = os.path.join("Files", self.assets_file_name)
         QuoteProvider.__init__(self, parameter, assets_path, datarate)
         self.file_handle = None
@@ -22,11 +22,11 @@ class QuoteCsv(QuoteProvider):
         self.symbol_path = os.path.join(self.parameter, self.symbol.name)
         pass
 
-    def get_day_at_utc(self, dt: datetime) -> tuple[str, QuotesType]:
+    def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, QuotesType]:
         return None  # type: ignore
         pass
 
-    def get_first_day(self) -> tuple[str, QuotesType]:
+    def get_first_day(self) -> tuple[str, datetime, QuotesType]:
         return None  # type: ignore
         pass
 
