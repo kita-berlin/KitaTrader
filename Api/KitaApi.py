@@ -49,16 +49,15 @@ class KitaApi:
         self,
         pos: Position,
         marginAfterOpen: float,
-        min_open_duration: list[timedelta],
-        avg_open_duration_sum: list[timedelta],
-        open_duration_count: list[int],
-        max_open_duration: list[timedelta],
+        min_open_duration: timedelta,
+        avg_open_duration_sum: timedelta,
+        open_duration_count: int,
+        max_open_duration: timedelta,
         is_utc: bool = True,
     ) -> bool:
         close_result = pos.symbol.trade_provider.close_position(pos)
         if close_result.is_successful:
             last_hist = self.history[-1]
-
             log = LogParams()
             log.symbol = pos.symbol
             log.volume_in_units = last_hist.volume_in_units
@@ -71,17 +70,19 @@ class KitaApi:
             log.comment = ""
             log.balance = self.account.balance
             log.trade_margin = last_hist.margin
-            log.max_equity_drawdown = self.max_equity_drawdown_value[0]
-            # log.max_trade_equity_drawdown_value = self.max_trade_equity_drawdown_value[0]
+            log.max_equity_drawdown = self.max_equity_drawdown_value
+            # log.max_trade_equity_drawdown_value = self.max_trade_equity_drawdown_value
 
             self.log_closing_trade(log)
             self.log_flush
 
             duration = last_hist.closing_time - last_hist.entry_time  # .seconds
-            self.min_timedelta(min_open_duration, duration)
-            avg_open_duration_sum[0] += duration
-            open_duration_count[0] += 1
-            self.max_timedelta(max_open_duration, duration)
+            if min_open_duration < duration:
+                min_open_duration = duration
+            avg_open_duration_sum += duration
+            open_duration_count += 1
+            if max_open_duration > duration:
+                max_open_duration = duration
 
             return True
         return False
@@ -91,6 +92,7 @@ class KitaApi:
     # Internal API
     # region
     from Api.QuoteProvider import QuoteProvider
+
     def request_symbol(
         self,
         symbol_name: str,
@@ -155,30 +157,6 @@ class KitaApi:
 
     def d_price(self, price: float, tickSize: float) -> float:
         return tickSize * price
-
-    def max(self, ref_value: list[T], compare: T) -> bool:
-        if compare > ref_value[0]:
-            ref_value[0] = compare
-            return True
-        return False
-
-    def min(self, ref_value: list[T], compare: T) -> bool:
-        if compare < ref_value[0]:
-            ref_value[0] = compare
-            return True
-        return False
-
-    def max_timedelta(self, ref_value: list[timedelta], compare: timedelta) -> bool:
-        if compare > ref_value[0]:
-            ref_value[0] = compare
-            return True
-        return False
-
-    def min_timedelta(self, ref_value: list[timedelta], compare: timedelta) -> bool:
-        if compare < ref_value[0]:
-            ref_value[0] = compare
-            return True
-        return False
 
     def sharpe_sortino(self, is_sortino: bool, vals: list[float]) -> float:
         if len(vals) < 2:
@@ -535,30 +513,29 @@ class KitaApi:
         self.account.leverage = self.AccountLeverage
         self.account.currency = self.AccountCurrency
 
+        self.is_train: bool = False
         self.initial_account_balance: float = self.AccountInitialBalance
         self.symbol_dictionary: dict[str, Symbol] = {}  # type: ignore
         self.positions: list[Position] = []
         self.history: list[Position] = []
-        self.max_equity_drawdown_value: list[float] = []
-        self.is_train: bool = False
-        self.max_margin = [0] * 1  # arrays because of by reference
-        self.same_time_open = [0] * 1
+        self.max_margin: float = 0
+        self.same_time_open: int = 0
+        self.max_balance: float = 0
+        self.max_balance_drawdown_value: float = 0
+        self.max_equity: float = 0
+        self.max_equity_drawdown_value: float = 0
+        self.min_open_duration: timedelta = timedelta.max
+        self.avg_open_duration_sum: timedelta = timedelta.min
+        self.open_duration_count: int = 0
+        self.max_open_duration: timedelta = timedelta.min
         self.same_time_open_date_time = datetime.min
         self.same_time_open_count = 0
-        self.max_balance = [0] * 1
-        self.max_balance_drawdown_value = [0] * 1
         self.max_balance_drawdown_time = datetime.min
         self.max_balance_drawdown_count = 0
-        self.max_equity: list[float] = [0] * 1
-        self.max_equity_drawdown_value = [0] * 1
         self.max_equity_drawdown_time = datetime.min
         self.max_equity_drawdown_count = 0
         self.current_volume = 0
         self.initial_volume = 0
-        self.min_open_duration: list[timedelta] = [timedelta.max] * 1
-        self.avg_open_duration_sum: list[timedelta] = [timedelta.min] * 1
-        self.open_duration_count: list[int] = [0] * 1  # arrays because of by reference
-        self.max_open_duration: list[timedelta] = [timedelta.min] * 1
 
         # call robot's OnInit
         self.robot.on_init()  # type: ignore
@@ -590,25 +567,23 @@ class KitaApi:
 
             # do max/min calcs
             # region
-            # self.max(self.max_margin, self.account.margin)
-            # if self.max(self.same_time_open, len(self.positions)):
-            #     self.same_time_open_date_time = symbol.time
-            #     self.same_time_open_count = len(self.history)
+            self.max_margin = max(self.max_margin, self.account.margin)
+            if  len(self.positions) > self.same_time_open:
+                self.same_time_open = len(self.positions)
+                self.same_time_open_date_time = symbol.time
+                self.same_time_open_count = len(self.history)
 
-            # self.max(self.max_balance, self.account.balance)
-            # if self.max(
-            #     self.max_balance_drawdown_value,
-            #     self.max_balance[0] - self.account.balance,
-            # ):
-            #     self.max_balance_drawdown_time = symbol.time
-            #     self.max_balance_drawdown_count = len(self.history)
+            self.max_balance = max(self.max_balance, self.account.balance)
+            if  self.max_balance - self.account.balance > self.max_balance_drawdown_value:
+                self.max_balance_drawdown_value = self.max_balance - self.account.balance
+                self.max_balance_drawdown_time = symbol.time
+                self.max_balance_drawdown_count = len(self.history)
 
-            # self.max(self.max_equity, self.account.equity)
-            # if self.max(
-            #     self.max_equity_drawdown_value, self.max_equity[0] - self.account.equity
-            # ):
-            #     self.max_equity_drawdown_time = symbol.time
-            #     self.max_equity_drawdown_count = len(self.history)
+            self.max_equity = max(self.max_equity, self.account.equity)
+            if  self.max_equity - self.account.equity > self.max_equity_drawdown_value:
+                self.max_equity_drawdown_value = self.max_equity - self.account.equity
+                self.max_equity_drawdown_time = symbol.time
+                self.max_equity_drawdown_count = len(self.history)
             # endregion
 
             symbol.prev_time = symbol.time
@@ -623,23 +598,12 @@ class KitaApi:
         min_duration = timedelta.max
         max_duration = timedelta.min
         duration_count = 0
-        max_invest_counter = [0] * 1
-        # invest_count_histo = None
-        duration_count += self.open_duration_count[0]
-        min_duration = min(self.min_open_duration[0], min_duration)
-        max_duration = max(self.max_open_duration[0], max_duration)
-
-        # self.max(self.max_invest_count[0], self.max_invest_count)
-
-        # if direction == TradeDirection.Long == self.robot.longShorts[0].is_long:
-        #     invest_count_histo = self.robot.longShorts[0].investCountHisto
-
-        # if len(self.robot.longShorts) >= 2:
-        #     if direction == TradeDirection.Long == self.robot.longShorts[1].is_long:
-        #         invest_count_histo = self.robot.longShorts[1].investCountHisto
+        duration_count += self.open_duration_count
+        min_duration = min(self.min_open_duration, min_duration)
+        max_duration = max(self.max_open_duration, max_duration)
 
         winning_trades = len([x for x in self.history if x.net_profit >= 0])
-        loosing_trades = len([x for x in self.history if x.net_profit < 0])
+        losing_trades = len([x for x in self.history if x.net_profit < 0])
         net_profit = sum(x.net_profit for x in self.history)
         trading_days = 0
         for symbol in self.symbol_dictionary.values():
@@ -652,14 +616,14 @@ class KitaApi:
             annual_profit = 0
         else:
             annual_profit = net_profit / (trading_days / 252.0)
-        total_trades = winning_trades + loosing_trades
+        total_trades = winning_trades + losing_trades
         annual_profit_percent = 0 if total_trades == 0 else 100.0 * annual_profit / self.initial_account_balance
         loss = sum(x.net_profit for x in self.history if x.net_profit < 0)
         profit = sum(x.net_profit for x in self.history if x.net_profit >= 0)
-        profit_factor = 0 if loosing_trades == 0 else abs(profit / loss)
-        max_current_equity_dd_percent = 100 * self.max_equity_drawdown_value[0] / self.max_equity[0]
-        max_start_equity_dd_percent = 100 * self.max_equity_drawdown_value[0] / self.initial_account_balance
-        calmar = 0 if self.max_equity_drawdown_value[0] == 0 else annual_profit / self.max_equity_drawdown_value[0]
+        profit_factor = 0 if losing_trades == 0 else abs(profit / loss)
+        max_current_equity_dd_percent = 100 * self.max_equity_drawdown_value / self.max_equity
+        max_start_equity_dd_percent = 100 * self.max_equity_drawdown_value / self.initial_account_balance
+        calmar = 0 if self.max_equity_drawdown_value == 0 else annual_profit / self.max_equity_drawdown_value
         winning_ratio_percent = 0 if total_trades == 0 else 100.0 * winning_trades / total_trades
 
         if 0 == trading_days:
@@ -684,101 +648,110 @@ class KitaApi:
         # average_daily_return = annual_profit / 252.0
         # sharpe_ratio = average_daily_return / sd * sqrt(252.0)
 
-        self.log_add_text_line("")
-        self.log_add_text_line("")
-        self.log_add_text_line(
-            "Net Profit,"
+        log_text = "\n\n" + (
+            "Net Profit:,"
             + KitaApi.double_to_string(profit + loss, 2)
-            + ",,,,Long: "
+            + ", Long:,"
             + KitaApi.double_to_string(
                 sum(x.net_profit for x in self.history if x.trade_type == TradeType.Buy),
                 2,
             )
-            + ",,,,Short:,"
+            + ", Short:,"
             + KitaApi.double_to_string(
                 sum(x.net_profit for x in self.history if x.trade_type == TradeType.Sell),
                 2,
             )
+            + "\n"
         )
 
-        # self.log_add_text_line("max_margin: " + self.account.asset + " " + KitaApi.double_to_string(mMaxMargin, 2))
-        # self.log_add_text_line("max_same_time_open: " + str(mSameTimeOpen)
+        log_text += (
+            "All Trades:,"
+            + str(total_trades)
+            + ", Winners:,"
+            + str(winning_trades)
+            + ", Losers:,"
+            + str(losing_trades)
+            + "\n"
+        )
+
+        # log_text += ("max_margin: " + self.account.asset + " " + KitaApi.double_to_string(mMaxMargin, 2) + "\n")
+        # log_text += ("max_same_time_open: " + str(mSameTimeOpen + "\n")
         # + ", @ " + mSameTimeOpenDateTime.strftime("%d.%m.%Y %H:%M:%S")
         # + ", Count# " + str(mSameTimeOpenCount))
-        self.log_add_text_line(
+        log_text += (
             "Max Balance Drawdown Value: "
             + self.account.currency
             + " "
-            + KitaApi.double_to_string(self.max_balance_drawdown_value[0], 2)
+            + KitaApi.double_to_string(self.max_balance_drawdown_value, 2)
             + "; @ "
             + self.max_balance_drawdown_time.strftime("%d.%m.%Y %H:%M:%S")
             + "; Count# "
             + str(self.max_balance_drawdown_count)
+            + "\n"
         )
 
-        self.log_add_text_line(
+        log_text += (
             "Max Balance Drawdown%: "
             + (
                 "NaN"
-                if self.max_balance[0] == 0
-                else KitaApi.double_to_string(100 * self.max_balance_drawdown_value[0] / self.max_balance[0], 2)
+                if self.max_balance == 0
+                else KitaApi.double_to_string(100 * self.max_balance_drawdown_value / self.max_balance, 2)
             )
+            + "\n"
         )
 
-        self.log_add_text_line(
+        log_text += (
             "Max Equity Drawdown Value: "
             + self.account.currency
             + " "
-            + KitaApi.double_to_string(self.max_equity_drawdown_value[0], 2)
+            + KitaApi.double_to_string(self.max_equity_drawdown_value, 2)
             + "; @ "
             + self.max_equity_drawdown_time.strftime("%d.%m.%Y %H:%M:%S")
             + "; Count# "
             + str(self.max_equity_drawdown_count)
+            + "\n"
         )
 
-        self.log_add_text_line(
-            "Max Current Equity Drawdown %: " + KitaApi.double_to_string(max_current_equity_dd_percent, 2)
+        log_text += (
+            "Max Current Equity Drawdown %: " + KitaApi.double_to_string(max_current_equity_dd_percent, 2) + "\n"
         )
 
-        self.log_add_text_line(
-            "Max start Equity Drawdown %: " + KitaApi.double_to_string(max_start_equity_dd_percent, 2)
+        log_text += (
+            "Max start Equity Drawdown %: " + KitaApi.double_to_string(max_start_equity_dd_percent, 2) + "\n"
         )
 
-        self.log_add_text_line(
-            "Profit Factor: " + ("-" if loosing_trades == 0 else KitaApi.double_to_string(profit_factor, 2))
+        log_text += (
+            "Profit Factor: " + ("-" if losing_trades == 0 else KitaApi.double_to_string(profit_factor, 2)) + "\n"
         )
 
-        self.log_add_text_line("Sharpe Ratio: " + KitaApi.double_to_string(sharpe_ratio, 2))
-        self.log_add_text_line("Sortino Ratio: " + KitaApi.double_to_string(sortino_ratio, 2))
-
-        self.log_add_text_line("Calmar Ratio: " + KitaApi.double_to_string(calmar, 2))
-        self.log_add_text_line("Winning Ratio: " + KitaApi.double_to_string(winning_ratio_percent, 2))
-
-        self.log_add_text_line("Trades Per Month: " + KitaApi.double_to_string(trades_per_month, 2))
-
-        self.log_add_text_line(
-            "Average Annual Profit Percent: " + KitaApi.double_to_string(annual_profit_percent, 2)
-        )
+        log_text += "Sharpe Ratio: " + KitaApi.double_to_string(sharpe_ratio, 2) + "\n"
+        log_text += "Sortino Ratio: " + KitaApi.double_to_string(sortino_ratio, 2) + "\n"
+        log_text += "Calmar Ratio: " + KitaApi.double_to_string(calmar, 2) + "\n"
+        log_text += "Winning Ratio: " + KitaApi.double_to_string(winning_ratio_percent, 2) + "\n"
+        log_text += "Trades Per Month: " + KitaApi.double_to_string(trades_per_month, 2) + "\n"
+        log_text += "Average Annual Profit Percent: " + KitaApi.double_to_string(annual_profit_percent, 2) + "\n"
 
         # if avg_open_duration_sum != 0:
-        #     self.log_add_text_line(
+        #     log_text += (
         #         "Min / Avg / Max Tradeopen Duration (Day.Hour.Min.sec): "
         #         + str(min_duration)
         #         + " / "
         #         + str(avg_open_duration_sum / avg_open_duration_sum)
         #         + " / "
         #         + str(self.max_duration)
-        #     )
-        self.log_add_text_line("Max Repurchase: " + str(max_invest_counter[0]))
+        #     ) + "\n"
+
         # histo_rest_sum = 0.0
         # if investCountHisto is not None:
         #     for i in range(len(investCountHisto) - 1, 0, -1):
         #         if investCountHisto[i] != 0:
-        #             self.log_add_text_line("Invest " + str(i) + ": " + str(investCountHisto[i]))
+        #             log_text += ("Invest " + str(i) + ": " + str(investCountHisto[i]))
         #             if i > 1:
         #                 histoRestSum += investCountHisto[i]
         #     if histoRestSum != 0:
-        #         self.log_add_text_line("histo_rest_quotient: " + KitaApi.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
+        #         log_text += ("histo_rest_quotient: " + KitaApi.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
+        print(log_text.replace(":,", ": "))
+        self.log_add_text_line(log_text)
         self.log_close()
 
     def calculate_reward(self) -> float:

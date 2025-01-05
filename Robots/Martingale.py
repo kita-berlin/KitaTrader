@@ -22,9 +22,9 @@ class Martingale(KitaApi):
     # region
     # These parameters can be set by the startup module like MainConsole.py
     # If not set from there, the given default values will be used
-    Rebuy1stPercent = 1.5
-    RebuyPercent = 0.2
-    TakeProfitPercent = 0.2
+    Rebuy1stPercent = 1
+    RebuyPercent = 0.1
+    TakeProfitPercent = 0.1
     Volume = 2000
     Direction = TradeDirection.Mode1
     # endregion
@@ -43,7 +43,7 @@ class Martingale(KitaApi):
         # region
         self.is_long = True
         self.current_volume = self.initial_volume = self.Volume
-        self.max_invest_count: list[int] = [0] * 1
+        self.max_invest_count: int = 0
         self.cluster_count: int = 0
         self.avg_price: float = 0
         self.invest_count: int = 0
@@ -103,7 +103,16 @@ class Martingale(KitaApi):
             )
 
     ###################################
+    def on_start(self, symbol: Symbol) -> None:
+        # Members to be re-initialized on each new start
+        # region
+        # endregion
+        pass
+
+    ###################################
     def on_tick(self, symbol: Symbol):
+        # Entry stuff
+        # region
         current_open = symbol.ask if self.is_long else symbol.bid
         current_close = symbol.bid if self.is_long else symbol.ask
         target_cash = current_repurchase_price = 0
@@ -145,8 +154,10 @@ class Martingale(KitaApi):
             tp_points = self.i_price(tp_value, symbol.point_size)
 
             target_cash = self.get_money_from_points_and_volume(symbol, tp_points, self.current_volume)
+        # endregion
 
-        # Take Profit ?
+        # Take Profit
+        # region
         is_just_closed = False
         if is_trading_allowed:
             if self.invest_count > 0:
@@ -162,7 +173,7 @@ class Martingale(KitaApi):
                             # + "; {:.2f}".format(
                             #     self.account.balance - self.initial_account_balance
                             # )
-                            + "; {:.2f}".format(self.max_equity_drawdown_value[0])
+                            + "; {:.2f}".format(self.max_equity_drawdown_value)
                             + "; {}".format(self.cluster_count)
                             + "; {}".format(self.invest_count)
                             + "; {:.2f}".format(self.calmar)
@@ -171,9 +182,10 @@ class Martingale(KitaApi):
                     if self.Direction == TradeDirection.Mode1:
                         self.is_long = not self.is_long  # flip direction
                     is_just_closed = True
-        pass
+        # endregion
 
-        # Open ?
+        # Open
+        # region
         if is_trading_allowed and not is_just_closed:
             is_reinvest = False
             volume_to_add = self.initial_volume
@@ -204,7 +216,8 @@ class Martingale(KitaApi):
                 )
 
                 self.invest_count += 1
-                self.max(self.max_invest_count, self.invest_count)
+                if self.invest_count > self.max_invest_count:
+                    self.max_invest_count = self.invest_count
                 self.margin_after_open = self.account.margin
 
                 if not self.is_train:
@@ -212,26 +225,19 @@ class Martingale(KitaApi):
                         symbol.time.strftime("%d-%m-%Y %H:%M:%S; ")
                         + ("Long" if self.is_long else "Short")
                         + "; {:.2f}".format(self.account.balance - self.initial_account_balance)
-                        # + "; {:.2f}".format(self.max_equity_drawdown_value[0])
-                        # + "; {}".format(self.cluster_count)
-                        # + "; {}".format(self.invest_count)
-                        # + "; {:.2f}".format(self.calmar)
-                        # + "; {:.2f}".format(self.Rebuy1stPercent)
-                        # + "; {:.2f}".format(self.RebuyPercent)
-                        # + "; {:.2f}".format(self.TakeProfitPercent)
+                        + "; {:.2f}".format(self.max_equity_drawdown_value)
+                        + "; {}".format(self.cluster_count)
+                        + "; {}".format(self.invest_count)
+                        + "; {:.2f}".format(self.calmar)
+                        + "; {:.2f}".format(self.Rebuy1stPercent)
+                        + "; {:.2f}".format(self.RebuyPercent)
+                        + "; {:.2f}".format(self.TakeProfitPercent)
                     )
-
-    ###################################
-    def on_start(self, symbol: Symbol) -> None:
-        # Members to be re-initialized on each new start
-        # region
         # endregion
-        pass
 
     ###################################
     def on_stop(self):
         print("Done")
-        pass
 
     ###################################
     def get_label(self, symbol: Symbol):
@@ -244,9 +250,9 @@ class Martingale(KitaApi):
 
     ###################################
     def close_all_open_positions(self):
-        # is_cluster = len(self.positions) >= 2
-        # if isCluster:
-        #     self.log_add_text("\n")
+        is_cluster = len(self.positions) >= 2
+        if is_cluster:
+            self.log_add_text("\n")
 
         for pos in self.positions:
             self.close_trade(
@@ -258,8 +264,8 @@ class Martingale(KitaApi):
                 self.max_open_duration,
             )
 
-        # if isCluster:
-        self.log_add_text("\n")
+        if is_cluster:
+            self.log_add_text("\n")
 
         self.cluster_count += 1
         self.positions = []
@@ -276,9 +282,7 @@ class Martingale(KitaApi):
         self.cluster_count  # number of current cluster
         self.invest_count  # number of open trades within current cluster
         self.account.margin  # sum of all open Position margins; equal to sum(x.margin for x in self.positions)
-        self.max_equity_drawdown_value[
-            0
-        ]  # holds biggest difference of self.account.balance and self.account.equity
+        self.max_equity_drawdown_value  # holds biggest difference of self.account.balance and self.account.equity
 
         # composed values
         history_profit = self.account.balance - self.initial_account_balance
@@ -290,8 +294,8 @@ class Martingale(KitaApi):
         self.daily_revenue.append(revenue - self.prev_revenue)
         # self.sharpe_ratio = self.sharpe_sortino(False, self.daily_revenue) * self.Sqrt252
         # self.sortino_ratio = self.sharpe_sortino(True, self.daily_revenue) * self.Sqrt252
-        if 0 != self.max_equity_drawdown_value[0]:
-            self.calmar = revenue / self.max_equity_drawdown_value[0]
+        if 0 != self.max_equity_drawdown_value:
+            self.calmar = revenue / self.max_equity_drawdown_value
 
         self.prev_revenue = revenue
 
