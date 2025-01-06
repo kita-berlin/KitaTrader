@@ -60,23 +60,22 @@ class Template(KitaApi):
             exit()
 
         # 4. Define one or more bars (optional)
-        self.sma_period = 10
+        self.sma_period = 2
         # request_bars(timeframe in seconds, look back number of bars so indicators can warm up
         # error, self.h1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_HOUR, self.sma_period)
         # error, self.d1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_DAY, self.sma_period)
-        # error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, self.sma_period)
-        # error, self.m5_bars = self.gbpusd_symbol.request_bars(5 * Constants.SEC_PER_MINUTE, self.sma_period)
+        error, self.m5_bars = self.gbpusd_symbol.request_bars(5 * Constants.SEC_PER_MINUTE, self.sma_period)
+        error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, 2000)
 
         # 5. Define kita indicators (optional)
         # error, self.sma = Indicators.moving_average(
-        #     source=self.m1_bars.close_bids,
+        #     source=self.m1_bars.open_bids,
         #     periods=self.sma_period,
         #     ma_type=MovingAverageType.Simple,
         # )
-
-        if "" != error:
-            print(error)
-            exit()
+        # if "" != error:
+        #     print(error)
+        #     exit()
 
         # Demo to show all available symbols
         # i = 0
@@ -91,13 +90,13 @@ class Template(KitaApi):
         ta_funcs = talib.get_functions()  # type:ignore
         # print(ta_funcs)  # type:ignore
 
-        # np_close = np.array(self.d1_bars.close_bids.data, dtype=float)
-        # ta_sma = talib.SMA(np_close, self.sma_period)  # type:ignore
+        np_open = np.array(self.m5_bars.open_bids.data)
+        self.ta_sma = talib.SMA(np_open, self.sma_period)  # type:ignore
 
         # # Access the first element as a float
-        # val_1st = ta_sma[0]  # type:ignore
-        # val_10000 = ta_sma[100]  # type:ignore
-        # val_last = ta_sma[-1]  # type:ignore
+        val_1st = self.ta_sma[0]  # type:ignore
+        val_mid = self.ta_sma[1000]  # type:ignore
+        val_last = self.ta_sma[-1]  # type:ignore
 
         print("")
 
@@ -105,6 +104,11 @@ class Template(KitaApi):
     def on_tick(self, symbol: Symbol):
         if symbol.is_warm_up:
             return
+
+        sma = self.ta_sma[self.m5_bars.current]  # type:ignore
+        bid0 = self.m5_bars.open_bids.last(0)
+        bid1 = self.m5_bars.open_bids.last(1)
+        bid_mid = (bid0 + bid1) / 2
 
         # print the time of the first tick of a new day
         # and the milliseconds it took to process the previous day

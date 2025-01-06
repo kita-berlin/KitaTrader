@@ -27,9 +27,6 @@ class Dukascopy(QuoteProvider):
     def init_symbol(self, api: KitaApi, symbol: Symbol):
         self.api = api
         self.symbol = symbol
-        self.cache_path = os.path.join(api.CachePath, "cache")
-        if not os.path.exists(self.cache_path):
-            os.makedirs(self.cache_path)
 
     def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, QuotesType]:
         day_data: QuotesType = []

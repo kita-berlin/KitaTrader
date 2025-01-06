@@ -158,34 +158,54 @@ class Symbol:
     def volume_in_units_to_quantity(self, volume: float) -> float:
         return volume / self.lot_size
 
-    def request_bars(self, timeframe_seconds: int, look_back: int = 0) -> tuple[str, Bars]:
-        if timeframe_seconds in self.bars_dictonary:
-            if look_back > self.bars_dictonary[timeframe_seconds].look_back:
-                self.bars_dictonary[timeframe_seconds].look_back = look_back
+    def request_bars(self, timeframe: int, look_back: int = 0) -> tuple[str, Bars]:
+        if timeframe < Constants.SEC_PER_HOUR:
+            if Constants.SEC_PER_MINUTE != timeframe:
+                minute_look_back = look_back * timeframe // Constants.SEC_PER_MINUTE
+                self.bars_dictonary[Constants.SEC_PER_MINUTE] = Bars(
+                    self.name, Constants.SEC_PER_MINUTE, minute_look_back
+                )
+
+        elif timeframe < Constants.SEC_PER_DAY:
+            if Constants.SEC_PER_HOUR != timeframe:
+                hour_look_back = look_back * timeframe // Constants.SEC_PER_HOUR
+                self.bars_dictonary[Constants.SEC_PER_HOUR] = Bars(
+                    self.name, Constants.SEC_PER_HOUR, hour_look_back
+                )
+
+        elif Constants.SEC_PER_DAY != timeframe:
+            daily_look_back = look_back * timeframe // Constants.SEC_PER_DAY
+            self.bars_dictonary[Constants.SEC_PER_DAY] = Bars(self.name, Constants.SEC_PER_HOUR, daily_look_back)
+
+        if timeframe in self.bars_dictonary:
+            if look_back > self.bars_dictonary[timeframe].look_back:
+                self.bars_dictonary[timeframe].look_back = look_back
         else:
-            new_bars = Bars(self.name, timeframe_seconds, look_back)
-            self.bars_dictonary[timeframe_seconds] = new_bars
-        return "", self.bars_dictonary[timeframe_seconds]
+            self.bars_dictonary[timeframe] = Bars(self.name, timeframe, look_back)
+        return "", self.bars_dictonary[timeframe]
 
     def load_datarate_and_bars(self) -> str:
         self._set_tz_awareness()
 
+        # load requested regular bars
+        min_start = datetime.max.replace(tzinfo=timezone.utc)
+        for timeframe in self.bars_dictonary:
+            start = self._load_bars(timeframe, self.api.robot.BacktestStartUtc)
+            min_start = min(min_start, start)  # type:ignore
+
         # check if ticks for data rate are rquested and load them
         if 0 == self.quote_provider.datarate:
             # get ticks from quote provider
-            error = self._load_ticks()
+            error = self._load_ticks(min_start)
             if "" != error:
                 return error
         else:
             self.bar_data = self.bars_dictonary[self.quote_provider.datarate]
 
-        # load requested bars
-        self._load_bars()
-
         self.symbol_on_tick()  # set initial time, bid, ask for on_start()
         return ""
 
-    def _load_ticks(self) -> str:
+    def _load_ticks(self, start: datetime) -> str:
         # find first quote if all data is requested
         if datetime.min.replace(tzinfo=timezone.utc) == self.api.AllDataStartUtc:
             print("Finding first quote of " + self.name)
@@ -221,7 +241,7 @@ class Symbol:
         dates = [file_date for file_date, _ in files]
 
         # Perform binary search
-        start_idx = bisect_left(dates, self.api.robot.BacktestStartUtc)
+        start_idx = bisect_left(dates, start)
 
         # line example: 79212312,1.65616,1.65694
         # milliseconds offset, bid, ask
@@ -251,30 +271,32 @@ class Symbol:
 
         return ""
 
-    def _load_bars(self):
-        for timeframe in self.bars_dictonary:
-            print(f"Loading {self.name} {timeframe} seconds OHLC bars")
+    def _load_bars(self, timeframe: int, start: datetime) -> datetime:
+        print(f"Loading {self.name} {timeframe} seconds OHLC bars")
+        start_look_back = datetime.min
 
-            if timeframe < Constants.SEC_PER_HOUR:
-                self._load_minute_bars()  # load 1 minute bars
-
-                if Constants.SEC_PER_MINUTE != timeframe:
-                    self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
-
-            elif timeframe < Constants.SEC_PER_DAY:
-                self._load_hour_or_daily_bars(Constants.SEC_PER_HOUR)  # load 1 hour bars
-
-                if Constants.SEC_PER_HOUR != timeframe:
-                    self._resample(self.bars_dictonary[Constants.SEC_PER_HOUR], timeframe)
-
+        if timeframe < Constants.SEC_PER_HOUR:
+            if Constants.SEC_PER_MINUTE == timeframe:
+                start_look_back = self._load_minute_bars(start)  # load 1 minute bars
             else:
-                self._load_hour_or_daily_bars(Constants.SEC_PER_DAY)  # load 1 day bars
+                start_look_back = self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
 
-                if Constants.SEC_PER_DAY != timeframe:
-                    self._resample(self.bars_dictonary[Constants.SEC_PER_DAY], timeframe)
+        elif timeframe < Constants.SEC_PER_DAY:
+            if Constants.SEC_PER_HOUR == timeframe:
+                start_look_back = self._load_hour_or_daily_bars(Constants.SEC_PER_HOUR, start)  # load 1 hour bars
+            else:
+                start_look_back = self._resample(self.bars_dictonary[Constants.SEC_PER_HOUR], timeframe)
 
-    def _resample(self, source_bars: Bars, second_tf: int):
-        pd_tf = self._seconds_to_pandas_timeframe(second_tf)
+        else:
+            if Constants.SEC_PER_DAY == timeframe:
+                start_look_back = self._load_hour_or_daily_bars(Constants.SEC_PER_DAY, start)  # load 1 day bars
+            else:
+                start_look_back = self._resample(self.bars_dictonary[Constants.SEC_PER_DAY], timeframe)
+
+        return start_look_back
+
+    def _resample(self, source_bars: Bars, timeframe: int) -> datetime:
+        pd_tf = self._seconds_to_pandas_timeframe(timeframe)
 
         # Resample bars to the desired timeframe using pandas resample
         df = pd.DataFrame(
@@ -294,10 +316,10 @@ class Symbol:
         df.set_index("time", inplace=True)  # type:ignore
 
         # resample
-        resampled_df = df.resample(pd_tf).apply(self.ohlcva_aggregation)  # type:ignore
+        resampled_df = df.resample(pd_tf).apply(self.ohlcva_aggregation).dropna()  # type:ignore
 
         # save resampled data to the target bars
-        target_bars = self.bars_dictonary[second_tf]
+        target_bars = self.bars_dictonary[timeframe]
         target_bars.open_times.data = resampled_df.index.to_pydatetime().tolist()  # type:ignore
         target_bars.open_bids.data = resampled_df["open"].tolist()
         target_bars.high_bids.data = resampled_df["high"].tolist()
@@ -305,6 +327,8 @@ class Symbol:
         target_bars.close_bids.data = resampled_df["close"].tolist()
         target_bars.volume.data = resampled_df["volume"].tolist()
         target_bars.open_asks.data = resampled_df["open_ask"].tolist()
+
+        return target_bars.open_times.data[0]  # type:ignore
 
     def _seconds_to_pandas_timeframe(self, seconds: int) -> str:
         if seconds % 60 != 0:
@@ -351,12 +375,9 @@ class Symbol:
             hours=self.normalized_hours_offset
         )
 
-    def _load_minute_bars(self):
+    def _load_minute_bars(self, start: datetime) -> datetime:
         bars = self.bars_dictonary[Constants.SEC_PER_MINUTE]
-        if len(bars.open_times.data) > 0:
-            return
-
-        look_back = bars.look_back
+        look_back_run = bars.look_back
         files: list[tuple[datetime, str]] = []
         folder = os.path.join(
             self.api.CachePath,
@@ -377,11 +398,11 @@ class Symbol:
         dates = [file_date for file_date, _ in files]
 
         # Start loading from BacktestStartUtc
-        start_idx = bisect_left(dates, self.api.robot.BacktestStartUtc)
+        start_idx = bisect_left(dates, start)
         # loaded_bars = 0
 
         # Process additional bars if needed
-        while look_back > 0 and start_idx > 0:
+        while look_back_run > 0 and start_idx > 0:
             start_idx -= 1
             file_date, file_name = files[start_idx]
             zip_path = os.path.join(folder, file_name)
@@ -394,11 +415,11 @@ class Symbol:
                     rows = list(reader)  # Read all rows to count bars
                     num_bars = len(rows)
 
-                    if num_bars <= look_back:
+                    if num_bars <= look_back_run:
                         # Load all bars if the file doesn't fulfill look_back
-                        look_back -= num_bars
+                        look_back_run -= num_bars
                     else:
-                        look_back = 0  # break
+                        look_back_run = 0  # break
 
         # Process files starting from BacktestStartUtc
         for file_date, file_name in files[start_idx:]:
@@ -424,7 +445,9 @@ class Symbol:
                             bars.volume.data.append(int(row[5]))
                             bars.open_asks.data.append(float(row[6]))
 
-    def _load_hour_or_daily_bars(self, timeframe: int):
+        return bars.open_times.data[0]
+
+    def _load_hour_or_daily_bars(self, timeframe: int, start: datetime) -> datetime:
         # file name example: gbp_usd.zip
         zipfile = os.path.join(
             self.api.CachePath,
@@ -451,9 +474,9 @@ class Symbol:
             current_datetime = datetime.strptime(lines[mid].split(",")[0], "%Y%m%d %H:%M").replace(
                 tzinfo=timezone.utc
             )
-            if current_datetime < self.api.robot.BacktestStartUtc:
+            if current_datetime < start:
                 low = mid + 1
-            elif current_datetime > self.api.robot.BacktestStartUtc:
+            elif current_datetime > start:
                 high = mid - 1
             else:
                 start_index = mid
@@ -479,6 +502,8 @@ class Symbol:
             bars.close_bids.data.append(float(row[4]))
             bars.volume.data.append(int(row[5]))
             bars.open_asks.data.append(float(row[6]))
+
+        return bars.open_times.data[0]
 
     def symbol_on_tick(self) -> str:
         if 0 == self.quote_provider.datarate:

@@ -11,6 +11,8 @@ from Api.Account import Account
 from Api.Symbol import Symbol
 from Api.Position import Position
 from Api.KitaApiEnums import BidAsk, TradeType, ProfitMode
+from Api.QuoteProvider import QuoteProvider
+from Api.Symbol import Symbol
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
@@ -91,8 +93,6 @@ class KitaApi:
 
     # Internal API
     # region
-    from Api.QuoteProvider import QuoteProvider
-
     def request_symbol(
         self,
         symbol_name: str,
@@ -100,18 +100,11 @@ class KitaApi:
         trade_provider: TradeProvider,
         str_time_zone: str = "utc",
     ) -> tuple[str, Symbol]:
-
-        from Api.Symbol import Symbol
-
         symbol = Symbol(self, symbol_name, quote_provider, trade_provider, str_time_zone)
 
         quote_provider.init_symbol(self, symbol)
         trade_provider.init_symbol(self, symbol)
         self.symbol_dictionary[symbol_name] = symbol
-
-        # check if datarate is not ticks but bars
-        if quote_provider.datarate > 0:
-            symbol.request_bars(quote_provider.datarate, 0)
 
         return "", symbol
 
