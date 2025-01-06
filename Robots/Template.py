@@ -33,7 +33,7 @@ class Template(KitaApi):
         super().__init__()  # Importatnt, do not delete
 
     sqrt252: float = sqrt(252)
-    prev_time: float = 0
+    performance_prev_time: float = 0
     # endregion
 
     ###################################
@@ -53,7 +53,7 @@ class Template(KitaApi):
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "New York normalized time")
-            # "America/New_York:Normalized",
+            "America/New_York:Normalized",
         )
         if "" != error:
             print(error)
@@ -62,10 +62,10 @@ class Template(KitaApi):
         # 4. Define one or more bars (optional)
         self.sma_period = 10
         # request_bars(timeframe in seconds, look back number of bars so indicators can warm up
-        error, self.h1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_HOUR, self.sma_period)
-        error, self.d1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_DAY, self.sma_period)
-        error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, self.sma_period)
-        error, self.m5_bars = self.gbpusd_symbol.request_bars(5 * Constants.SEC_PER_MINUTE, self.sma_period)
+        # error, self.h1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_HOUR, self.sma_period)
+        # error, self.d1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_DAY, self.sma_period)
+        # error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, self.sma_period)
+        # error, self.m5_bars = self.gbpusd_symbol.request_bars(5 * Constants.SEC_PER_MINUTE, self.sma_period)
 
         # 5. Define kita indicators (optional)
         # error, self.sma = Indicators.moving_average(
@@ -91,33 +91,33 @@ class Template(KitaApi):
         ta_funcs = talib.get_functions()  # type:ignore
         # print(ta_funcs)  # type:ignore
 
-        np_close = np.array(self.d1_bars.close_bids.data, dtype=float)
-        ta_sma = talib.SMA(np_close, self.sma_period)  # type:ignore
+        # np_close = np.array(self.d1_bars.close_bids.data, dtype=float)
+        # ta_sma = talib.SMA(np_close, self.sma_period)  # type:ignore
 
-        # Access the first element as a float
-        val_1st = ta_sma[0]  # type:ignore
-        val_10000 = ta_sma[100]  # type:ignore
-        val_last = ta_sma[-1]  # type:ignore
+        # # Access the first element as a float
+        # val_1st = ta_sma[0]  # type:ignore
+        # val_10000 = ta_sma[100]  # type:ignore
+        # val_last = ta_sma[-1]  # type:ignore
 
         print("")
 
     ###################################
     def on_tick(self, symbol: Symbol):
-        current_time = symbol.time
-
         if symbol.is_warm_up:
             return
 
+        # print the time of the first tick of a new day
+        # and the milliseconds it took to process the previous day
         if symbol.time.date() != symbol.prev_time.date():
-            diff = time.perf_counter() - self.prev_time
+            diff = (time.perf_counter() - self.performance_prev_time) * 1e3
             print(
                 symbol.time.strftime("%Y-%m-%d %H:%M:%S"),
                 ", ",
                 symbol.time.strftime("%A"),
                 ", ",
-                f"{diff:.3f}",
+                f"{diff:.1f}",
             )
-            self.prev_time = time.perf_counter()
+            self.performance_prev_time = time.perf_counter()
 
     ###################################
     def on_stop(self):

@@ -126,7 +126,7 @@ class Symbol:
         self.leverage = self.api.AccountLeverage
 
         # 7 is the difference between midnight and 17:00 New York time
-        if "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]:
+        if 2 == len(tz_split) and "America/New_York" == tz_split[0] and "Normalized" == tz_split[1]:
             self.normalized_hours_offset = 7
 
         error = self.quote_provider.init_market_info(
@@ -298,7 +298,7 @@ class Symbol:
 
         # save resampled data to the target bars
         target_bars = self.bars_dictonary[second_tf]
-        target_bars.open_times.data = resampled_df.index.to_pydatetime().tolist() # type:ignore
+        target_bars.open_times.data = resampled_df.index.to_pydatetime().tolist()  # type:ignore
         target_bars.open_bids.data = resampled_df["open"].tolist()
         target_bars.high_bids.data = resampled_df["high"].tolist()
         target_bars.low_bids.data = resampled_df["low"].tolist()
@@ -414,7 +414,7 @@ class Symbol:
                         reader = csv.reader(decoded.splitlines())
                         for row in reader:
                             bars.open_times.data.append(
-                                (file_date + timedelta(milliseconds=int(row[0]))).replace(tzinfo=self.time_zone)
+                                (file_date + timedelta(milliseconds=int(row[0]))).astimezone(self.time_zone)
                                 + timedelta(hours=self.normalized_hours_offset)
                             )
                             bars.open_bids.data.append(float(row[1]))
@@ -469,7 +469,7 @@ class Symbol:
             if line_datetime > self.api.robot.BacktestEndUtc:
                 break
 
-            line_datetime = line_datetime.replace(tzinfo=self.time_zone) + timedelta(
+            line_datetime = line_datetime.astimezone(self.time_zone) + timedelta(
                 hours=self.normalized_hours_offset
             )
             bars.open_times.data.append(line_datetime)
