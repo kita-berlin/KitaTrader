@@ -1,9 +1,15 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 from typing import Iterable, Iterator
 from datetime import datetime
 
+if TYPE_CHECKING:
+    from Api.Bars import Bars
+
 
 class TimeSeries(Iterable[datetime]):
-    def __init__(self):
+    def __init__(self, parent: Bars):
+        self.parent = parent
         self.data: list[datetime] = []
 
     def __getitem__(self, index: int) -> datetime:
@@ -12,36 +18,12 @@ class TimeSeries(Iterable[datetime]):
     def __iter__(self) -> Iterator[datetime]:
         return iter(self.data)  # Generator for iteration
 
-    @property
-    def last_value(self) -> datetime:  # Gets the last value of this time series.
-        return self.data[-1]
+    # Access a value in the data series certain number of bars ago.
+    def last(self, index: int) -> datetime:
+        if index < 0 or index >= len(self.data):
+            return datetime.min
 
-    @property
-    def count(self) -> int:  # Gets the number of elements contained in the series.
-        return len(self.data)
-
-    def last(self, index: int) -> datetime:  # Access a value in the data series certain number of bars ago.
-        return self.data[self.count - index - 1]
-
-    def get_index_by_exact_time(self, dateTime: datetime) -> int:
-        """
-        Find the index in the different time frame series.
-
-        gui_parameters:
-          dateTime:
-            The open time of the bar at this index.
-        """
-        raise NotImplementedError
-
-    def get_index_by_time(self, dateTime: datetime) -> int:
-        """
-        Find the index in the different time frame series.
-
-        gui_parameters:
-          dateTime:
-            The open time of the bar at this index.
-        """
-        raise NotImplementedError
+        return self.data[self.parent.current - index]
 
 
 # end of file

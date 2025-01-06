@@ -8,7 +8,8 @@ from Api.CoFu import *
 from Api.Constants import *
 from BrokerProvider.QuoteDukascopy import Dukascopy
 from BrokerProvider.TradePaper import TradePaper
-from Indicators.Indicators import Indicators
+
+# from Indicators.Indicators import Indicators
 
 
 class Template(KitaApi):
@@ -60,16 +61,18 @@ class Template(KitaApi):
 
         # 4. Define one or more bars (optional)
         self.sma_period = 10
-        error, self.h1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_HOUR, 0)
-        error, self.d1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_DAY, 0)
-        error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, 2000)
+        # request_bars(timeframe in seconds, look back number of bars so indicators can warm up
+        error, self.h1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_HOUR, self.sma_period)
+        error, self.d1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_DAY, self.sma_period)
+        error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, self.sma_period)
+        error, self.m5_bars = self.gbpusd_symbol.request_bars(5 * Constants.SEC_PER_MINUTE, self.sma_period)
 
         # 5. Define kita indicators (optional)
-        error, self.sma = Indicators.moving_average(
-            source=self.m1_bars.close_prices,
-            periods=self.sma_period,
-            ma_type=MovingAverageType.Simple,
-        )
+        # error, self.sma = Indicators.moving_average(
+        #     source=self.m1_bars.close_bids,
+        #     periods=self.sma_period,
+        #     ma_type=MovingAverageType.Simple,
+        # )
 
         if "" != error:
             print(error)
@@ -82,47 +85,26 @@ class Template(KitaApi):
         #     print(str(i) + ": " + symbol_name)
 
     def on_start(self, symbol: Symbol) -> None:
-        # Members to be re-initialized on each new start
-        # region
-        # endregion
-
-        # example how to use ta-lib
+        # examples how to use ta-lib
+        # ta-lib indicators must be defined in on_start because
+        # full bars are built after on_init
         ta_funcs = talib.get_functions()  # type:ignore
         # print(ta_funcs)  # type:ignore
 
-        np_close = np.array(self.m1_bars.close_prices.data)
-        ta_sma = talib.SMA(  # type:ignore
-            np_close[-self.sma_period :],  # type:ignore
-            timeperiod=self.sma_period,
-        )[-1]
+        np_close = np.array(self.d1_bars.close_bids.data, dtype=float)
+        ta_sma = talib.SMA(np_close, self.sma_period)  # type:ignore
+
+        # Access the first element as a float
+        val_1st = ta_sma[0]  # type:ignore
+        val_10000 = ta_sma[100]  # type:ignore
+        val_last = ta_sma[-1]  # type:ignore
+
         print("")
-
-        """
-        my_sma = self.Sma.Result.Last(0)
-
-        ta_sd = talib.STDDEV(
-            self.indi_bars.close_prices.data[-self.sma_period :], timeperiod =self.sma_period
-        )[-1]
-        my_sd = self.Sd.Result.Last(0)
-
-        taUpperArray, taMiddleArray, ta_lower_array = talib.BBANDS(
-            self.indi_bars.close_prices.data[-self.sma_period :],
-            timeperiod =self.sma_period,
-            nbdevup =2,
-            nbdevdn =2,
-            matype =MA_Type.SMA
-        )
-        ta_upper = taUpperArray[-1]
-        ta_middle = taMiddleArray[-1]
-        ta_lower = taLowerArray[-1]
-
-        my_upper = self.bb_indi.Top.Last(0)
-        my_middle = self.bb_indi.Main.Last(0)
-        my_lower = self.bb_indi.Bottoself.Last(0)
-        """
 
     ###################################
     def on_tick(self, symbol: Symbol):
+        current_time = symbol.time
+
         if symbol.is_warm_up:
             return
 

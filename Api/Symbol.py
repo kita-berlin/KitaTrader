@@ -14,6 +14,7 @@ from Api.KitaApi import QuotesType, RoundingMode
 from Api.MarketHours import MarketHours
 from Api.QuoteProvider import QuoteProvider
 from Api.Constants import Constants
+from Api.Bar import Bar
 from Api.Bars import Bars
 from Api.LeverageTier import LeverageTier
 
@@ -181,7 +182,7 @@ class Symbol:
         # load requested bars
         self._load_bars()
 
-        self.on_tick()  # set initial time, bid, ask for on_start()
+        self.symbol_on_tick()  # set initial time, bid, ask for on_start()
         return ""
 
     def _load_ticks(self) -> str:
@@ -279,10 +280,10 @@ class Symbol:
         df = pd.DataFrame(
             {
                 "time": source_bars.open_times.data,  # Assuming open_times.data is a list of datetime
-                "open": source_bars.open_prices.data,
-                "high": source_bars.high_prices.data,
-                "low": source_bars.low_prices.data,
-                "close": source_bars.close_prices.data,
+                "open": source_bars.open_bids.data,
+                "high": source_bars.high_bids.data,
+                "low": source_bars.low_bids.data,
+                "close": source_bars.close_bids.data,
                 "volume": source_bars.volume.data,
                 "open_ask": source_bars.open_asks.data,  # Include open ask if needed
             }
@@ -297,11 +298,11 @@ class Symbol:
 
         # save resampled data to the target bars
         target_bars = self.bars_dictonary[second_tf]
-        target_bars.open_times.data = resampled_df.index.tolist()  # type:ignore
-        target_bars.open_prices.data = resampled_df["open"].tolist()
-        target_bars.high_prices.data = resampled_df["high"].tolist()
-        target_bars.low_prices.data = resampled_df["low"].tolist()
-        target_bars.close_prices.data = resampled_df["close"].tolist()
+        target_bars.open_times.data = resampled_df.index.to_pydatetime().tolist() # type:ignore
+        target_bars.open_bids.data = resampled_df["open"].tolist()
+        target_bars.high_bids.data = resampled_df["high"].tolist()
+        target_bars.low_bids.data = resampled_df["low"].tolist()
+        target_bars.close_bids.data = resampled_df["close"].tolist()
         target_bars.volume.data = resampled_df["volume"].tolist()
         target_bars.open_asks.data = resampled_df["open_ask"].tolist()
 
@@ -352,7 +353,7 @@ class Symbol:
 
     def _load_minute_bars(self):
         bars = self.bars_dictonary[Constants.SEC_PER_MINUTE]
-        if bars.open_times.count > 0:
+        if len(bars.open_times.data) > 0:
             return
 
         look_back = bars.look_back
@@ -416,10 +417,10 @@ class Symbol:
                                 (file_date + timedelta(milliseconds=int(row[0]))).replace(tzinfo=self.time_zone)
                                 + timedelta(hours=self.normalized_hours_offset)
                             )
-                            bars.open_prices.data.append(float(row[1]))
-                            bars.high_prices.data.append(float(row[2]))
-                            bars.low_prices.data.append(float(row[3]))
-                            bars.close_prices.data.append(float(row[4]))
+                            bars.open_bids.data.append(float(row[1]))
+                            bars.high_bids.data.append(float(row[2]))
+                            bars.low_bids.data.append(float(row[3]))
+                            bars.close_bids.data.append(float(row[4]))
                             bars.volume.data.append(int(row[5]))
                             bars.open_asks.data.append(float(row[6]))
 
@@ -439,6 +440,9 @@ class Symbol:
                 # Read and decode the lines
                 lines = f.read().decode("utf-8").strip().split("\n")
 
+        # one line example:
+        # date time, bid_open, bid_high, bid_low, bid_close, bid_volume, open_ask, high_ask, low_ask, close_ask, volume_ask
+        # 20140101 22:00,1.65616,1.65778,1.65529,1.65778,0,1.65694,1.658,1.65618,1.658,0
         # Perform binary search to find the start line
         low, high = 0, len(lines) - 1
         start_index = 0
@@ -459,7 +463,7 @@ class Symbol:
 
         # load bars from the start index up to the end datetime
         bars = self.bars_dictonary[timeframe]
-        for i in range(start_index, len(lines)):
+        for i in range(start_index - bars.look_back, len(lines)):
             row = lines[i].split(",")
             line_datetime = datetime.strptime(row[0], "%Y%m%d %H:%M").replace(tzinfo=timezone.utc)
             if line_datetime > self.api.robot.BacktestEndUtc:
@@ -469,24 +473,44 @@ class Symbol:
                 hours=self.normalized_hours_offset
             )
             bars.open_times.data.append(line_datetime)
-            bars.open_prices.data.append(float(row[1]))
-            bars.high_prices.data.append(float(row[2]))
-            bars.low_prices.data.append(float(row[3]))
-            bars.close_prices.data.append(float(row[4]))
+            bars.open_bids.data.append(float(row[1]))
+            bars.high_bids.data.append(float(row[2]))
+            bars.low_bids.data.append(float(row[3]))
+            bars.close_bids.data.append(float(row[4]))
             bars.volume.data.append(int(row[5]))
             bars.open_asks.data.append(float(row[6]))
 
-    def on_tick(self) -> str:
+    def symbol_on_tick(self) -> str:
         if 0 == self.quote_provider.datarate:
             self.time = self.tick_data[self.rate_data_index][0]
             self.bid = self.tick_data[self.rate_data_index][1]
             self.ask = self.tick_data[self.rate_data_index][2]
             max_size = len(self.tick_data)
+
+            bar = Bar()
+            bar.open_time = self.tick_data[self.rate_data_index][0]
+            bar.open_bid = bar.high_bid = bar.low_bid = bar.close_bid = self.tick_data[self.rate_data_index][1]
+            bar.volume_bid += 1
+            bar.open_ask = self.tick_data[self.rate_data_index][2]
         else:
             self.time = self.bar_data.open_times[self.rate_data_index]
-            self.bid = self.bar_data.open_prices[self.rate_data_index]
+            self.bid = self.bar_data.open_bids[self.rate_data_index]
             self.ask = self.bar_data.open_asks[self.rate_data_index]
             max_size = len(self.bar_data.open_times.data)
+
+            bar = Bar()
+            bar.open_time = self.bar_data.open_times[self.rate_data_index]
+            bar.open_bid = self.bar_data.open_bids[self.rate_data_index]
+            bar.high_bid = self.bar_data.high_bids[self.rate_data_index]
+            bar.low_bid = self.bar_data.low_bids[self.rate_data_index]
+            bar.close_bid = self.bar_data.close_bids[self.rate_data_index]
+            bar.volume_bid = self.bar_data.volume[self.rate_data_index]
+            bar.open_ask = self.bar_data.open_asks[self.rate_data_index]
+            # to save performance the following is not implemented (yet)
+            # bar.high_ask = self.bar_data.high_asks[self.rate_data_index]
+            # bar.low_ask = self.bar_data.low_asks[self.rate_data_index]
+            # bar.close_ask = self.bar_data.close_asks[self.rate_data_index]
+            # bar.volume_ask = self.bar_data.volume[self.rate_data_index]
 
         self.rate_data_index += 1
 
@@ -494,6 +518,9 @@ class Symbol:
             return "End reached"
 
         self.is_warm_up = self.time < self.start_tz_dt
+
+        for bars in self.bars_dictonary.values():
+            bars.bars_on_tick(self.time, bar)
 
         return ""
 

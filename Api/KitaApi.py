@@ -554,7 +554,7 @@ class KitaApi:
         for symbol in self.symbol_dictionary.values():
 
             # Update quote, bars, indicators which are bound to this symbol
-            error = symbol.on_tick()
+            error = symbol.symbol_on_tick()
             if "" != error or symbol.time > symbol.end_tz_dt:
                 return True  # end reached
 

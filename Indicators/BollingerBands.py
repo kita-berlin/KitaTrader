@@ -6,9 +6,9 @@ from Api.KitaApiEnums import *
 
 
 class BollingerBands(IIndicator):
-    Main: DataSeries = DataSeries()
-    Top: DataSeries = DataSeries()
-    Bottom: DataSeries = DataSeries()
+    main: DataSeries
+    top: DataSeries
+    bottom: DataSeries
 
     def __init__(
         self,
@@ -23,6 +23,9 @@ class BollingerBands(IIndicator):
         self.standard_deviations: float = standard_deviations
         self.ma_type: MovingAverageType = ma_type
         self.shift: int = shift
+        self.main = DataSeries(self.source.parent)
+        self.top = DataSeries(self.source.parent)
+        self.bottom = DataSeries(self.source.parent)
 
         self.MovingAverage = None
         self.StandardDeviation = None
@@ -35,15 +38,16 @@ class BollingerBands(IIndicator):
         self.StandardDeviation = StandardDeviation(self.source, self.periods)
 
     def calculate(self, index: int) -> None:
-        for index in range(self.source.count):
+        count = len(self.source.data)
+        for index in range(count):
             index1 = index + self.shift
-            if index1 >= self.source.count or index1 < 0:
+            if index1 >= count or index1 < 0:
                 continue
 
             num = self.StandardDeviation.result.data[index] * self.standard_deviations  # type: ignore
-            self.Main[index1] = self.MovingAverage.result.data[index]  # type: ignore
-            self.Bottom[index1] = self.MovingAverage.result.data[index] - num  # type: ignore
-            self.Top[index1] = self.MovingAverage.result.data[index] + num  # type: ignore
+            self.main[index1] = self.MovingAverage.result.data[index]  # type: ignore
+            self.bottom[index1] = self.MovingAverage.result.data[index] - num  # type: ignore
+            self.top[index1] = self.MovingAverage.result.data[index] + num  # type: ignore
 
 
 # end of file

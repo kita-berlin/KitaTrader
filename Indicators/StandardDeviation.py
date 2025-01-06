@@ -1,10 +1,13 @@
+import math
 from Api.IIndicator import IIndicator
 from Api.DataSeries import DataSeries
 from Api.KitaApiEnums import *
+from Indicators.MovingAverage import MovingAverage
+from Indicators.SimpleMovingAverage import SimpleMovingAverage
 
 
 class StandardDeviation(IIndicator):
-    result: DataSeries = DataSeries()
+    result: DataSeries
 
     def __init__(
         self,
@@ -15,6 +18,7 @@ class StandardDeviation(IIndicator):
         self.source: DataSeries = source
         self.periods: int = periods
         self.ma_type: MovingAverageType = ma_type
+        self.result = DataSeries(self.source.parent)
         self.initialize()
         pass
 
@@ -31,7 +35,7 @@ class StandardDeviation(IIndicator):
             num1 += (self.source[index - num3] - num2) ** 2
             num3 += 1
 
-        self.result[index] = np.sqrt(num1 / self.periods)
+        self.result[index] = math.sqrt(num1 / self.periods)
 
 
 # end of file
