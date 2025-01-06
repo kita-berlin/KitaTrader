@@ -1,12 +1,11 @@
-﻿from KitaApiEnums import *
-from KitaApi import KitaApi, Symbol
+﻿from Api.KitaApiEnums import *
+from Api.KitaApi import KitaApi, Symbol
 from Api.CoFu import *
-from Constants import *
-from TradePaper import TradePaper
-from QuoteMe import QuoteMe  # type: ignore
-from QuoteDukascopy import Dukascopy  # type: ignore
-from QuoteTradeMt5 import BrokerMt5  # type: ignore
-from QuoteCsv import QuoteCsv  # type: ignore
+from Api.Constants import *
+from BrokerProvider.TradePaper import TradePaper
+from BrokerProvider.QuoteDukascopy import Dukascopy  # type: ignore
+from BrokerProvider.QuoteTradeMt5 import BrokerMt5  # type: ignore
+from BrokerProvider.QuoteCsv import QuoteCsv  # type: ignore
 
 
 class Downloader(KitaApi):
@@ -43,8 +42,7 @@ class Downloader(KitaApi):
 
         # Define quote_provider(s)
         # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
-        quote_provider = Dukascopy("", datarate=Constants.SEC_PER_MINUTE)
-        # quote_provider = QuoteMe("G:\\Meine Ablage\\TickBars", datarate=0),
+        quote_provider = Dukascopy(datarate=Constants.SEC_PER_MINUTE)
         # quote_provider = BrokerMt5("62060378, pepperstone_uk-Demo, tFue0y*akr", datarate=0)
         # quote_provider = QuoteCsv("G:\\Meine Ablage", datarate=0)
 

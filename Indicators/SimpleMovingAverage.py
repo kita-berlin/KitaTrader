@@ -1,3 +1,8 @@
+from Api.IIndicator import IIndicator
+from Api.DataSeries import DataSeries
+from Indicators.MovingAverage import MovingAverage
+
+
 class SimpleMovingAverage(MovingAverage, IIndicator):
     def __init__(self, source: DataSeries, periods: int = 14, shift: int = 0):
         self.source: DataSeries = source
@@ -19,3 +24,5 @@ class SimpleMovingAverage(MovingAverage, IIndicator):
             index2 += 1
         self.result[index1] = num / self.periods
 
+
+# end of file

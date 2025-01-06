@@ -2,15 +2,13 @@
 import time
 import numpy as np
 from math import sqrt
-from KitaApiEnums import *
-from KitaApi import KitaApi, Symbol, Indicators
+from Api.KitaApiEnums import *
+from Api.KitaApi import KitaApi, Symbol
 from Api.CoFu import *
-from Constants import *
-from TradePaper import TradePaper
-from QuoteMe import QuoteMe  # type: ignore
-from QuoteDukascopy import Dukascopy  # type: ignore
-from QuoteTradeMt5 import BrokerMt5  # type: ignore
-from QuoteCsv import QuoteCsv  # type: ignore
+from Api.Constants import *
+from BrokerProvider.QuoteDukascopy import Dukascopy
+from BrokerProvider.TradePaper import TradePaper
+from Indicators.Indicators import Indicators
 
 
 class Template(KitaApi):
@@ -54,17 +52,17 @@ class Template(KitaApi):
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59
             # (we call this "New York normalized time")
-            "America/New_York:Normalized",
+            # "America/New_York:Normalized",
         )
         if "" != error:
             print(error)
             exit()
 
         # 4. Define one or more bars (optional)
-        self.sma_period = 1
+        self.sma_period = 10
         error, self.h1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_HOUR, 0)
         error, self.d1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_DAY, 0)
-        error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, self.sma_period)
+        error, self.m1_bars = self.gbpusd_symbol.request_bars(Constants.SEC_PER_MINUTE, 2000)
 
         # 5. Define kita indicators (optional)
         error, self.sma = Indicators.moving_average(
@@ -78,10 +76,10 @@ class Template(KitaApi):
             exit()
 
         # Demo to show all available symbols
-        i = 0
-        for symbol_name in quote_provider.symbols:
-            i = i + 1
-            print(str(i) + ": " + symbol_name)
+        # i = 0
+        # for symbol_name in quote_provider.symbols:
+        #     i = i + 1
+        #     print(str(i) + ": " + symbol_name)
 
     def on_start(self, symbol: Symbol) -> None:
         # Members to be re-initialized on each new start
@@ -90,7 +88,7 @@ class Template(KitaApi):
 
         # example how to use ta-lib
         ta_funcs = talib.get_functions()  # type:ignore
-        print(ta_funcs)  # type:ignore
+        # print(ta_funcs)  # type:ignore
 
         np_close = np.array(self.m1_bars.close_prices.data)
         ta_sma = talib.SMA(  # type:ignore
@@ -125,6 +123,9 @@ class Template(KitaApi):
 
     ###################################
     def on_tick(self, symbol: Symbol):
+        if symbol.is_warm_up:
+            return
+
         if symbol.time.date() != symbol.prev_time.date():
             diff = time.perf_counter() - self.prev_time
             print(

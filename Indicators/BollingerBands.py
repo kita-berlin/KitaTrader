@@ -1,4 +1,9 @@
-import Api.DataSeries as DataSeries
+from Api.IIndicator import IIndicator
+from Api.DataSeries import DataSeries
+from Indicators.SimpleMovingAverage import SimpleMovingAverage
+from Indicators.StandardDeviation import StandardDeviation
+from Api.KitaApiEnums import *
+
 
 class BollingerBands(IIndicator):
     Main: DataSeries = DataSeries()
@@ -40,3 +45,5 @@ class BollingerBands(IIndicator):
             self.Bottom[index1] = self.MovingAverage.result.data[index] - num  # type: ignore
             self.Top[index1] = self.MovingAverage.result.data[index] + num  # type: ignore
 
+
+# end of file

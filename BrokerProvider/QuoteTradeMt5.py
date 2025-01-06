@@ -1,8 +1,8 @@
 import os
+import MetaTrader5 as mt5 # type: ignore
 from datetime import datetime
-from KitaApi import QuotesType, QuoteProvider, TradeProvider, KitaApi, Symbol
-
-# import MetaTrader5 as mt5
+from Api.KitaApi import QuotesType, TradeProvider, KitaApi, Symbol
+from Api.QuoteProvider import QuoteProvider
 
 
 class BrokerMt5(QuoteProvider, TradeProvider):

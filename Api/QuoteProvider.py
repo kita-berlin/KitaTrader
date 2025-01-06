@@ -5,11 +5,14 @@ import csv
 import traceback
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
+
+from sympy import symbols
 from Api.KitaApiEnums import *
 
 if TYPE_CHECKING:
     from Api.KitaApi import KitaApi
     from Api.Symbol import Symbol
+
 
 class QuoteProvider(ABC):
     api: KitaApi
@@ -22,6 +25,7 @@ class QuoteProvider(ABC):
         3600: "hour",
         86400: "daily",
     }
+    symbols: list[str] = []
 
     def __init__(self, parameter: str, assets_path: str, datarate: int):
         self.parameter = parameter
@@ -42,7 +46,8 @@ class QuoteProvider(ABC):
                     if line[1] == "Price":
                         continue
 
-                    if None == symbol or line[0] not in symbol.name:  # type:ignore
+                    self.symbols.append(line[0])
+                    if line[0] not in symbol.name:  # type:ignore
                         continue
 
                     if len(line) < 16:

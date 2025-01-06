@@ -13,8 +13,9 @@ class Bars:
 
     # Members
     # region
-    timeframe_seconds: int  # Get the timeframe in seconds.#
     symbol_name: str  # Gets the symbol name.#
+    timeframe_seconds: int  # Get the timeframe in seconds.#
+    look_back: int  # Gets the look back period.#
     open_times: TimeSeries  # Gets the open bar time data.#
     open_prices: DataSeries  # Gets the Open price bars data.#
     high_prices: DataSeries  # Gets the High price bars data.#
@@ -31,9 +32,10 @@ class Bars:
 
     # endregion
 
-    def __init__(self, timeframe_seconds: int, symbol_name: str):
-        self.timeframe_seconds = timeframe_seconds
+    def __init__(self, symbol_name: str, timeframe_seconds: int, look_back: int):
         self.symbol_name = symbol_name
+        self.timeframe_seconds = timeframe_seconds
+        self.look_back = look_back
 
         # Create initial OHLC data
         self.open_times = TimeSeries()

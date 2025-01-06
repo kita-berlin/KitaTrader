@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
-from KitaApi import QuoteProvider, QuotesType, KitaApi, Symbol
+from Api.KitaApi import QuotesType, KitaApi, Symbol
+from Api.QuoteProvider import QuoteProvider
 
 
 class QuoteCsv(QuoteProvider):

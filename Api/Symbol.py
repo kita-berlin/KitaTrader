@@ -59,6 +59,7 @@ class Symbol:
     dynamic_leverage: list[LeverageTier] = []
     tick_data: QuotesType = []
     rate_data_index: int = 0
+    is_warm_up: bool = True
 
     @property
     def point_size(self) -> float:
@@ -156,9 +157,12 @@ class Symbol:
     def volume_in_units_to_quantity(self, volume: float) -> float:
         return volume / self.lot_size
 
-    def request_bars(self, timeframe_seconds: int, lookback: int = 0) -> tuple[str, Bars]:
-        if timeframe_seconds not in self.bars_dictonary:
-            new_bars = Bars(timeframe_seconds, self.name)
+    def request_bars(self, timeframe_seconds: int, look_back: int = 0) -> tuple[str, Bars]:
+        if timeframe_seconds in self.bars_dictonary:
+            if look_back > self.bars_dictonary[timeframe_seconds].look_back:
+                self.bars_dictonary[timeframe_seconds].look_back = look_back
+        else:
+            new_bars = Bars(self.name, timeframe_seconds, look_back)
             self.bars_dictonary[timeframe_seconds] = new_bars
         return "", self.bars_dictonary[timeframe_seconds]
 
@@ -192,7 +196,7 @@ class Symbol:
         self.api.AllDataStartUtc = self.api.AllDataStartUtc.replace(tzinfo=timezone.utc)
 
         # data read loop
-        print(f"Loading {self.name} quotes from quote provider")
+        print(f"Loading {self.name} ticks ")
         files: list[tuple[datetime, str]] = []
         folder = os.path.join(
             self.api.CachePath,
@@ -246,41 +250,12 @@ class Symbol:
 
         return ""
 
-    def _set_tz_awareness(self):
-        self.api.AllDataStartUtc = self.api.AllDataStartUtc.replace(tzinfo=timezone.utc)
-
-        # max is up to yesterday because data might not be completed for today
-        if datetime.max == self.api.AllDataEndUtc:
-            self.api.AllDataEndUtc = datetime.now()
-        else:
-            self.api.AllDataEndUtc += timedelta(days=1)
-        self.api.AllDataEndUtc = self.api.AllDataEndUtc.replace(tzinfo=timezone.utc)
-
-        if datetime.max == self.api.BacktestEndUtc:
-            self.api.BacktestEndUtc = datetime.now().replace(
-                hour=0, minute=0, second=0, microsecond=0
-            ) - timedelta(seconds=1)
-        else:
-            self.api.BacktestEndUtc += timedelta(days=1)
-
-        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(tzinfo=timezone.utc)
-        self.api.BacktestEndUtc = self.api.BacktestEndUtc.replace(tzinfo=timezone.utc)
-
-        # set symbol's local time zones
-        self.start_tz_dt = self.api.BacktestStartUtc.astimezone(self.time_zone) + timedelta(
-            hours=self.normalized_hours_offset
-        )
-
-        self.end_tz_dt = self.api.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
-            hours=self.normalized_hours_offset
-        )
-
     def _load_bars(self):
         for timeframe in self.bars_dictonary:
             print(f"Loading {self.name} {timeframe} seconds OHLC bars")
 
             if timeframe < Constants.SEC_PER_HOUR:
-                self._load_minute_bars(Constants.SEC_PER_MINUTE)  # load 1 minute bars
+                self._load_minute_bars()  # load 1 minute bars
 
                 if Constants.SEC_PER_MINUTE != timeframe:
                     self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
@@ -346,21 +321,50 @@ class Symbol:
                 days = hours // 24
                 return f"{days}D"
 
-    def _load_minute_bars(self, timeframe: int):
-        if self.bars_dictonary[timeframe].open_times.count > 0:
+    def _set_tz_awareness(self):
+        self.api.AllDataStartUtc = self.api.AllDataStartUtc.replace(tzinfo=timezone.utc)
+
+        # max is up to yesterday because data might not be completed for today
+        if datetime.max == self.api.AllDataEndUtc:
+            self.api.AllDataEndUtc = datetime.now()
+        else:
+            self.api.AllDataEndUtc += timedelta(days=1)
+        self.api.AllDataEndUtc = self.api.AllDataEndUtc.replace(tzinfo=timezone.utc)
+
+        if datetime.max == self.api.BacktestEndUtc:
+            self.api.BacktestEndUtc = datetime.now().replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ) - timedelta(seconds=1)
+        else:
+            self.api.BacktestEndUtc += timedelta(days=1)
+
+        self.api.BacktestStartUtc = self.api.BacktestStartUtc.replace(tzinfo=timezone.utc)
+        self.api.BacktestEndUtc = self.api.BacktestEndUtc.replace(tzinfo=timezone.utc)
+
+        # set symbol's local time zones
+        self.start_tz_dt = self.api.BacktestStartUtc.astimezone(self.time_zone) + timedelta(
+            hours=self.normalized_hours_offset
+        )
+
+        self.end_tz_dt = self.api.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
+            hours=self.normalized_hours_offset
+        )
+
+    def _load_minute_bars(self):
+        bars = self.bars_dictonary[Constants.SEC_PER_MINUTE]
+        if bars.open_times.count > 0:
             return
 
+        look_back = bars.look_back
         files: list[tuple[datetime, str]] = []
         folder = os.path.join(
             self.api.CachePath,
             self.quote_provider.provider_name,
-            self.quote_provider.bar_folder[timeframe],
+            self.quote_provider.bar_folder[Constants.SEC_PER_MINUTE],
             f"{self.name}",
         )
 
-        # file name example: 20140101_quote.zip
-        # yyyyMMdd_quote.zip
-        # List and filter files matching the pattern
+        # Gather and sort files by date
         for file in Path(folder).iterdir():
             match = re.compile(r"(\d{8})_quote\.zip").match(file.name)
             if match:
@@ -369,28 +373,42 @@ class Symbol:
                 files.append((file_date, file.name))
 
         files.sort()
-        # Extract just the dates for binary search
         dates = [file_date for file_date, _ in files]
 
-        # Perform binary search
+        # Start loading from BacktestStartUtc
         start_idx = bisect_left(dates, self.api.robot.BacktestStartUtc)
-        bars = self.bars_dictonary[timeframe]
+        # loaded_bars = 0
 
-        # line example: 0,1.65753,1.65753,1.65719,1.65736,0,1.65791,1.65791,1.65732,1.65776,0
-        # Bid OHLC, Volume, Ask OHLC, Volume
-        # Loop over the files starting from start_idx
+        # Process additional bars if needed
+        while look_back > 0 and start_idx > 0:
+            start_idx -= 1
+            file_date, file_name = files[start_idx]
+            zip_path = os.path.join(folder, file_name)
+
+            with ZipFile(zip_path, "r") as zip_file:
+                csv_file_name = zip_file.namelist()[0]
+                with zip_file.open(csv_file_name) as csv_file:
+                    decoded = csv_file.read().decode("utf-8")
+                    reader = csv.reader(decoded.splitlines())
+                    rows = list(reader)  # Read all rows to count bars
+                    num_bars = len(rows)
+
+                    if num_bars <= look_back:
+                        # Load all bars if the file doesn't fulfill look_back
+                        look_back -= num_bars
+                    else:
+                        look_back = 0  # break
+
+        # Process files starting from BacktestStartUtc
         for file_date, file_name in files[start_idx:]:
             if file_date > self.api.robot.BacktestEndUtc:
                 break
 
-            # Path to the zip file
             zip_path = os.path.join(folder, file_name)
 
-            # Unzip and load data from CSV
             with ZipFile(zip_path, "r") as zip_file:
                 for csv_file_name in zip_file.namelist():
                     with zip_file.open(csv_file_name) as csv_file:
-                        # Read and decode CSV file contents
                         decoded = csv_file.read().decode("utf-8")
                         reader = csv.reader(decoded.splitlines())
                         for row in reader:
@@ -474,6 +492,8 @@ class Symbol:
 
         if self.rate_data_index >= max_size:
             return "End reached"
+
+        self.is_warm_up = self.time < self.start_tz_dt
 
         return ""
 
