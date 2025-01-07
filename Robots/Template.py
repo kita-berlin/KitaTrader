@@ -110,6 +110,10 @@ class Template(KitaApi):
         bid1 = self.m5_bars.open_bids.last(1)
         bid_mid = (bid0 + bid1) / 2
 
+        if self.m5_bars.is_new_bar:
+            if self.m5_bars.open_times.last(0) != self.m1_bars.open_times.last(0):
+                print(str(self.m1_bars.open_times.last(0)) + ", " + str(self.m5_bars.open_times.last(0)))
+
         # print the time of the first tick of a new day
         # and the milliseconds it took to process the previous day
         if symbol.time.date() != symbol.prev_time.date():

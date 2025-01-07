@@ -1,6 +1,5 @@
 from Api.CoFu import *
 from Api.KitaApiEnums import *
-
 from Robots.Template import Template  # type: ignore
 from Robots.Downloader import Downloader  # type: ignore
 from Robots.Template import Template  # type: ignore
@@ -32,14 +31,11 @@ class MainConsole:
         self.robot.AccountCurrency = "EUR"
         # endregion
 
-        # 2. Set the parameters for the robot
+        # 2. Define the backtest time window
         # region
-        # Define the backtest time window
         self.robot.BacktestStartUtc = datetime.strptime("3.1.2024", "%d.%m.%Y")
         # self.robot.BacktestEndUtc = datetime.strptime("10.12.2024", "%d.%m.%Y")
         self.robot.BacktestEndUtc = datetime.max
-        # self.robot.Parameter1 = 1.3
-        # self.robot.Parameter2 = 0.29
         # endregion
 
         # 3. Initialize the platform and the robot

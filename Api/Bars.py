@@ -47,8 +47,10 @@ class Bars:
             # self.line_colors = np.array([])
 
     def bars_on_tick(self, time: datetime, bar: Bar) -> None:
+        self.is_new_bar = False
         while self.current + 1 < len(self.open_times.data) and time >= self.open_times.data[self.current + 1]:
             self.current += 1
+            self.is_new_bar = True
 
         # on real time trading we have to build the bars ourselves
         # if False:
