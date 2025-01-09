@@ -5,8 +5,6 @@ import csv
 import traceback
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-
-from sympy import symbols
 from Api.KitaApiEnums import *
 
 if TYPE_CHECKING:

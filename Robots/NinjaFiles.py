@@ -8,18 +8,18 @@ from BrokerProvider.QuoteTradeMt5 import BrokerMt5  # type: ignore
 from BrokerProvider.QuoteCsv import QuoteCsv  # type: ignore
 
 
-class Downloader(KitaApi):
+class NinjaFiles(KitaApi):
 
     # History
     # region
-    version: str = "Downloader V1.0"
-    # V1.0     03.01.25     HMz created
+    version: str = "NinjaFiles V1.0"
+    # V1.0     09.01.25     HMz created
     # endregion
 
     # Members
     # region
     symbols_to_load: list[str] = [
-        "GBP_USD",
+        "NQ 03-25",
         # "EUR_USD",
         # "NZD_CAD",
         # "AUD_CAD",
@@ -37,7 +37,8 @@ class Downloader(KitaApi):
 
     ###################################
     def on_init(self) -> None:
-        # self.robot.AllDataStartUtc = datetime.min  # load all you can get
+        self.robot.DataPath = "$(OneDrive)/KitaData/futures"
+        self.robot.AllDataStartUtc = datetime.min  # load all you can get
 
         for symbol_name in self.symbols_to_load:
             error, symbol = self.request_symbol(
@@ -50,7 +51,6 @@ class Downloader(KitaApi):
                 exit()
 
             symbol.request_bars(Constants.SEC_PER_HOUR)
-            symbol.request_bars(2 * Constants.SEC_PER_HOUR)
             symbol.request_bars(Constants.SEC_PER_MINUTE)
             symbol.request_bars(Constants.SEC_PER_DAY)
 

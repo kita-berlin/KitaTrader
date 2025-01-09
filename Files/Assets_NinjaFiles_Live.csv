@@ -1,0 +1,2 @@
+Name,Price,spread,RollLong,RollShort,PIP,PIPCost,MarginCost,Market,Multiplier,commission,symbol,leverage,Lotsize,Base,Quote
+NQ 03-25,1.08567,0.000109,-0.64000,0.20000,0.00010,9.20996887,200.00,UTC:21:01-20:59,1000.00000000,0.00,NQ 03-25,500,100000.00,EUR,USD

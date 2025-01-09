@@ -1,4 +1,6 @@
 from __future__ import annotations
+import os
+import re
 import math
 import locale
 from typing import TypeVar
@@ -30,7 +32,7 @@ class KitaApi:
     BacktestStartUtc: datetime
     BacktestEndUtc: datetime
     RunningMode: RunMode = RunMode.SilentBacktesting
-    CachePath: str = ""
+    DataPath: str = ""
     AccountInitialBalance: float = 10000.0
     AccountLeverage: int = 500
     AccountCurrency: str = "EUR"
@@ -45,7 +47,7 @@ class KitaApi:
     def __init__(self):
         pass
 
-    # Trading API
+    # API for robots
     # region
     def close_trade(
         self,
@@ -89,10 +91,6 @@ class KitaApi:
             return True
         return False
 
-    # endregion
-
-    # Internal API
-    # region
     def request_symbol(
         self,
         symbol_name: str,
@@ -108,6 +106,18 @@ class KitaApi:
 
         return "", symbol
 
+    # Function to resolve environment variables in a template string
+    def resolve_env_variables(self, template):
+        # Find all environment variable placeholders (e.g., $(Env1))
+        matches = re.findall(r"\$\((\w+)\)", template)
+    
+        # Replace each placeholder with its value from the environment
+        resolved_path = template
+        for match in matches:
+            env_value = os.getenv(match, f"<{match}>")  # Default to placeholder if not found
+            resolved_path = resolved_path.replace(f"$({match})", env_value)
+    
+        return resolved_path
     # endregion
 
     # Long/Short and other arithmetic
@@ -533,8 +543,12 @@ class KitaApi:
         # call robot's OnInit
         self.robot.on_init()  # type: ignore
 
+        # set working data path
+        self.robot.DataPath = self.resolve_env_variables(self.robot.DataPath)
+
         # load bars and data rate
         for symbol in self.symbol_dictionary.values():
+            symbol.check_historical_data() # makes sure data do exist since AllDataStartUtc
             symbol.load_datarate_and_bars()
 
     def start(self):
@@ -749,31 +763,6 @@ class KitaApi:
 
     def calculate_reward(self) -> float:
         return self.robot.get_tick_fitness()  # type:ignore
-
-    @staticmethod
-    def double_to_string(value: float, digits: int) -> str:
-        if value == float("inf") or value != value:
-            return "NaN"
-        format_str = "{:." + str(digits) + "f}"
-        return format_str.format(value)
-
-    @staticmethod
-    def integer_to_string(n: int) -> str:
-        return str(n)
-
-    @staticmethod
-    def string_to_double(s: str) -> float:
-        try:
-            return locale.atof(s)
-        except ValueError:
-            return 0
-
-    @staticmethod
-    def string_to_integer(s: str) -> int:
-        try:
-            return int(s)
-        except ValueError:
-            return 0
 
     # endregion
 

@@ -12,7 +12,7 @@
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <InterpreterId>Global|PythonCore|3.9</InterpreterId>
+    <InterpreterId>MSBuild|env|$(MSBuildProjectFullPath)</InterpreterId>
     <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <Name>kita_trader</Name>
@@ -26,12 +26,15 @@
     <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="241124 Python Coding Conventions.txt" />
+    <Content Include="250109 Install ta-lib.txt" />
+    <Content Include="250109 Python Coding Conventions.txt" />
     <Content Include="Files\Assets_Dukascopy_Live.csv" />
+    <Content Include="Files\Assets_NinjaFiles_Live.csv" />
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
     <Content Include="BrokerProvider\QuoteTradeMt5.py" />
     <Content Include="MainNotebook.ipynb" />
     <Content Include="pyproject.toml" />
+    <Content Include="requirements.txt" />
     <Content Include="typings\MetaTrader5\__init__.pyi" />
   </ItemGroup>
   <ItemGroup>
@@ -69,6 +72,7 @@
     <Compile Include="Api\TradeResult.py" />
     <Compile Include="Api\TradingSession.py" />
     <Compile Include="BrokerProvider\QuoteDukascopy.py" />
+    <Compile Include="BrokerProvider\QuoteNinjaFiles.py" />
     <Compile Include="Indicators\BollingerBands.py" />
     <Compile Include="Indicators\Indicators.py" />
     <Compile Include="Indicators\MovingAverage.py" />
@@ -79,12 +83,31 @@
     <Compile Include="BrokerProvider\TradePaper.py" />
     <Compile Include="MainRl.py" />
     <Compile Include="Robots\Downloader.py" />
+    <Compile Include="Robots\NinjaFiles.py" />
     <Compile Include="Robots\Template.py" />
     <Compile Include="Robots\Martingale.py" />
     <Compile Include="Robots\Ultron.py" />
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="Global|PythonCore|3.9" />
+  </ItemGroup>
+  <ItemGroup>
+    <Interpreter Include="env\">
+      <Id>env</Id>
+      <Version>3.9</Version>
+      <Description>env (Python 3.9 (64-bit))</Description>
+      <InterpreterPath>Scripts\python.exe</InterpreterPath>
+      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+      <Architecture>X64</Architecture>
+    </Interpreter>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="BrokerProvider\NinjaFiles\NinjaFiles.csproj">
+      <Name>NinjaFiles</Name>
+      <Project>{8fe6d34a-c4e4-4898-97d0-ba87b7df1052}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
 </Project>

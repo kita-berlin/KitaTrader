@@ -4,13 +4,14 @@ from Robots.Template import Template  # type: ignore
 from Robots.Downloader import Downloader  # type: ignore
 from Robots.Template import Template  # type: ignore
 from Robots.Ultron import Ultron  # type: ignore
+from Robots.NinjaFiles import NinjaFiles  # type: ignore
 
 
 class MainConsole:
     def __init__(self):
         # 1. Set the parameters of the platform
         # region
-        self.robot = Template()  # Define here which robot should be used
+        self.robot = Downloader()  # Define here which robot should be used
 
         # self.robot.AllDataStartUtc = datetime.min means earliest possible what the source can provide
         # End datetime always is yesterday. Cannot be today because today's data are not complete yet
@@ -21,8 +22,8 @@ class MainConsole:
         # VisualBacktesting, BruteForceOptimization, GeneticOptimization, WalkForwardOptimization
         self.robot.RunningMode = RunMode.SilentBacktesting
 
-        # The path where the robot can store data
-        self.robot.CachePath = "..\\QuantConnect\\MyLean\\MyData\\cfd"
+        # Historical data path
+        self.robot.DataPath = "$(OneDrive)/KitaData/cfd"
 
         # Paper trading initial account settings
         self.robot.AccountInitialBalance = 10000

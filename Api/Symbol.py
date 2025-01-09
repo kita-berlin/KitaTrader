@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, tzinfo, timezone
 from bisect import bisect_left
 from zipfile import ZipFile
+#from numba import jit
 from Api.KitaApi import QuotesType, RoundingMode
 from Api.MarketHours import MarketHours
 from Api.QuoteProvider import QuoteProvider
@@ -184,9 +185,28 @@ class Symbol:
             self.bars_dictonary[timeframe] = Bars(self.name, timeframe, look_back)
         return "", self.bars_dictonary[timeframe]
 
-    def load_datarate_and_bars(self) -> str:
+    def check_historical_data(self) -> str:
         self._set_tz_awareness()
+        # ignore other folders then ticks, minutes, hours, and days
+        for timeframe in self.bars_dictonary:
+            try:
+                folder = os.path.join(
+                    self.api.DataPath,
+                    self.quote_provider.provider_name,
+                    self.quote_provider.bar_folder[timeframe],
+                    f"{self.name}.zip",
+                )
+            except Exception as ex:
+                continue
 
+            # format for ticks and minutes: 20140101_quote.zip
+            if timeframe < Constants.SEC_PER_HOUR:
+                pass
+            else:
+            # format for hours and days: gbp_usd.zip, datetime is within the file
+                pass
+
+    def load_datarate_and_bars(self) -> str:
         # load requested regular bars
         min_start = datetime.max.replace(tzinfo=timezone.utc)
         for timeframe in self.bars_dictonary:
@@ -220,7 +240,7 @@ class Symbol:
         print(f"Loading {self.name} ticks ")
         files: list[tuple[datetime, str]] = []
         folder = os.path.join(
-            self.api.CachePath,
+            self.api.DataPath,
             self.quote_provider.provider_name,
             "tick",
             f"{self.name}",
@@ -295,6 +315,7 @@ class Symbol:
 
         return start_look_back
 
+    #@jit()
     def _resample(self, source_bars: Bars, timeframe: int) -> datetime:
         pd_tf = self._seconds_to_pandas_timeframe(timeframe)
 
@@ -380,7 +401,7 @@ class Symbol:
         look_back_run = bars.look_back
         files: list[tuple[datetime, str]] = []
         folder = os.path.join(
-            self.api.CachePath,
+            self.api.DataPath,
             self.quote_provider.provider_name,
             self.quote_provider.bar_folder[Constants.SEC_PER_MINUTE],
             f"{self.name}",
@@ -450,7 +471,7 @@ class Symbol:
     def _load_hour_or_daily_bars(self, timeframe: int, start: datetime) -> datetime:
         # file name example: gbp_usd.zip
         zipfile = os.path.join(
-            self.api.CachePath,
+            self.api.DataPath,
             self.quote_provider.provider_name,
             self.quote_provider.bar_folder[timeframe],
             f"{self.name}.zip",
@@ -505,14 +526,15 @@ class Symbol:
 
         return bars.open_times.data[0]
 
+    #@jit()
     def symbol_on_tick(self) -> str:
+        bar = Bar()
         if 0 == self.quote_provider.datarate:
             self.time = self.tick_data[self.rate_data_index][0]
             self.bid = self.tick_data[self.rate_data_index][1]
             self.ask = self.tick_data[self.rate_data_index][2]
             max_size = len(self.tick_data)
 
-            bar = Bar()
             bar.open_time = self.tick_data[self.rate_data_index][0]
             bar.open_bid = bar.high_bid = bar.low_bid = bar.close_bid = self.tick_data[self.rate_data_index][1]
             bar.volume_bid += 1
@@ -523,7 +545,6 @@ class Symbol:
             self.ask = self.bar_data.open_asks[self.rate_data_index]
             max_size = len(self.bar_data.open_times.data)
 
-            bar = Bar()
             bar.open_time = self.bar_data.open_times[self.rate_data_index]
             bar.open_bid = self.bar_data.open_bids[self.rate_data_index]
             bar.high_bid = self.bar_data.high_bids[self.rate_data_index]
