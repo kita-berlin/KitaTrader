@@ -83,10 +83,10 @@ class HedgePosition:
 
     def do_main_close(
         self,
-        min_open_duration: list[timedelta],
-        avg_open_duration_sum: list[timedelta],
-        open_duration_count: list[int],
-        max_open_duration: list[timedelta],
+        min_open_duration: timedelta,
+        avg_open_duration_sum: timedelta,
+        open_duration_count: int,
+        max_open_duration: timedelta,
         is_utc: bool = True,
     ) -> bool:
         result = False
@@ -117,10 +117,10 @@ class HedgePosition:
 
     def do_freeze_close(
         self,
-        min_open_duration: list[timedelta],
-        avg_open_duration_sum: list[timedelta],
-        open_duration_count: list[int],
-        max_open_duration: list[timedelta],
+        min_open_duration: timedelta,
+        avg_open_duration_sum: timedelta,
+        open_duration_count: int,
+        max_open_duration: timedelta,
         is_utc: bool = True,
     ) -> bool:
         result = False
@@ -141,10 +141,10 @@ class HedgePosition:
 
     def do_exchange_and_freeze_close(
         self,
-        min_open_duration: list[timedelta],
-        avg_open_duration_sum: list[timedelta],
-        open_duration_count: list[int],
-        max_open_duration: list[timedelta],
+        min_open_duration: timedelta,
+        avg_open_duration_sum: timedelta,
+        open_duration_count: int,
+        max_open_duration: timedelta,
         is_utc: bool = True,
     ) -> bool:
         result = False
@@ -166,10 +166,10 @@ class HedgePosition:
 
     def do_both_close(
         self,
-        min_open_duration: list[timedelta],
-        avg_open_duration_sum: list[timedelta],
-        open_duration_count: list[int],
-        max_open_duration: list[timedelta],
+        min_open_duration: timedelta,
+        avg_open_duration_sum: timedelta,
+        open_duration_count: int,
+        max_open_duration: timedelta,
         is_utc: bool = True,
     ) -> bool:
         if self.main_position is None and self.freeze_position is None:  # type: ignore
@@ -200,10 +200,10 @@ class HedgePosition:
     def close_frozen_and_modify_main(
         self,
         volume: float,
-        min_open_duration: list[timedelta],
-        avg_open_duration_sum: list[timedelta],
-        open_duration_count: list[int],
-        max_open_duration: list[timedelta],
+        min_open_duration: timedelta,
+        avg_open_duration_sum: timedelta,
+        open_duration_count: int,
+        max_open_duration: timedelta,
         is_utc: bool = True,
     ) -> bool:
         ret_val = False
@@ -225,10 +225,10 @@ class HedgePosition:
     def close_main_and_modify_frozen(
         self,
         volume: float,
-        min_open_duration: list[timedelta],
-        avg_open_duration_sum: list[timedelta],
-        open_duration_count: list[int],
-        max_open_duration: list[timedelta],
+        min_open_duration: timedelta,
+        avg_open_duration_sum: timedelta,
+        open_duration_count: int,
+        max_open_duration: timedelta,
         is_utc: bool = True,
     ) -> bool:
         ret_val = False
@@ -250,10 +250,10 @@ class HedgePosition:
     def reverse(
         self,
         volume: float,
-        min_open_duration: list[timedelta],
-        avg_open_duration_sum: list[timedelta],
-        open_duration_count: list[int],
-        max_open_duration: list[timedelta],
+        min_open_duration: timedelta,
+        avg_open_duration_sum: timedelta,
+        open_duration_count: int,
+        max_open_duration: timedelta,
         is_utc: bool = True,
     ) -> bool:
         ret_val = False

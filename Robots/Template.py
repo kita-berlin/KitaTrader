@@ -40,10 +40,10 @@ class Template(KitaApi):
     def on_init(self) -> None:
 
         # 1. Define quote_provider(s)
-        # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
-        quote_provider = Dukascopy(datarate=Constants.SEC_PER_MINUTE)
-        # quote_provider = BrokerMt5( datarate=0, "62060378, pepperstone_uk-Demo, tFue0y*akr")
-        # quote_provider = QuoteCsv(datarate=0, "G:\\Meine Ablage")
+        # data_rate is in seconds, 0 means fastetst possible (i.e. Ticks)
+        quote_provider = Dukascopy(data_rate=Constants.SEC_PER_MINUTE)
+        # quote_provider = BrokerMt5( data_rate=0, "62060378, pepperstone_uk-Demo, tFue0y*akr")
+        # quote_provider = QuoteCsv(data_rate=0, "G:\\Meine Ablage")
 
         # 2. Define symbol(s); at least one symbol must be defined
         error, self.gbpusd_symbol = self.request_symbol(
@@ -108,7 +108,7 @@ class Template(KitaApi):
         sma = self.ta_sma[self.m5_bars.current]  # type:ignore
         bid0 = self.m5_bars.open_bids.last(0)
         bid1 = self.m5_bars.open_bids.last(1)
-        bid_mid = (bid0 + bid1) / 2
+        bid_mid = (bid0 + bid1) / 2  # type:ignore
 
         if self.m5_bars.is_new_bar:
             if self.m5_bars.open_times.last(0) != self.m1_bars.open_times.last(0):

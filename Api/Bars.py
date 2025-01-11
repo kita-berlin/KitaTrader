@@ -11,16 +11,23 @@ class Bars:
 
     # Members
     # region
+    open_times: TimeSeries
+
+    open_bids: DataSeries
+    high_bids: DataSeries
+    low_bids: DataSeries
+    close_bids: DataSeries
+    volume_bids: DataSeries
+
+    open_asks: DataSeries
+    high_asks: DataSeries
+    low_asks: DataSeries
+    close_asks: DataSeries
+    volume_asks: DataSeries
+
     symbol_name: str  # Gets the symbol name.#
     timeframe_seconds: int  # Get the timeframe in seconds.#
     look_back: int  # Gets the look back period.#
-    open_times: TimeSeries  # Gets the open bar time data.#
-    open_bids: DataSeries  # Gets the Open price bars data.#
-    high_bids: DataSeries  # Gets the High price bars data.#
-    low_bids: DataSeries  # Gets the Low price bars data.#
-    close_bids: DataSeries  # Gets the Close price bars data.#
-    volume: DataSeries  # Gets the tick volumes data.#
-    open_asks: DataSeries  # The ask value at open time (open_bids are bids)
     is_new_bar: bool = False  # if true, the current tick is the first tick of a new bar
     current: int = 0  # index of the current bar
 
@@ -39,12 +46,16 @@ class Bars:
         self.open_times = TimeSeries(self)
         self.open_bids = DataSeries(self)
         self.open_asks = DataSeries(self)
+        self.volume_bids = DataSeries(self)
+        self.volume_asks = DataSeries(self)
         if 0 != timeframe_seconds:
             self.high_bids = DataSeries(self)
             self.low_bids = DataSeries(self)
             self.close_bids = DataSeries(self)
-            self.volume = DataSeries(self)
-            # self.line_colors = np.array([])
+
+            self.high_asks = DataSeries(self)
+            self.low_asks = DataSeries(self)
+            self.close_asks = DataSeries(self)
 
     def bars_on_tick(self, time: datetime, bar: Bar) -> None:
         self.is_new_bar = False

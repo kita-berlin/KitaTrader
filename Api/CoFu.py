@@ -39,5 +39,8 @@ class CoFu:
         local_time_with_tz = localTime.astimezone(get_localzone())  # type: ignore
         return local_time_with_tz.astimezone(pytz.utc)
 
+    @staticmethod
+    def double_to_string(value: float, digits: int) -> str:
+        return "{:.{}f}".format(value, digits)
 
 # end of file

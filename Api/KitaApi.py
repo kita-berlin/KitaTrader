@@ -2,7 +2,6 @@ from __future__ import annotations
 import os
 import re
 import math
-import locale
 from typing import TypeVar
 from datetime import datetime, timedelta
 from Api.KitaApiEnums import *
@@ -15,6 +14,7 @@ from Api.Position import Position
 from Api.KitaApiEnums import BidAsk, TradeType, ProfitMode
 from Api.QuoteProvider import QuoteProvider
 from Api.Symbol import Symbol
+from Api.CoFu import CoFu
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
@@ -107,17 +107,18 @@ class KitaApi:
         return "", symbol
 
     # Function to resolve environment variables in a template string
-    def resolve_env_variables(self, template):
+    def resolve_env_variables(self, template: str) -> str:
         # Find all environment variable placeholders (e.g., $(Env1))
         matches = re.findall(r"\$\((\w+)\)", template)
-    
+
         # Replace each placeholder with its value from the environment
         resolved_path = template
         for match in matches:
             env_value = os.getenv(match, f"<{match}>")  # Default to placeholder if not found
             resolved_path = resolved_path.replace(f"$({match})", env_value)
-    
+
         return resolved_path
+
     # endregion
 
     # Long/Short and other arithmetic
@@ -268,7 +269,7 @@ class KitaApi:
             if len(bid_asks) >= 2:
                 bid_asks = bid_asks[1].split(",")
                 if len(bid_asks) == 2:
-                    i_ask = KitaApi.string_to_integer(bid_asks[0])
+                    i_ask = int(bid_asks[0])
                     open_ask = round(lp.symbol.point_size * i_ask, lp.symbol.digits)
                     # open_bid = lp.symbol.point_size * (
                     #     i_ask - KitaApi.string_to_integer(bid_asks[1])
@@ -296,30 +297,30 @@ class KitaApi:
                 self.logger.add_text(lp.symbol.name)
                 continue
             elif change_part == "Lots":
-                self.logger.add_text(KitaApi.double_to_string(lp.lots, lot_digits))
+                self.logger.add_text(CoFu.double_to_string(lp.lots, lot_digits))
                 continue
             elif change_part == "OpenPrice":
-                self.logger.add_text(KitaApi.double_to_string(lp.entry_price, lp.symbol.digits))
+                self.logger.add_text(CoFu.double_to_string(lp.entry_price, lp.symbol.digits))
                 continue
             elif change_part == "Swap":
-                self.logger.add_text(KitaApi.double_to_string(lp.swap, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.swap, 2))
                 continue
             elif change_part == "Swap/Lot":
-                self.logger.add_text(KitaApi.double_to_string(lp.swap / lp.lots, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.swap / lp.lots, 2))
                 continue
             elif change_part == "OpenAsks":
                 self.logger.add_text(
-                    KitaApi.double_to_string(open_ask, lp.symbol.digits) if lp.trade_type == TradeType.Buy else ""
+                    CoFu.double_to_string(open_ask, lp.symbol.digits) if lp.trade_type == TradeType.Buy else ""
                 )
                 continue
             elif change_part == "OpenBid":
                 self.logger.add_text(
-                    KitaApi.double_to_string(open_bid, lp.symbol.digits) if lp.trade_type == TradeType.Sell else ""
+                    CoFu.double_to_string(open_bid, lp.symbol.digits) if lp.trade_type == TradeType.Sell else ""
                 )
                 continue
             elif change_part == "OpenSpreadPoints":
                 self.logger.add_text(
-                    KitaApi.double_to_string(self.i_price((open_ask - open_bid), lp.symbol.point_size), 0)
+                    CoFu.double_to_string(self.i_price((open_ask - open_bid), lp.symbol.point_size), 0)
                 )
                 continue
             elif change_part == "CloseDate":
@@ -332,16 +333,16 @@ class KitaApi:
                 self.logger.add_text("Short" if lp.trade_type == TradeType.Sell else "Long")
                 continue
             elif change_part == "PointValue":
-                self.logger.add_text(KitaApi.double_to_string(self.get_money_from_1point_and_1lot(lp.symbol), 5))
+                self.logger.add_text(CoFu.double_to_string(self.get_money_from_1point_and_1lot(lp.symbol), 5))
                 continue
             elif change_part == "ClosingPrice":
-                self.logger.add_text(KitaApi.double_to_string(lp.closing_price, lp.symbol.digits))
+                self.logger.add_text(CoFu.double_to_string(lp.closing_price, lp.symbol.digits))
                 continue
             elif change_part == "Commission":
-                self.logger.add_text(KitaApi.double_to_string(lp.commissions, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.commissions, 2))
                 continue
             elif change_part == "Comm/Lot":
-                self.logger.add_text(KitaApi.double_to_string(lp.commissions / lp.lots, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.commissions / lp.lots, 2))
                 continue
             elif change_part == "CloseAsk":
                 self.logger.add_text(
@@ -352,14 +353,14 @@ class KitaApi:
                 continue
             elif change_part == "CloseBid":
                 self.logger.add_text(
-                    KitaApi.double_to_string(self.get_bid_ask_price(lp.symbol, BidAsk.Bid), lp.symbol.digits)
+                    CoFu.double_to_string(self.get_bid_ask_price(lp.symbol, BidAsk.Bid), lp.symbol.digits)
                     if lp.trade_type == TradeType.Buy
                     else ""
                 )
                 continue
             elif change_part == "CloseSpreadPoints":
                 self.logger.add_text(
-                    KitaApi.double_to_string(
+                    CoFu.double_to_string(
                         self.i_price(
                             self.get_bid_ask_price(lp.symbol, BidAsk.Ask)
                             - self.get_bid_ask_price(lp.symbol, BidAsk.Bid),
@@ -370,46 +371,46 @@ class KitaApi:
                 )
                 continue
             elif change_part == "Balance":
-                self.logger.add_text(KitaApi.double_to_string(lp.balance, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.balance, 2))
                 continue
             elif change_part == "Dur. d.h.self.s":
                 self.logger.add_text(str(lp.entry_time - lp.closing_time).rjust(11, " "))
                 continue
             elif change_part == "Number":
                 self.logging_trade_count += 1
-                self.logger.add_text(KitaApi.integer_to_string(self.logging_trade_count))
+                self.logger.add_text(str(self.logging_trade_count))
                 continue
             elif change_part == "Volume":
-                self.logger.add_text(KitaApi.double_to_string(lp.volume_in_units, 1))
+                self.logger.add_text(CoFu.double_to_string(lp.volume_in_units, 1))
                 continue
             elif change_part == "DiffPoints":
-                self.logger.add_text(KitaApi.double_to_string(point_diff, 0))
+                self.logger.add_text(CoFu.double_to_string(point_diff, 0))
                 continue
             elif change_part == "DiffGross":
                 self.logger.add_text(
-                    KitaApi.double_to_string(
+                    CoFu.double_to_string(
                         self.get_money_from_points_and_lot(lp.symbol, point_diff, lp.lots),
                         2,
                     )
                 )
                 continue
             elif change_part == "net_profit":
-                self.logger.add_text(KitaApi.double_to_string(lp.net_profit, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.net_profit, 2))
                 continue
             elif change_part == "NetProf/Lot":
-                self.logger.add_text(KitaApi.double_to_string(lp.net_profit / lp.lots, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.net_profit / lp.lots, 2))
                 continue
             elif change_part == "AccountMargin":
-                self.logger.add_text(KitaApi.double_to_string(lp.account_margin, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.account_margin, 2))
                 continue
             elif change_part == "TradeMargin":
-                self.logger.add_text(KitaApi.double_to_string(lp.trade_margin, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.trade_margin, 2))
                 continue
             elif change_part == "MaxEquityDrawdown":
-                self.logger.add_text(KitaApi.double_to_string(lp.max_equity_drawdown, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.max_equity_drawdown, 2))
                 continue
             elif change_part == "MaxTradeEquityDrawdownValue":
-                self.logger.add_text(KitaApi.double_to_string(lp.max_trade_equity_drawdown_value, 2))
+                self.logger.add_text(CoFu.double_to_string(lp.max_trade_equity_drawdown_value, 2))
                 continue
             else:
                 pass
@@ -540,15 +541,15 @@ class KitaApi:
         self.current_volume = 0
         self.initial_volume = 0
 
-        # call robot's OnInit
-        self.robot.on_init()  # type: ignore
-
         # set working data path
         self.robot.DataPath = self.resolve_env_variables(self.robot.DataPath)
 
+        # call robot's OnInit
+        self.robot.on_init()  # type: ignore
+
         # load bars and data rate
         for symbol in self.symbol_dictionary.values():
-            symbol.check_historical_data() # makes sure data do exist since AllDataStartUtc
+            symbol.check_historical_data()  # make sure data do exist since AllDataStartUtc
             symbol.load_datarate_and_bars()
 
     def start(self):
@@ -575,19 +576,19 @@ class KitaApi:
             # do max/min calcs
             # region
             self.max_margin = max(self.max_margin, self.account.margin)
-            if  len(self.positions) > self.same_time_open:
+            if len(self.positions) > self.same_time_open:
                 self.same_time_open = len(self.positions)
                 self.same_time_open_date_time = symbol.time
                 self.same_time_open_count = len(self.history)
 
             self.max_balance = max(self.max_balance, self.account.balance)
-            if  self.max_balance - self.account.balance > self.max_balance_drawdown_value:
+            if self.max_balance - self.account.balance > self.max_balance_drawdown_value:
                 self.max_balance_drawdown_value = self.max_balance - self.account.balance
                 self.max_balance_drawdown_time = symbol.time
                 self.max_balance_drawdown_count = len(self.history)
 
             self.max_equity = max(self.max_equity, self.account.equity)
-            if  self.max_equity - self.account.equity > self.max_equity_drawdown_value:
+            if self.max_equity - self.account.equity > self.max_equity_drawdown_value:
                 self.max_equity_drawdown_value = self.max_equity - self.account.equity
                 self.max_equity_drawdown_time = symbol.time
                 self.max_equity_drawdown_count = len(self.history)
@@ -657,14 +658,14 @@ class KitaApi:
 
         log_text = "\n\n" + (
             "Net Profit:,"
-            + KitaApi.double_to_string(profit + loss, 2)
+            + CoFu.double_to_string(profit + loss, 2)
             + ", Long:,"
-            + KitaApi.double_to_string(
+            + CoFu.double_to_string(
                 sum(x.net_profit for x in self.history if x.trade_type == TradeType.Buy),
                 2,
             )
             + ", Short:,"
-            + KitaApi.double_to_string(
+            + CoFu.double_to_string(
                 sum(x.net_profit for x in self.history if x.trade_type == TradeType.Sell),
                 2,
             )
@@ -681,7 +682,7 @@ class KitaApi:
             + "\n"
         )
 
-        # log_text += ("max_margin: " + self.account.asset + " " + KitaApi.double_to_string(mMaxMargin, 2) + "\n")
+        # log_text += ("max_margin: " + self.account.asset + " " + CoFu.double_to_string(mMaxMargin, 2) + "\n")
         # log_text += ("max_same_time_open: " + str(mSameTimeOpen + "\n")
         # + ", @ " + mSameTimeOpenDateTime.strftime("%d.%m.%Y %H:%M:%S")
         # + ", Count# " + str(mSameTimeOpenCount))
@@ -689,7 +690,7 @@ class KitaApi:
             "Max Balance Drawdown Value: "
             + self.account.currency
             + " "
-            + KitaApi.double_to_string(self.max_balance_drawdown_value, 2)
+            + CoFu.double_to_string(self.max_balance_drawdown_value, 2)
             + "; @ "
             + self.max_balance_drawdown_time.strftime("%d.%m.%Y %H:%M:%S")
             + "; Count# "
@@ -702,7 +703,7 @@ class KitaApi:
             + (
                 "NaN"
                 if self.max_balance == 0
-                else KitaApi.double_to_string(100 * self.max_balance_drawdown_value / self.max_balance, 2)
+                else CoFu.double_to_string(100 * self.max_balance_drawdown_value / self.max_balance, 2)
             )
             + "\n"
         )
@@ -711,7 +712,7 @@ class KitaApi:
             "Max Equity Drawdown Value: "
             + self.account.currency
             + " "
-            + KitaApi.double_to_string(self.max_equity_drawdown_value, 2)
+            + CoFu.double_to_string(self.max_equity_drawdown_value, 2)
             + "; @ "
             + self.max_equity_drawdown_time.strftime("%d.%m.%Y %H:%M:%S")
             + "; Count# "
@@ -720,23 +721,23 @@ class KitaApi:
         )
 
         log_text += (
-            "Max Current Equity Drawdown %: " + KitaApi.double_to_string(max_current_equity_dd_percent, 2) + "\n"
+            "Max Current Equity Drawdown %: " + CoFu.double_to_string(max_current_equity_dd_percent, 2) + "\n"
         )
 
         log_text += (
-            "Max start Equity Drawdown %: " + KitaApi.double_to_string(max_start_equity_dd_percent, 2) + "\n"
+            "Max start Equity Drawdown %: " + CoFu.double_to_string(max_start_equity_dd_percent, 2) + "\n"
         )
 
         log_text += (
-            "Profit Factor: " + ("-" if losing_trades == 0 else KitaApi.double_to_string(profit_factor, 2)) + "\n"
+            "Profit Factor: " + ("-" if losing_trades == 0 else CoFu.double_to_string(profit_factor, 2)) + "\n"
         )
 
-        log_text += "Sharpe Ratio: " + KitaApi.double_to_string(sharpe_ratio, 2) + "\n"
-        log_text += "Sortino Ratio: " + KitaApi.double_to_string(sortino_ratio, 2) + "\n"
-        log_text += "Calmar Ratio: " + KitaApi.double_to_string(calmar, 2) + "\n"
-        log_text += "Winning Ratio: " + KitaApi.double_to_string(winning_ratio_percent, 2) + "\n"
-        log_text += "Trades Per Month: " + KitaApi.double_to_string(trades_per_month, 2) + "\n"
-        log_text += "Average Annual Profit Percent: " + KitaApi.double_to_string(annual_profit_percent, 2) + "\n"
+        log_text += "Sharpe Ratio: " + CoFu.double_to_string(sharpe_ratio, 2) + "\n"
+        log_text += "Sortino Ratio: " + CoFu.double_to_string(sortino_ratio, 2) + "\n"
+        log_text += "Calmar Ratio: " + CoFu.double_to_string(calmar, 2) + "\n"
+        log_text += "Winning Ratio: " + CoFu.double_to_string(winning_ratio_percent, 2) + "\n"
+        log_text += "Trades Per Month: " + CoFu.double_to_string(trades_per_month, 2) + "\n"
+        log_text += "Average Annual Profit Percent: " + CoFu.double_to_string(annual_profit_percent, 2) + "\n"
 
         # if avg_open_duration_sum != 0:
         #     log_text += (
@@ -756,7 +757,7 @@ class KitaApi:
         #             if i > 1:
         #                 histoRestSum += investCountHisto[i]
         #     if histoRestSum != 0:
-        #         log_text += ("histo_rest_quotient: " + KitaApi.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
+        #         log_text += ("histo_rest_quotient: " + CoFu.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
         print(log_text.replace(":,", ": "))
         self.log_add_text_line(log_text)
         self.log_close()

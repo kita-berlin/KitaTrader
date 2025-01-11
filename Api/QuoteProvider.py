@@ -6,6 +6,7 @@ import traceback
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from Api.KitaApiEnums import *
+from Api.Bars import Bars
 
 if TYPE_CHECKING:
     from Api.KitaApi import KitaApi
@@ -25,10 +26,10 @@ class QuoteProvider(ABC):
     }
     symbols: list[str] = []
 
-    def __init__(self, parameter: str, assets_path: str, datarate: int):
+    def __init__(self, parameter: str, assets_path: str, data_rate: int):
         self.parameter = parameter
         self.assets_path = assets_path
-        self.datarate = datarate
+        self.data_rate = data_rate
         self.init_market_info(assets_path, None)  # type:ignore
 
     def init_market_info(self, assets_path: str, symbol: Symbol) -> str:
@@ -91,10 +92,13 @@ class QuoteProvider(ABC):
     def init_symbol(self, api: KitaApi, symbol: Symbol): ...
 
     @abstractmethod
-    def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, QuotesType]: ...
+    def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, Bars]: ...
 
     @abstractmethod
-    def get_first_day(self) -> tuple[str, datetime, QuotesType]: ...
+    def get_first_datetime(self) -> tuple[str, datetime]: ...
+
+    @abstractmethod
+    def get_highest_data_rate(self) -> int: ...
 
 
 # end of file

@@ -49,8 +49,8 @@ class Ultron(KitaApi):
         # request symbol to be used
         error, symbol = self.request_symbol(
             "GBP_USD",  # symbol name
-            # datarate is in seconds, 0 means fastetst possible (i.e. Ticks)
-            Dukascopy(datarate=Constants.SEC_PER_MINUTE),
+            # data_rate is in seconds, 0 means fastetst possible (i.e. Ticks)
+            Dukascopy(data_rate=Constants.SEC_PER_MINUTE),
             TradePaper(),  # Paper trading
             # If :Normalized is added to America/New_York, 7 hours are added
             # This gives New York 17:00 = midnight so that forex trading runs from Moday 00:00 - Friday 23:59:59

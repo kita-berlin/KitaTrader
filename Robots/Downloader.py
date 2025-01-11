@@ -19,15 +19,15 @@ class Downloader(KitaApi):
     # Members
     # region
     symbols_to_load: list[str] = [
-        "GBP_USD",
-        # "EUR_USD",
-        # "NZD_CAD",
-        # "AUD_CAD",
+        # "GBPUSD",
+        # "EURUSD",
+        "NZDCAD",
+        # "AUDCAD",
         # "DEU.IDX_EUR",
         # "USA30.IDX_USD",
         # "USATECH.IDX_USD",
         # "USA500.IDX_USD",
-        # "XAU_USD",
+        # "XAUUSD",
     ]
 
     def __init__(self):
@@ -42,7 +42,7 @@ class Downloader(KitaApi):
         for symbol_name in self.symbols_to_load:
             error, symbol = self.request_symbol(
                 symbol_name,
-                Dukascopy(datarate=0),
+                Dukascopy(data_rate=0),
                 TradePaper(""),
             )
             if "" != error:

@@ -1,4 +1,4 @@
-from Api.CoFu import *
+from datetime import datetime
 from Api.KitaApiEnums import *
 from Robots.Template import Template  # type: ignore
 from Robots.Downloader import Downloader  # type: ignore
@@ -15,7 +15,8 @@ class MainConsole:
 
         # self.robot.AllDataStartUtc = datetime.min means earliest possible what the source can provide
         # End datetime always is yesterday. Cannot be today because today's data are not complete yet
-        self.robot.AllDataStartUtc = datetime.strptime("3.1.2006", "%d.%m.%Y")
+        self.robot.AllDataStartUtc = datetime.strptime("1.12.2024", "%d.%m.%Y")
+        #self.robot.AllDataStartUtc = datetime.min
 
         # Platform mode how the robot will be used by the platform
         # Other possibilities are (not yet implemented): RealTime (live trading),

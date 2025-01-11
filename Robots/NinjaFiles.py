@@ -43,7 +43,7 @@ class NinjaFiles(KitaApi):
         for symbol_name in self.symbols_to_load:
             error, symbol = self.request_symbol(
                 symbol_name,
-                Dukascopy(datarate=0),
+                Dukascopy(data_rate=0),
                 TradePaper(""),
             )
             if "" != error:
