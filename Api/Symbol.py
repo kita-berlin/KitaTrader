@@ -245,102 +245,118 @@ class Symbol:
         daily_bars: Bars = Bars(self.name, Constants.SEC_PER_DAY, 0)
 
         while True:
-            error, start_dt, one_day_data = self.quote_provider.get_day_at_utc(run_utc)
+            # daily loop
+            error, start_dt, one_day_provider_data = self.quote_provider.get_day_at_utc(run_utc)
             assert "" == error, error
 
             print(run_utc.strftime("%d.%m.%Y"))
-            one_day_csv_buffer = StringIO()
-            one_day_csv_writer = csv.writer(one_day_csv_buffer)
-            last_tick = 0
+            daily_tick_csv_buffer = StringIO()
+            daily_tick_csv_writer = csv.writer(daily_tick_csv_buffer)
+            daily_minute_csv_buffer = StringIO()
+            daily_minute_csv_writer = csv.writer(daily_minute_csv_buffer)
+            last_time: datetime = datetime.min
+            last_stamp: int = 0
 
-            for i in range(len(one_day_data.open_times.data)):
-                current_tick = one_day_data.open_times.data[i].timestamp()
-                if (
-                    0 == last_tick
-                    or current_tick / Constants.SEC_PER_MINUTE != last_tick / Constants.SEC_PER_MINUTE
-                ):
-                    if 0 != last_tick:
-                        self._write_bars(minute_bars)
-                    minute_bars: Bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0)
-                    self._init_bar(
-                        minute_bars,
-                        one_day_data.open_times.data[i],
-                        one_day_data.open_bids.data[i],
-                        one_day_data.open_asks.data[i],
-                        one_day_data.volume_bids.data[i],
-                        one_day_data.volume_asks.data[i],
-                    )
+            for i in range(len(one_day_provider_data.open_times.data)):
+                # tick loop
+                time = one_day_provider_data.open_times.data[i]
+                bid = one_day_provider_data.open_bids.data[i]
+                ask = one_day_provider_data.open_asks.data[i]
+                volume_bid = one_day_provider_data.volume_bids.data[i]
+                volume_ask = one_day_provider_data.volume_asks.data[i]
+                milliseconds = (time - run_utc).total_seconds() * 1_000  # Convert to milliseconds
 
+                current_stamp = int(time.timestamp())
+                last_stamp = 0 if datetime.min == last_time else int(last_time.timestamp())
                 if (
-                    0 == last_tick
-                    or current_tick / Constants.SEC_PER_HOUR != last_tick / Constants.SEC_PER_HOUR
+                    0 == last_stamp
+                    or current_stamp // Constants.SEC_PER_DAY != last_stamp // Constants.SEC_PER_DAY
                 ):
-                    if 0 != last_tick:
-                        self._write_bars(hour_bars)
-                    hour_bars: Bars = Bars(self.name, Constants.SEC_PER_HOUR, 0)
-                    self._init_bar(
-                        hour_bars,
-                        one_day_data.open_times.data[i],
-                        one_day_data.open_bids.data[i],
-                        one_day_data.open_asks.data[i],
-                        one_day_data.volume_bids.data[i],
-                        one_day_data.volume_asks.data[i],
-                    )
-
-                if (
-                    0 == last_tick
-                    or current_tick / Constants.SEC_PER_DAY != last_tick / Constants.SEC_PER_DAY
-                ):
-                    if 0 != last_tick:
-                        self._write_bars(daily_bars)
-                    daily_bars: Bars = Bars(self.name, Constants.SEC_PER_DAY, 0)
-                    self._init_bar(
+                    # add a new empty daily bar
+                    self._add_empty_bar(
                         daily_bars,
-                        one_day_data.open_times.data[i],
-                        one_day_data.open_bids.data[i],
-                        one_day_data.open_asks.data[i],
-                        one_day_data.volume_bids.data[i],
-                        one_day_data.volume_asks.data[i],
+                        time.replace(hour=0, minute=0, second=0, microsecond=0),
+                        bid,
+                        ask,
+                        volume_bid,
+                        volume_ask,
                     )
+                else:
+                    # update the bar
+                    self._update_bars(daily_bars, bid, ask, volume_bid, volume_ask)
 
-                # Calculate milliseconds since base_date
-                delta = one_day_data.open_times.data[i] - run_utc
-                milliseconds = delta.total_seconds() * 1_000  # Convert to milliseconds
-                bid = one_day_data.open_bids.data[i]
-                ask = one_day_data.open_asks.data[i]
-                one_day_csv_writer.writerow(
+                if (
+                    0 == last_stamp
+                    or current_stamp // Constants.SEC_PER_HOUR != last_stamp // Constants.SEC_PER_HOUR
+                ):
+                    # add a new empty hour bar
+                    self._add_empty_bar(
+                        hour_bars,
+                        time.replace(minute=0, second=0, microsecond=0),
+                        bid,
+                        ask,
+                        volume_bid,
+                        volume_ask,
+                    )
+                else:
+                    # update the bar
+                    self._update_bars(hour_bars, bid, ask, volume_bid, volume_ask)
+
+                if (
+                    0 == last_stamp
+                    or current_stamp // Constants.SEC_PER_MINUTE != last_stamp // Constants.SEC_PER_MINUTE
+                ):
+                    if 0 != last_stamp:
+                        # write daily minute data into the csv/zip file
+                        daily_minute_csv_writer.writerow(
+                            [
+                                int(
+                                    (last_time.replace(second=0, microsecond=0) - run_utc).total_seconds() * 1_000
+                                ),
+                                f"{minute_bars.open_bids.data[0]:.{self.digits}f}",
+                                f"{minute_bars.high_bids.data[0]:.{self.digits}f}",
+                                f"{minute_bars.low_bids.data[0]:.{self.digits}f}",
+                                f"{minute_bars.close_bids.data[0]:.{self.digits}f}",
+                                f"{minute_bars.volume_bids.data[0]:.2f}",
+                                f"{minute_bars.open_asks.data[0]:.{self.digits}f}",
+                                f"{minute_bars.high_asks.data[0]:.{self.digits}f}",
+                                f"{minute_bars.low_asks.data[0]:.{self.digits}f}",
+                                f"{minute_bars.close_asks.data[0]:.{self.digits}f}",
+                                f"{minute_bars.volume_asks.data[0]:.2f}",
+                            ]
+                        )
+
+                    # create a new empty minute bar
+                    minute_bars: Bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0)
+                    self._add_empty_bar(
+                        minute_bars,
+                        time.replace(second=0, microsecond=0),
+                        bid,
+                        ask,
+                        volume_bid,
+                        volume_ask,
+                    )
+                else:
+                    # update the bar
+                    self._update_bars(minute_bars, bid, ask, volume_bid, volume_ask)
+
+                # write daily tick data into the csv/zip file
+                daily_tick_csv_writer.writerow(
                     [int(milliseconds), f"{bid:.{self.digits}f}", f"{ask:.{self.digits}f}"]
                 )
 
-                # Update the bars
-                self._update_bars(
-                    minute_bars, bid, ask, one_day_data.volume_bids.data[i], one_day_data.volume_asks.data[i]
-                )
-                self._update_bars(
-                    hour_bars, bid, ask, one_day_data.volume_bids.data[i], one_day_data.volume_asks.data[i]
-                )
-                self._update_bars(
-                    daily_bars, bid, ask, one_day_data.volume_bids.data[i], one_day_data.volume_asks.data[i]
-                )
-                last_tick = current_tick
+                last_time = time
+                last_stamp = current_stamp
 
-            # Create a zip file in memory
-            file = os.path.join(tick_folder, run_utc.strftime("%Y%m%d_quote"))
-            zip_buffer = BytesIO()
-            with ZipFile(zip_buffer, mode="w", compression=ZIP_DEFLATED) as zf:
-                # Add the CSV file to the zip archive
-                zf.writestr(run_utc.strftime(f"%Y%m%d_{self.name}_tick_quote.csv"), one_day_csv_buffer.getvalue())
-
-            # Write the tick zip file of 1 day to disk
-            with open(file + ".zip", "wb") as f:
-                f.write(zip_buffer.getvalue())
+            # write daily files
+            self._write_daily_zip_file(tick_folder, run_utc, daily_tick_csv_buffer, "tick")
+            self._write_daily_zip_file(minute_folder, run_utc, daily_minute_csv_buffer, "minute")
 
             run_utc += timedelta(days=1)
 
             if run_utc >= self.api.AllDataEndUtc:
-                self._write_bars(minute_bars)
-                self._write_bars(hour_bars)
-                self._write_bars(daily_bars)
+                # self._write_bars(hour_bars)
+                # self._write_bars(daily_bars)
                 break
 
         return ""
@@ -363,7 +379,7 @@ class Symbol:
         self.symbol_on_tick()  # set initial time, bid, ask for on_start()
         return ""
 
-    def _init_bar(
+    def _add_empty_bar(
         self,
         bars: Bars,
         open_time: datetime,
@@ -396,8 +412,17 @@ class Symbol:
         bars.close_asks.data[-1] = ask
         bars.volume_asks.data[-1] += volume_ask
 
-    def _write_bars(self, bars: Bars):
-        pass
+    def _write_daily_zip_file(self, tick_folder: str, run_utc: datetime, csv_buffer: StringIO, timeframe: str):
+        # Create the daily  zip file in memory
+        file = os.path.join(tick_folder, run_utc.strftime("%Y%m%d_quote"))
+        zip_buffer = BytesIO()
+        with ZipFile(zip_buffer, mode="w", compression=ZIP_DEFLATED) as zf:
+            # Add the CSV file to the zip archive
+            zf.writestr(run_utc.strftime(f"%Y%m%d_{self.name}_" + timeframe + "_quote.csv"), csv_buffer.getvalue())
+
+        # Write the tick zip file of 1 day to disk
+        with open(file + ".zip", "wb") as f:
+            f.write(zip_buffer.getvalue())
 
     def _load_ticks(self, start: datetime) -> str:
         self.api.AllDataStartUtc = self.api.AllDataStartUtc.replace(tzinfo=timezone.utc)

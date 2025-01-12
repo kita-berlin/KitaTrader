@@ -31,7 +31,7 @@ class Dukascopy(QuoteProvider):
         self.cache_path = os.path.join(api.DataPath, self.provider_name, "cache")
 
     def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, Bars]:
-        day_data: Bars = Bars(self.symbol.name, 0, 0)
+        day_data: Bars = Bars(self.symbol.name, 0, 0)  # 0 = tick timeframe
         self.last_utc = run_utc = utc.replace(hour=0, minute=0, second=0, microsecond=0)
 
         while True:
@@ -54,11 +54,12 @@ class Dukascopy(QuoteProvider):
                     return str(e), self.last_utc, None  # type: ignore
 
             if len(data) > 0:
-                day_data.open_times.data += self._get_hour(run_utc, data).open_times.data
-                day_data.open_bids.data += self._get_hour(run_utc, data).open_bids.data
-                day_data.open_asks.data += self._get_hour(run_utc, data).open_asks.data
-                day_data.volume_bids.data += self._get_hour(run_utc, data).volume_bids.data
-                day_data.volume_asks.data += self._get_hour(run_utc, data).volume_asks.data
+                hour_data = self._get_hour(run_utc, data)
+                day_data.open_times.data += hour_data.open_times.data
+                day_data.open_bids.data += hour_data.open_bids.data
+                day_data.open_asks.data += hour_data.open_asks.data
+                day_data.volume_bids.data += hour_data.volume_bids.data
+                day_data.volume_asks.data += hour_data.volume_asks.data
 
             run_utc += timedelta(hours=1)
             if run_utc.date() > utc.date():
@@ -84,7 +85,7 @@ class Dukascopy(QuoteProvider):
         return error, end_date + timedelta(days=1)
 
     def get_highest_data_rate(self) -> int:
-        return 0  # we (only) can do ticks
+        return 0  # we can do ticks
 
     def _get_hour(self, hour_base_time: datetime, data: bytes) -> Bars:
         hour: Bars = Bars(self.symbol.name, 0, 0)
