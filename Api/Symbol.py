@@ -226,7 +226,6 @@ class Symbol:
                 self.api.DataPath,
                 self.quote_provider.provider_name,
                 "hour",
-                f"{self.name}",
             )
             os.makedirs(hour_folder, exist_ok=True)
 
@@ -234,15 +233,20 @@ class Symbol:
             self.api.DataPath,
             self.quote_provider.provider_name,
             "daily",
-            f"{self.name}",
         )
         os.makedirs(daily_folder, exist_ok=True)
 
         print(f"Downloading {self.name} from " + self.api.AllDataStartUtc.strftime("%d.%m.%Y"))
         run_utc = self.api.AllDataStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
-        minute_bars: Bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0)
-        hour_bars: Bars = Bars(self.name, Constants.SEC_PER_HOUR, 0)
-        daily_bars: Bars = Bars(self.name, Constants.SEC_PER_DAY, 0)
+        daily_bar = Bar()
+        hour_bar = Bar()
+        minute_bar = Bar()
+        hour_csv_buffer = StringIO()
+        hour_csv_writer = csv.writer(hour_csv_buffer)
+        daily_csv_buffer = StringIO()
+        daily_csv_writer = csv.writer(daily_csv_buffer)
+        last_time: datetime = datetime.min
+        last_stamp: int = 0
 
         while True:
             # daily loop
@@ -254,8 +258,6 @@ class Symbol:
             daily_tick_csv_writer = csv.writer(daily_tick_csv_buffer)
             daily_minute_csv_buffer = StringIO()
             daily_minute_csv_writer = csv.writer(daily_minute_csv_buffer)
-            last_time: datetime = datetime.min
-            last_stamp: int = 0
 
             for i in range(len(one_day_provider_data.open_times.data)):
                 # tick loop
@@ -268,40 +270,90 @@ class Symbol:
 
                 current_stamp = int(time.timestamp())
                 last_stamp = 0 if datetime.min == last_time else int(last_time.timestamp())
+
+                # do day bar aggregation
                 if (
                     0 == last_stamp
                     or current_stamp // Constants.SEC_PER_DAY != last_stamp // Constants.SEC_PER_DAY
                 ):
+                    if 0 != last_stamp:
+                        # write daily minute data into the csv/zip file
+                        daily_csv_writer.writerow(
+                            [
+                                daily_bar.open_time.strftime("%Y%m%d %H:%M"),
+                                f"{daily_bar.open_bid:.{self.digits}f}",
+                                f"{daily_bar.high_bid:.{self.digits}f}",
+                                f"{daily_bar.low_bid:.{self.digits}f}",
+                                f"{daily_bar.close_bid:.{self.digits}f}",
+                                f"{daily_bar.volume_bid:.2f}",
+                                f"{daily_bar.open_ask:.{self.digits}f}",
+                                f"{daily_bar.high_ask:.{self.digits}f}",
+                                f"{daily_bar.low_ask:.{self.digits}f}",
+                                f"{daily_bar.close_ask:.{self.digits}f}",
+                                f"{daily_bar.volume_ask:.2f}",
+                            ]
+                        )
+
                     # add a new empty daily bar
-                    self._add_empty_bar(
-                        daily_bars,
+                    daily_bar = Bar(
                         time.replace(hour=0, minute=0, second=0, microsecond=0),
                         bid,
-                        ask,
+                        bid,
+                        bid,
+                        bid,
                         volume_bid,
+                        ask,
+                        ask,
+                        ask,
+                        ask,
                         volume_ask,
                     )
                 else:
-                    # update the bar
-                    self._update_bars(daily_bars, bid, ask, volume_bid, volume_ask)
+                    # update daily bar
+                    self._update_bar(daily_bar, bid, ask, volume_bid, volume_ask)
 
+                # do hour bar aggregation
                 if (
                     0 == last_stamp
                     or current_stamp // Constants.SEC_PER_HOUR != last_stamp // Constants.SEC_PER_HOUR
                 ):
+                    if 0 != last_stamp:
+                        # write daily minute data into the csv/zip file
+                        hour_csv_writer.writerow(
+                            [
+                                hour_bar.open_time.strftime("%Y%m%d %H:%M"),
+                                f"{hour_bar.open_bid:.{self.digits}f}",
+                                f"{hour_bar.high_bid:.{self.digits}f}",
+                                f"{hour_bar.low_bid:.{self.digits}f}",
+                                f"{hour_bar.close_bid:.{self.digits}f}",
+                                f"{hour_bar.volume_bid:.2f}",
+                                f"{hour_bar.open_ask:.{self.digits}f}",
+                                f"{hour_bar.high_ask:.{self.digits}f}",
+                                f"{hour_bar.low_ask:.{self.digits}f}",
+                                f"{hour_bar.close_ask:.{self.digits}f}",
+                                f"{hour_bar.volume_ask:.2f}",
+                            ]
+                        )
+
                     # add a new empty hour bar
-                    self._add_empty_bar(
-                        hour_bars,
+                    hour_bar = Bar(
                         time.replace(minute=0, second=0, microsecond=0),
                         bid,
-                        ask,
+                        bid,
+                        bid,
+                        bid,
                         volume_bid,
+                        ask,
+                        ask,
+                        ask,
+                        ask,
                         volume_ask,
                     )
                 else:
-                    # update the bar
-                    self._update_bars(hour_bars, bid, ask, volume_bid, volume_ask)
+                    # update hour bar
+                    self._update_bar(hour_bar, bid, ask, volume_bid, volume_ask)
 
+                # do minute bar aggregation
                 if (
                     0 == last_stamp
                     or current_stamp // Constants.SEC_PER_MINUTE != last_stamp // Constants.SEC_PER_MINUTE
@@ -311,34 +363,41 @@ class Symbol:
                         daily_minute_csv_writer.writerow(
                             [
                                 int(
-                                    (last_time.replace(second=0, microsecond=0) - run_utc).total_seconds() * 1_000
+                                    (
+                                        minute_bar.open_time.replace(second=0, microsecond=0) - run_utc
+                                    ).total_seconds()
+                                    * 1_000
                                 ),
-                                f"{minute_bars.open_bids.data[0]:.{self.digits}f}",
-                                f"{minute_bars.high_bids.data[0]:.{self.digits}f}",
-                                f"{minute_bars.low_bids.data[0]:.{self.digits}f}",
-                                f"{minute_bars.close_bids.data[0]:.{self.digits}f}",
-                                f"{minute_bars.volume_bids.data[0]:.2f}",
-                                f"{minute_bars.open_asks.data[0]:.{self.digits}f}",
-                                f"{minute_bars.high_asks.data[0]:.{self.digits}f}",
-                                f"{minute_bars.low_asks.data[0]:.{self.digits}f}",
-                                f"{minute_bars.close_asks.data[0]:.{self.digits}f}",
-                                f"{minute_bars.volume_asks.data[0]:.2f}",
+                                f"{minute_bar.open_bid:.{self.digits}f}",
+                                f"{minute_bar.high_bid:.{self.digits}f}",
+                                f"{minute_bar.low_bid:.{self.digits}f}",
+                                f"{minute_bar.close_bid:.{self.digits}f}",
+                                f"{minute_bar.volume_bid:.2f}",
+                                f"{minute_bar.open_ask:.{self.digits}f}",
+                                f"{minute_bar.high_ask:.{self.digits}f}",
+                                f"{minute_bar.low_ask:.{self.digits}f}",
+                                f"{minute_bar.close_ask:.{self.digits}f}",
+                                f"{minute_bar.volume_ask:.2f}",
                             ]
                         )
 
                     # create a new empty minute bar
-                    minute_bars: Bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0)
-                    self._add_empty_bar(
-                        minute_bars,
+                    minute_bar = Bar(
                         time.replace(second=0, microsecond=0),
                         bid,
-                        ask,
+                        bid,
+                        bid,
+                        bid,
                         volume_bid,
+                        ask,
+                        ask,
+                        ask,
+                        ask,
                         volume_ask,
                     )
                 else:
-                    # update the bar
-                    self._update_bars(minute_bars, bid, ask, volume_bid, volume_ask)
+                    # update minute bar
+                    self._update_bar(minute_bar, bid, ask, volume_bid, volume_ask)
 
                 # write daily tick data into the csv/zip file
                 daily_tick_csv_writer.writerow(
@@ -349,14 +408,14 @@ class Symbol:
                 last_stamp = current_stamp
 
             # write daily files
-            self._write_daily_zip_file(tick_folder, run_utc, daily_tick_csv_buffer, "tick")
-            self._write_daily_zip_file(minute_folder, run_utc, daily_minute_csv_buffer, "minute")
+            self._write_zip_file(tick_folder, "", run_utc, daily_tick_csv_buffer, "tick")
+            self._write_zip_file(minute_folder, "", run_utc, daily_minute_csv_buffer, "minute")
 
             run_utc += timedelta(days=1)
 
             if run_utc >= self.api.AllDataEndUtc:
-                # self._write_bars(hour_bars)
-                # self._write_bars(daily_bars)
+                self._write_zip_file(hour_folder, self.name, datetime.min, hour_csv_buffer, "hour")
+                self._write_zip_file(daily_folder, self.name, datetime.min, daily_csv_buffer, "daily")
                 break
 
         return ""
@@ -379,49 +438,31 @@ class Symbol:
         self.symbol_on_tick()  # set initial time, bid, ask for on_start()
         return ""
 
-    def _add_empty_bar(
-        self,
-        bars: Bars,
-        open_time: datetime,
-        open_bid: float,
-        open_ask: float,
-        volume_bid: float,
-        volume_ask: float,
-    ):
-        bars.open_times.data.append(open_time)
+    def _update_bar(self, bar: Bar, bid: float, ask: float, volume_bid: float, volume_ask: float):
+        bar.high_bid = max(bar.high_bid, bid)
+        bar.low_bid = min(bar.low_bid, bid)
+        bar.close_bid = bid
+        bar.volume_bid += volume_bid
+        bar.high_ask = max(bar.high_ask, ask)
+        bar.low_ask = min(bar.low_ask, ask)
+        bar.close_ask = ask
+        bar.volume_ask += volume_ask
 
-        bars.open_bids.data.append(open_bid)
-        bars.high_bids.data.append(open_bid)
-        bars.low_bids.data.append(open_bid)
-        bars.close_bids.data.append(open_bid)
-        bars.volume_bids.data.append(volume_bid)
-
-        bars.open_asks.data.append(open_ask)
-        bars.high_asks.data.append(open_ask)
-        bars.low_asks.data.append(open_ask)
-        bars.close_asks.data.append(open_ask)
-        bars.volume_asks.data.append(volume_ask)
-
-    def _update_bars(self, bars: Bars, bid: float, ask: float, volume_bid: float, volume_ask: float):
-        bars.high_bids.data[-1] = max(bars.high_bids.data[-1], bid)
-        bars.low_bids.data[-1] = min(bars.low_bids.data[-1], bid)
-        bars.close_bids.data[-1] = bid
-        bars.volume_bids.data[-1] += volume_bid
-        bars.high_asks.data[-1] = max(bars.high_asks.data[-1], ask)
-        bars.low_asks.data[-1] = min(bars.low_asks.data[-1], ask)
-        bars.close_asks.data[-1] = ask
-        bars.volume_asks.data[-1] += volume_ask
-
-    def _write_daily_zip_file(self, tick_folder: str, run_utc: datetime, csv_buffer: StringIO, timeframe: str):
-        # Create the daily  zip file in memory
-        file = os.path.join(tick_folder, run_utc.strftime("%Y%m%d_quote"))
+    def _write_zip_file(self, folder: str, symbol: str, run_utc: datetime, csv_buffer: StringIO, timeframe: str):
+        # Create the zip file in memory
+        file = os.path.join(folder, run_utc.strftime("%Y%m%d_quote") if "" == symbol else symbol) + ".zip"
         zip_buffer = BytesIO()
         with ZipFile(zip_buffer, mode="w", compression=ZIP_DEFLATED) as zf:
             # Add the CSV file to the zip archive
-            zf.writestr(run_utc.strftime(f"%Y%m%d_{self.name}_" + timeframe + "_quote.csv"), csv_buffer.getvalue())
+            zf.writestr(
+                run_utc.strftime(
+                    (f"%Y%m%d_{self.name}_" + timeframe + "_quote" if "" == symbol else symbol) + ".csv"
+                ),
+                csv_buffer.getvalue(),
+            )
 
-        # Write the tick zip file of 1 day to disk
-        with open(file + ".zip", "wb") as f:
+        # Write the zip file to disk
+        with open(file, "wb") as f:
             f.write(zip_buffer.getvalue())
 
     def _load_ticks(self, start: datetime) -> str:
@@ -480,13 +521,13 @@ class Symbol:
 
         elif timeframe < Constants.SEC_PER_DAY:
             if Constants.SEC_PER_HOUR == timeframe:
-                start_look_back = self._load_hour_or_daily_bars(Constants.SEC_PER_HOUR, start)  # load 1 hour bars
+                start_look_back = self._load_hour_or_daily_bar(Constants.SEC_PER_HOUR, start)  # load 1 hour bars
             else:
                 start_look_back = self._resample(self.bars_dictonary[Constants.SEC_PER_HOUR], timeframe)
 
         else:
             if Constants.SEC_PER_DAY == timeframe:
-                start_look_back = self._load_hour_or_daily_bars(Constants.SEC_PER_DAY, start)  # load 1 day bars
+                start_look_back = self._load_hour_or_daily_bar(Constants.SEC_PER_DAY, start)  # load 1 day bars
             else:
                 start_look_back = self._resample(self.bars_dictonary[Constants.SEC_PER_DAY], timeframe)
 
@@ -518,7 +559,9 @@ class Symbol:
 
         # max is up to yesterday because data might not be completed for today
         if datetime.max == self.api.AllDataEndUtc:
-            self.api.AllDataEndUtc = datetime.now()
+            self.api.AllDataEndUtc = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
+                seconds=1
+            )
         else:
             self.api.AllDataEndUtc += timedelta(days=1)
         self.api.AllDataEndUtc = self.api.AllDataEndUtc.replace(tzinfo=timezone.utc)
@@ -610,7 +653,7 @@ class Symbol:
 
         return bars.open_times.data[0]
 
-    def _load_hour_or_daily_bars(self, timeframe: int, start: datetime) -> datetime:
+    def _load_hour_or_daily_bar(self, timeframe: int, start: datetime) -> datetime:
         # file name example: gbp_usd.zip
         zipfile = os.path.join(
             self.api.DataPath,
