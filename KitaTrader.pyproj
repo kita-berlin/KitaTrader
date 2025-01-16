@@ -32,6 +32,7 @@
     <Content Include="Files\Assets_NinjaFiles_Live.csv" />
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
     <Content Include="BrokerProvider\QuoteTradeMt5.py" />
+    <Content Include="Files\protoc.exe" />
     <Content Include="MainNotebook.ipynb" />
     <Content Include="pyproject.toml" />
     <Content Include="requirements.txt" />
@@ -83,7 +84,9 @@
     <Compile Include="BrokerProvider\TradePaper.py" />
     <Compile Include="MainRl.py" />
     <Compile Include="Robots\Downloader.py" />
+    <Compile Include="Robots\KitaTesterProto_pb2.py" />
     <Compile Include="Robots\NinjaFiles.py" />
+    <Compile Include="Robots\KitaTester.py" />
     <Compile Include="Robots\Template.py" />
     <Compile Include="Robots\Martingale.py" />
     <Compile Include="Robots\Ultron.py" />

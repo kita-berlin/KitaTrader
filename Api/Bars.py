@@ -1,6 +1,5 @@
 from __future__ import annotations
 from datetime import datetime
-from Api.Bar import Bar
 from Api.TimeSeries import TimeSeries
 from Api.DataSeries import DataSeries
 
@@ -57,16 +56,19 @@ class Bars:
             self.low_asks = DataSeries(self)
             self.close_asks = DataSeries(self)
 
-    def bars_on_tick(self, time: datetime, bar: Bar) -> None:
+    def bars_on_tick_ready_bars(self, time: datetime) -> None:
         self.is_new_bar = False
+        # synchronize the bars with  the tick time open time by setting their current index
         while self.current + 1 < len(self.open_times.data) and time >= self.open_times.data[self.current + 1]:
             self.current += 1
             self.is_new_bar = True
 
-        # on real time trading we have to build the bars ourselves
-        # if False:
-        #     self.is_new_bar = False
+        return
 
+    def bars_on_tick_create_bars(self, time: datetime, bid: float, ask: float) -> None:
+        return
+
+        # if False:
         #     # do we have to build a new bar ?
         #     if (
         #         0 == self.open_times.count  # on init

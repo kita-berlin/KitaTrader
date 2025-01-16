@@ -1,0 +1,19 @@
+﻿syntax = "proto3";
+
+message Task {
+  int32 task_id = 1;
+  repeated string parameters = 2;
+}
+
+message QuoteMessage {
+  int32 id = 1;
+  double timestamp = 2;
+  double bid = 3;
+  double ask = 4;
+}
+
+message PythonResponseMessage {
+  int32 id = 1;
+  string para1 = 2;
+  bool is_end = 3;
+}

@@ -31,9 +31,6 @@ class Template(KitaApi):
     # region
     def __init__(self):
         super().__init__()  # Importatnt, do not delete
-
-    sqrt252: float = sqrt(252)
-    performance_prev_time: float = 0
     # endregion
 
     ###################################

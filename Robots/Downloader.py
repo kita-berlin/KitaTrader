@@ -56,11 +56,28 @@ class Downloader(KitaApi):
 
     ###################################
     def on_start(self, symbol: Symbol) -> None:
-        pass
+        (error, self.hour_bars) = symbol.get_bars(Constants.SEC_PER_HOUR)
+        if "" != error:
+            print(error)
+            exit()
+        (error, self.hour2_bars) = symbol.get_bars(2 * Constants.SEC_PER_HOUR)
+        if "" != error:
+            print(error)
+            exit()
+        (error, self.minute_bars) = symbol.get_bars(Constants.SEC_PER_MINUTE)
+        if "" != error:
+            print(error)
+            exit()
+        (error, self.day_bars) = symbol.get_bars(Constants.SEC_PER_DAY)
+        if "" != error:
+            print(error)
+            exit()
 
     ###################################
     def on_tick(self, symbol: Symbol) -> None:
-        pass
+        if self.hour_bars.is_new_bar:
+            print(symbol.time.strftime('%d.%m.%Y %H:%M, ') + f"{symbol.bid}, {symbol.ask}")
+            pass
 
     ###################################
     def on_stop(self) -> None:

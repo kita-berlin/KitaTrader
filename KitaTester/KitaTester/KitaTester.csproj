@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="cTrader.Automate" Version="*" />
+    <PackageReference Include="Google.Protobuf" Version="3.29.3" />
+  </ItemGroup>
+
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="$(SolutionDir)\files\protoc.exe --python_out=$(SolutionDir)\Robots --csharp_out=$(ProjectDir) KitaTesterProto.proto" />
+  </Target>
+</Project>
