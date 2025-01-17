@@ -49,6 +49,7 @@ class KitaApi:
 
     # API for robots
     # region
+    # close a position with logging; logger must be set up in the robot on_init or on_start
     def close_trade(
         self,
         pos: Position,
@@ -91,6 +92,7 @@ class KitaApi:
             return True
         return False
 
+    # request a symbol to work with in the robot
     def request_symbol(
         self,
         symbol_name: str,

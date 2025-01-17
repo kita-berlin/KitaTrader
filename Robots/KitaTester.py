@@ -6,7 +6,7 @@ from Api.KitaApiEnums import *
 from Api.KitaApi import KitaApi, Symbol
 from Api.CoFu import *
 from Api.Constants import *
-from BrokerProvider.QuoteDukascopy import Dukascopy
+from BrokerProvider.QuoteCtraderCache import QuoteCtraderCache
 from BrokerProvider.TradePaper import TradePaper
 import Robots.KitaTesterProto_pb2
 
@@ -52,7 +52,10 @@ class KitaTester(KitaApi):
     def on_init(self) -> None:
         # 1. Define quote_provider(s)
         # data_rate is in seconds, 0 means fastetst possible (i.e. Ticks)
-        quote_provider = Dukascopy(data_rate=Constants.SEC_PER_MINUTE)
+        quote_provider = QuoteCtraderCache(
+            data_rate=0,
+            parameter=r"$(USERPROFILE)\AppData\Roaming\Spotware\Cache\pepperstone\BacktestingCache\V1\live_ad845a9a",
+        )
         # quote_provider = BrokerMt5( data_rate=0, "62060378, pepperstone_uk-Demo, tFue0y*akr")
         # quote_provider = QuoteCsv(data_rate=0, "G:\\Meine Ablage")
 
@@ -66,9 +69,7 @@ class KitaTester(KitaApi):
             # (we call this "New York normalized time")
             # "America/New_York:Normalized",
         )
-        if "" != error:
-            print(error)
-            exit()
+        assert "" == error
 
         # 4. Define one or more bars (optional)
         self.sma_period = 2
@@ -83,19 +84,6 @@ class KitaTester(KitaApi):
         # Open memory-mapped file
         self.memory_map = mmap.mmap(-1, 1024, tagname=self.MEMORY_MAP_NAME)
 
-        # Open named semaphores
-        self.quote_ready_semaphore = self.kernel32.OpenSemaphoreW(  # type:ignore
-            0x1F0003, False, self.QUOTE_READY_SEMAPHORE_NAME
-        )
-        if not self.quote_ready_semaphore:
-            raise OSError(f"Could not open semaphore: {self.QUOTE_READY_SEMAPHORE_NAME}")
-
-        self.quote_acc_semaphore = self.kernel32.OpenSemaphoreW(  # type:ignore
-            0x1F0003, False, self.QUOTE_ACC_SEMAPHORE_NAME
-        )
-        if not self.quote_acc_semaphore:
-            raise OSError(f"Could not open semaphore: {self.QUOTE_ACC_SEMAPHORE_NAME}")
-
         # 5. Define kita indicators (optional)
         # error, self.sma = Indicators.moving_average(
         #     source=self.m1_bars.open_bids,
@@ -107,6 +95,17 @@ class KitaTester(KitaApi):
         #     exit()
 
     def on_start(self, symbol: Symbol) -> None:
+        # Open named semaphores
+        self.quote_ready_semaphore = self.kernel32.OpenSemaphoreW(  # type:ignore
+            0x1F0003, False, self.QUOTE_READY_SEMAPHORE_NAME
+        )
+        assert self.quote_ready_semaphore
+
+        self.quote_acc_semaphore = self.kernel32.OpenSemaphoreW(  # type:ignore
+            0x1F0003, False, self.QUOTE_ACC_SEMAPHORE_NAME
+        )
+        assert self.quote_acc_semaphore
+
         (error, self.hour_bars) = symbol.get_bars(Constants.SEC_PER_HOUR)
         assert "" == error
         (error, self.hour2_bars) = symbol.get_bars(2 * Constants.SEC_PER_HOUR)
@@ -122,7 +121,7 @@ class KitaTester(KitaApi):
         # full bars are built after on_init
         # ta_funcs = talib.get_functions()  # type:ignore
         # print(ta_funcs)  # type:ignore
-        print("")
+        pass
 
     ###################################
     def on_tick(self, symbol: Symbol):

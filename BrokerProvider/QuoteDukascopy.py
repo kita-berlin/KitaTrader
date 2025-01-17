@@ -97,22 +97,11 @@ class Dukascopy(QuoteProvider):
             # Ducascopy timedelta is milliseconds since hour start
             timestamp: float = struct.unpack_from(">I", data, current_index)[0]
 
-            ask = round(
-                struct.unpack_from(">I", data, current_index + 4)[0] * self.symbol.point_size,
-                self.symbol.digits,
-            )
-            bid = round(
-                struct.unpack_from(">I", data, current_index + 8)[0] * self.symbol.point_size,
-                self.symbol.digits,
-            )
-            volume_ask = round(
-                struct.unpack_from(">f", data, current_index + 12)[0],
-                self.symbol.digits,
-            )
-            volume_bid = round(
-                struct.unpack_from(">f", data, current_index + 16)[0],
-                self.symbol.digits,
-            )
+            # rounding will be done by the caller
+            ask = struct.unpack_from(">I", data, current_index + 4)[0] * self.symbol.point_size
+            bid = struct.unpack_from(">I", data, current_index + 8)[0] * self.symbol.point_size
+            volume_ask = struct.unpack_from(">f", data, current_index + 12)[0]
+            volume_bid = struct.unpack_from(">f", data, current_index + 16)[0]
 
             hour.open_times.data.append(hour_base_time + timedelta(milliseconds=timestamp))
             hour.open_bids.data.append(bid)

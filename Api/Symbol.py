@@ -190,12 +190,9 @@ class Symbol:
     def get_bars(self, timeframe: int) -> tuple[str, Bars]:
         if timeframe in self.bars_dictonary:
             return "", self.bars_dictonary[timeframe]
-        return "Bars have not been requested in on_init()", Bars(self.name, timeframe, look_back)
+        return "Bars have not been requested in on_init()", Bars(self.name, timeframe, 0)
 
     def check_historical_data(self):
-        # format for ticks and minutes: 20140101_quote.zip, microseconds offset is within the file
-        # format for hours and days: gbpusd.zip, datetime is within the file
-
         # if all data requested, find the first quote
         start_dt = self.api.AllDataStartUtc
         if datetime.min == self.api.AllDataStartUtc:
@@ -281,8 +278,8 @@ class Symbol:
                 for i in range(len(one_day_provider_data.open_times.data)):
                     # tick loop
                     time = one_day_provider_data.open_times.data[i]
-                    bid = one_day_provider_data.open_bids.data[i]
-                    ask = one_day_provider_data.open_asks.data[i]
+                    bid = round(one_day_provider_data.open_bids.data[i], ndigits=self.digits)
+                    ask = round(one_day_provider_data.open_asks.data[i], ndigits=self.digits)
                     volume_bid = one_day_provider_data.volume_bids.data[i]
                     volume_ask = one_day_provider_data.volume_asks.data[i]
 
@@ -431,26 +428,31 @@ class Symbol:
                     last_time = time
                     last_stamp = current_stamp
 
-                # write daily files
+                # write tick daily file
                 self._write_zip_file(tick_folder, "", run_utc, daily_tick_csv_buffer, "tick")
-                daily_minute_csv_writer.writerow(
-                    [
-                        int(
-                            (minute_bar.open_time.replace(second=0, microsecond=0) - run_utc).total_seconds()
-                            * 1_000
-                        ),
-                        f"{minute_bar.open_bid:.{self.digits}f}",
-                        f"{minute_bar.high_bid:.{self.digits}f}",
-                        f"{minute_bar.low_bid:.{self.digits}f}",
-                        f"{minute_bar.close_bid:.{self.digits}f}",
-                        f"{minute_bar.volume_bid:.2f}",
-                        f"{minute_bar.open_ask:.{self.digits}f}",
-                        f"{minute_bar.high_ask:.{self.digits}f}",
-                        f"{minute_bar.low_ask:.{self.digits}f}",
-                        f"{minute_bar.close_ask:.{self.digits}f}",
-                        f"{minute_bar.volume_ask:.2f}",
-                    ]
-                )
+                if 0 == len(one_day_provider_data.open_times.data):
+                    daily_minute_csv_writer.writerow("")
+                else:
+                    daily_minute_csv_writer.writerow(
+                        [
+                            int(
+                                (minute_bar.open_time.replace(second=0, microsecond=0) - run_utc).total_seconds()
+                                * 1_000
+                            ),
+                            f"{minute_bar.open_bid:.{self.digits}f}",
+                            f"{minute_bar.high_bid:.{self.digits}f}",
+                            f"{minute_bar.low_bid:.{self.digits}f}",
+                            f"{minute_bar.close_bid:.{self.digits}f}",
+                            f"{minute_bar.volume_bid:.2f}",
+                            f"{minute_bar.open_ask:.{self.digits}f}",
+                            f"{minute_bar.high_ask:.{self.digits}f}",
+                            f"{minute_bar.low_ask:.{self.digits}f}",
+                            f"{minute_bar.close_ask:.{self.digits}f}",
+                            f"{minute_bar.volume_ask:.2f}",
+                        ]
+                    )
+
+                # write minute daily file
                 self._write_zip_file(minute_folder, "", run_utc, daily_minute_csv_buffer, "minute")
 
             run_utc += timedelta(days=1)
@@ -564,11 +566,12 @@ class Symbol:
                         decoded = csv_file.read().decode("utf-8")
                         reader = csv.reader(decoded.splitlines())
                         for row in reader:
-                            bars.open_times.data.append(
-                                (file_date + timedelta(milliseconds=int(row[0]))).replace(tzinfo=pytz.UTC)
-                            )
-                            bars.open_bids.data.append(float(row[1]))
-                            bars.open_asks.data.append(float(row[2]))
+                            if len(row) > 0:
+                                bars.open_times.data.append(
+                                    (file_date + timedelta(milliseconds=int(row[0]))).replace(tzinfo=pytz.UTC)
+                                )
+                                bars.open_bids.data.append(float(row[1]))
+                                bars.open_asks.data.append(float(row[2]))
         return bars
 
     def _load_bars(self, timeframe: int, start: datetime) -> datetime:
@@ -685,7 +688,7 @@ class Symbol:
         # Start loading from BacktestStartUtc
         start_idx = bisect_left(file_dates, start)
 
-        # Process additional bars if needed
+        # Process additional lookback bars if needed
         while look_back_run > 0 and start_idx > 0:
             start_idx -= 1
             file_date, file_name = files[start_idx]
@@ -720,20 +723,21 @@ class Symbol:
                         decoded = csv_file.read().decode("utf-8")
                         reader = csv.reader(decoded.splitlines())
                         for row in reader:
-                            bars.open_times.data.append(
-                                (file_date + timedelta(milliseconds=int(row[0]))).astimezone(self.time_zone)
-                                + timedelta(hours=self.normalized_hours_offset)
-                            )
-                            bars.open_bids.data.append(float(row[1]))
-                            bars.high_bids.data.append(float(row[2]))
-                            bars.low_bids.data.append(float(row[3]))
-                            bars.close_bids.data.append(float(row[4]))
-                            bars.volume_bids.data.append(float(row[5]))
-                            bars.open_asks.data.append(float(row[6]))
-                            bars.high_asks.data.append(float(row[7]))
-                            bars.low_asks.data.append(float(row[8]))
-                            bars.close_asks.data.append(float(row[9]))
-                            bars.volume_asks.data.append(float(row[10]))
+                            if len(row) > 0:
+                                bars.open_times.data.append(
+                                    (file_date + timedelta(milliseconds=int(row[0]))).astimezone(self.time_zone)
+                                    + timedelta(hours=self.normalized_hours_offset)
+                                )
+                                bars.open_bids.data.append(float(row[1]))
+                                bars.high_bids.data.append(float(row[2]))
+                                bars.low_bids.data.append(float(row[3]))
+                                bars.close_bids.data.append(float(row[4]))
+                                bars.volume_bids.data.append(float(row[5]))
+                                bars.open_asks.data.append(float(row[6]))
+                                bars.high_asks.data.append(float(row[7]))
+                                bars.low_asks.data.append(float(row[8]))
+                                bars.close_asks.data.append(float(row[9]))
+                                bars.volume_asks.data.append(float(row[10]))
 
         return bars.open_times.data[0]
 

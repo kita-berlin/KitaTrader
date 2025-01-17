@@ -32,6 +32,7 @@
     <Content Include="Files\Assets_NinjaFiles_Live.csv" />
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
     <Content Include="BrokerProvider\QuoteTradeMt5.py" />
+    <Content Include="Files\Assets_Pepperstone_Live.csv" />
     <Content Include="Files\protoc.exe" />
     <Content Include="MainNotebook.ipynb" />
     <Content Include="pyproject.toml" />
@@ -72,6 +73,7 @@
     <Compile Include="Api\TradeProvider.py" />
     <Compile Include="Api\TradeResult.py" />
     <Compile Include="Api\TradingSession.py" />
+    <Compile Include="BrokerProvider\QuoteCtraderCache.py" />
     <Compile Include="BrokerProvider\QuoteDukascopy.py" />
     <Compile Include="BrokerProvider\QuoteNinjaFiles.py" />
     <Compile Include="Indicators\BollingerBands.py" />

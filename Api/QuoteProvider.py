@@ -1,4 +1,5 @@
 from __future__ import annotations
+from operator import contains
 from typing import TYPE_CHECKING
 import math
 import csv
@@ -42,6 +43,9 @@ class QuoteProvider(ABC):
                         continue
                     line = [item.strip() for item in line]
 
+                    if "sep" in line[0].lower():
+                        continue
+
                     if line[1] == "Price":
                         continue
 
@@ -50,7 +54,7 @@ class QuoteProvider(ABC):
                         continue
 
                     if len(line) < 16:
-                        return f"{assets_path} has wrong format (not 16 columns)"
+                        return f"{assets_path} has wrong format (not >= 16 columns)"
 
                     symbol.swap_long = float(line[3])
                     symbol.swap_short = float(line[4])

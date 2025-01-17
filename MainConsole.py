@@ -17,7 +17,7 @@ class MainConsole:
         # self.robot.AllDataStartUtc = datetime.min means earliest possible what the source can provide
         # End datetime always is yesterday. Cannot be today because today's data are not complete yet
         self.robot.AllDataStartUtc = datetime.strptime("1.12.2024", "%d.%m.%Y")
-        #self.robot.AllDataStartUtc = datetime.min
+        # self.robot.AllDataStartUtc = datetime.min
 
         # Platform mode how the robot will be used by the platform
         # Other possibilities are (not yet implemented): RealTime (live trading),
@@ -36,7 +36,7 @@ class MainConsole:
 
         # 2. Define the backtest time window
         # region
-        #self.robot.BacktestStartUtc = datetime.min
+        # self.robot.BacktestStartUtc = datetime.min
         self.robot.BacktestStartUtc = datetime.strptime("3.1.2025", "%d.%m.%Y")
 
         # self.robot.BacktestEndUtc = datetime.strptime("10.12.2024", "%d.%m.%Y")
