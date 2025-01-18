@@ -16,7 +16,7 @@ class MainConsole:
 
         # self.robot.AllDataStartUtc = datetime.min means earliest possible what the source can provide
         # End datetime always is yesterday. Cannot be today because today's data are not complete yet
-        self.robot.AllDataStartUtc = datetime.strptime("1.12.2024", "%d.%m.%Y")
+        self.robot.AllDataStartUtc = datetime.strptime("5.12.2024", "%d.%m.%Y")
         # self.robot.AllDataStartUtc = datetime.min
 
         # Platform mode how the robot will be used by the platform

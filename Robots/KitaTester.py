@@ -94,17 +94,18 @@ class KitaTester(KitaApi):
         #     print(error)
         #     exit()
 
+    ###################################
     def on_start(self, symbol: Symbol) -> None:
         # Open named semaphores
         self.quote_ready_semaphore = self.kernel32.OpenSemaphoreW(  # type:ignore
             0x1F0003, False, self.QUOTE_READY_SEMAPHORE_NAME
         )
-        assert self.quote_ready_semaphore
+        assert self.quote_ready_semaphore, "quote_ready_semaphore not found"
 
         self.quote_acc_semaphore = self.kernel32.OpenSemaphoreW(  # type:ignore
             0x1F0003, False, self.QUOTE_ACC_SEMAPHORE_NAME
         )
-        assert self.quote_acc_semaphore
+        assert self.quote_acc_semaphore, "quote_acc_semaphore not found"
 
         (error, self.hour_bars) = symbol.get_bars(Constants.SEC_PER_HOUR)
         assert "" == error
@@ -147,8 +148,20 @@ class KitaTester(KitaApi):
             print(f"Raw data: {serialized_data}")  # type: ignore
             raise
 
-        print(f"cTrader Timestamp: {quote_message.timestamp}, Bid: {quote_message.bid}, Ask: {quote_message.ask}")  # type: ignore
-        print(f"Kita    Timestamp: {symbol.time.timestamp()}, Bid: {symbol.bid}, Ask: {symbol.ask}")
+        # Convert quote_message.timestamp from milliseconds to seconds and ensure it's in UTC
+        message_time = datetime.fromtimestamp(quote_message.timestamp / 1000, tz=pytz.UTC)  # type: ignore
+
+        # Compare timestamps
+        if int(quote_message.timestamp / 1000) != int(symbol.time.timestamp()):  # type: ignore
+            print(message_time, symbol.time)
+            print(f"Timestamp mismatch: {quote_message.timestamp / 1000} != {symbol.time.timestamp()}")  # type: ignore
+        symbol.prev_time
+
+        if quote_message.bid != symbol.bid:  # type: ignore
+            print(f"Bid mismatch: {quote_message.bid} != {symbol.bid}")  # type: ignore
+            # type: ignore
+        if quote_message.ask != symbol.ask:  # type: ignore
+            print(f"Ask mismatch: {quote_message.ask} != {symbol.ask}")  # type: ignore
 
         # Respond with a PythonResponseMessage
         response = Robots.KitaTesterProto_pb2.PythonResponseMessage(  # type: ignore
@@ -188,9 +201,9 @@ class KitaTester(KitaApi):
         if self.memory_map:
             self.memory_map.close()
         if self.quote_ready_semaphore:  # type:ignore
-            kernel32.CloseHandle(self.quote_ready_semaphore)  # type:ignore
+            self.kernel32.CloseHandle(self.quote_ready_semaphore)  # type:ignore
         if self.quote_acc_semaphore:  # type:ignore
-            kernel32.CloseHandle(self.quote_acc_semaphore)  # type:ignore
+            self.kernel32.CloseHandle(self.quote_acc_semaphore)  # type:ignore
 
         print("Done")
 

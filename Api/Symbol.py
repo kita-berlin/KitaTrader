@@ -269,7 +269,7 @@ class Symbol:
                 error, start_dt, one_day_provider_data = self.quote_provider.get_day_at_utc(run_utc)
                 assert "" == error, error
 
-                print("Downloading " + run_utc.strftime("%d.%m.%Y"))
+                print("Getting " + run_utc.strftime("%d.%m.%Y"))
                 daily_tick_csv_buffer = StringIO()
                 daily_tick_csv_writer = csv.writer(daily_tick_csv_buffer)
                 daily_minute_csv_buffer = StringIO()

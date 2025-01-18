@@ -12,7 +12,7 @@ using Google.Protobuf;
 namespace cAlgo.Robots
 {
     [SupportedOSPlatform("windows")]
-    [Robot(AccessRights = AccessRights.FullAccess, AddIndicators = true)]
+    [Robot(AccessRights = AccessRights.FullAccess, TimeZone = "UTC", AddIndicators = true)]
     public class KitaTester : Robot
     {
         #region Parameters
@@ -47,7 +47,7 @@ namespace cAlgo.Robots
             QuoteMessage quoteMessage = new QuoteMessage
             {
                 Id = 1,
-                Timestamp = Time.Subtract(new DateTime(1970, 1, 1)).TotalSeconds,
+                Timestamp = Time.ToNativeMs(),
                 Bid = Symbol.Bid,
                 Ask = Symbol.Ask
             };
@@ -93,6 +93,32 @@ namespace cAlgo.Robots
             mMemoryMappedFile?.Dispose();
             mQuoteAccFromPySemaphore?.Dispose();
             //mResultReady2PySemaphore?.Dispose();
+        }
+
+    }
+
+    public static class Extensions
+    {
+        public const int HECTONANOSEC_PER_SEC = (10000000);
+        static public readonly DateTime TimeInvalid = new DateTime(1970, 1, 1, 0, 0, 0, 0); // needed to convert DateTime and Mt4 datetime
+        static public readonly long DateTime2EpocDiff = TimeInvalid.Ticks / HECTONANOSEC_PER_SEC;
+
+        /// <summary>
+        /// Get seconds since 1.1.1970 as in MQL
+        /// </summary>
+        /// <returns>Seconds since 1.1.1970 as in MT4</returns>
+        public static long ToNativeSec(this DateTime time)
+        {
+            return time.Ticks / HECTONANOSEC_PER_SEC - DateTime2EpocDiff;
+        }
+
+        /// <summary>
+        /// Get seconds since 1.1.1970 as in MQL
+        /// </summary>
+        /// <returns>Seconds since 1.1.1970 as in MT4</returns>
+        public static long ToNativeMs(this DateTime time)
+        {
+            return (time.Ticks - TimeInvalid.Ticks) / (HECTONANOSEC_PER_SEC / 1000);
         }
     }
 }
