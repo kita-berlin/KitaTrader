@@ -2,7 +2,6 @@
 import talib  # type: ignore
 import time
 import ctypes
-from pytz import UTC
 from Api.KitaApiEnums import *
 from Api.KitaApi import KitaApi, Symbol
 from Api.CoFu import *
@@ -78,7 +77,7 @@ class KitaTester(KitaApi):
         symbol.request_bars(Constants.SEC_PER_HOUR, 1)
         symbol.request_bars(2 * Constants.SEC_PER_HOUR, 1)
         symbol.request_bars(Constants.SEC_PER_MINUTE, 1)
-        symbol.request_bars(Constants.SEC_PER_DAY, 1)
+        symbol.request_bars(Constants.SEC_PER_DAY, 2)
 
         # Load kernel32.dll for semaphore operations
         self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -200,9 +199,14 @@ class KitaTester(KitaApi):
         if quote_message.hour2Close != self.hour2_bars.close_bids.last(1):  # type: ignore
             print(f"Hour2Close mismatch: {quote_message.hour2Close} != {self.hour2_bars.close_bids.last(1)}")  # type: ignore
 
-        # if quote_message.day1Open != self.day_bars.open_bids.last(1):  # type: ignore
-        #     print(f"DayOpen mismatch: {quote_message.day1Open} != {self.day_bars.open_bids.last(1)}")  # type: ignore
-        #     print(self.day_bars.open_times.last(1))  # type: ignore
+        message_time = datetime.fromtimestamp(quote_message.day1Timestamp / 1000, tz=pytz.UTC)  # type: ignore
+        if int(quote_message.day1Timestamp / 1000) != int(self.day_bars.open_times.last(1).timestamp()):  # type: ignore
+            print(message_time, symbol.time)
+            print(f"Timestamp mismatch: {quote_message.timestamp / 1000} != {symbol.time.timestamp()}")  # type: ignore
+
+        if quote_message.day1Open != self.day_bars.open_bids.last(1):  # type: ignore
+            print(f"DayOpen mismatch: {quote_message.day1Open} != {self.day_bars.open_bids.last(1)}")  # type: ignore
+            print(self.day_bars.open_times.last(1))  # type: ignore
 
         # Respond with a PythonResponseMessage
         response = Robots.KitaTesterProto_pb2.PythonResponseMessage(  # type: ignore

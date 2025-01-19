@@ -1,9 +1,9 @@
 from __future__ import annotations
-from operator import contains
 from typing import TYPE_CHECKING
 import math
 import csv
 import traceback
+import pytz
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from Api.KitaApiEnums import *
@@ -66,13 +66,13 @@ class QuoteProvider(ABC):
                     market_time_split = line[8].split("-")
                     market_tzid_split = line[8].split(":")
 
-                    symbol.symbol_tz_id = market_tzid_split[0].strip()
-                    if 2 == len(symbol.symbol_tz_id):
-                        symbol.market_open_time = timedelta(
+                    symbol.market_data_tz = pytz.timezone(market_tzid_split[0].strip())
+                    if 4 == len(market_tzid_split) and 2 == len(market_time_split):
+                        symbol.market_open_delta = timedelta(
                             hours=int(market_tzid_split[1]),
                             minutes=int(market_tzid_split[2].split("-")[0]),
                         )
-                        symbol.market_close_time = timedelta(
+                        symbol.market_close_delta = timedelta(
                             hours=int(market_time_split[1].split(":")[0]),
                             minutes=int(market_time_split[1].split(":")[1]),
                         )

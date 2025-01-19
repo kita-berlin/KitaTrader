@@ -23,19 +23,20 @@ public static partial class KitaTesterProtoReflection {
     byte[] descriptorData = global::System.Convert.FromBase64String(
         string.Concat(
           "ChVLaXRhVGVzdGVyUHJvdG8ucHJvdG8iKwoEVGFzaxIPCgd0YXNrX2lkGAEg",
-          "ASgFEhIKCnBhcmFtZXRlcnMYAiADKAki+gEKDFF1b3RlTWVzc2FnZRIRCgl0",
+          "ASgFEhIKCnBhcmFtZXRlcnMYAiADKAkikQIKDFF1b3RlTWVzc2FnZRIRCgl0",
           "aW1lc3RhbXAYASABKAESCwoDYmlkGAIgASgBEgsKA2FzaxgDIAEoARITCgtt",
           "aW51dGUxT3BlbhgEIAEoARIRCglob3VyMU9wZW4YBSABKAESEQoJaG91cjJP",
           "cGVuGAYgASgBEhAKCGRheTFPcGVuGAcgASgBEhEKCWhvdXIxSGlnaBgIIAEo",
           "ARIQCghob3VyMUxvdxgJIAEoARISCgpob3VyMUNsb3NlGAogASgBEhEKCWhv",
           "dXIySGlnaBgLIAEoARIQCghob3VyMkxvdxgMIAEoARISCgpob3VyMkNsb3Nl",
-          "GA0gASgBIkIKFVB5dGhvblJlc3BvbnNlTWVzc2FnZRIKCgJpZBgBIAEoBRIN",
-          "CgVwYXJhMRgCIAEoCRIOCgZpc19lbmQYAyABKAhiBnByb3RvMw=="));
+          "GA0gASgBEhUKDWRheTFUaW1lc3RhbXAYDiABKAEiQgoVUHl0aG9uUmVzcG9u",
+          "c2VNZXNzYWdlEgoKAmlkGAEgASgFEg0KBXBhcmExGAIgASgJEg4KBmlzX2Vu",
+          "ZBgDIAEoCGIGcHJvdG8z"));
     descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
         new pbr::FileDescriptor[] { },
         new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
           new pbr::GeneratedClrTypeInfo(typeof(global::Task), global::Task.Parser, new[]{ "TaskId", "Parameters" }, null, null, null, null),
-          new pbr::GeneratedClrTypeInfo(typeof(global::QuoteMessage), global::QuoteMessage.Parser, new[]{ "Timestamp", "Bid", "Ask", "Minute1Open", "Hour1Open", "Hour2Open", "Day1Open", "Hour1High", "Hour1Low", "Hour1Close", "Hour2High", "Hour2Low", "Hour2Close" }, null, null, null, null),
+          new pbr::GeneratedClrTypeInfo(typeof(global::QuoteMessage), global::QuoteMessage.Parser, new[]{ "Timestamp", "Bid", "Ask", "Minute1Open", "Hour1Open", "Hour2Open", "Day1Open", "Hour1High", "Hour1Low", "Hour1Close", "Hour2High", "Hour2Low", "Hour2Close", "Day1Timestamp" }, null, null, null, null),
           new pbr::GeneratedClrTypeInfo(typeof(global::PythonResponseMessage), global::PythonResponseMessage.Parser, new[]{ "Id", "Para1", "IsEnd" }, null, null, null, null)
         }));
   }
@@ -305,6 +306,7 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     hour2High_ = other.hour2High_;
     hour2Low_ = other.hour2Low_;
     hour2Close_ = other.hour2Close_;
+    day1Timestamp_ = other.day1Timestamp_;
     _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
   }
 
@@ -470,6 +472,18 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     }
   }
 
+  /// <summary>Field number for the "day1Timestamp" field.</summary>
+  public const int Day1TimestampFieldNumber = 14;
+  private double day1Timestamp_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Day1Timestamp {
+    get { return day1Timestamp_; }
+    set {
+      day1Timestamp_ = value;
+    }
+  }
+
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
   public override bool Equals(object other) {
@@ -498,6 +512,7 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour2High, other.Hour2High)) return false;
     if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour2Low, other.Hour2Low)) return false;
     if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour2Close, other.Hour2Close)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Day1Timestamp, other.Day1Timestamp)) return false;
     return Equals(_unknownFields, other._unknownFields);
   }
 
@@ -518,6 +533,7 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     if (Hour2High != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour2High);
     if (Hour2Low != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour2Low);
     if (Hour2Close != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour2Close);
+    if (Day1Timestamp != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Day1Timestamp);
     if (_unknownFields != null) {
       hash ^= _unknownFields.GetHashCode();
     }
@@ -588,6 +604,10 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
       output.WriteRawTag(105);
       output.WriteDouble(Hour2Close);
     }
+    if (Day1Timestamp != 0D) {
+      output.WriteRawTag(113);
+      output.WriteDouble(Day1Timestamp);
+    }
     if (_unknownFields != null) {
       _unknownFields.WriteTo(output);
     }
@@ -650,6 +670,10 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
       output.WriteRawTag(105);
       output.WriteDouble(Hour2Close);
     }
+    if (Day1Timestamp != 0D) {
+      output.WriteRawTag(113);
+      output.WriteDouble(Day1Timestamp);
+    }
     if (_unknownFields != null) {
       _unknownFields.WriteTo(ref output);
     }
@@ -697,6 +721,9 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
       size += 1 + 8;
     }
     if (Hour2Close != 0D) {
+      size += 1 + 8;
+    }
+    if (Day1Timestamp != 0D) {
       size += 1 + 8;
     }
     if (_unknownFields != null) {
@@ -749,6 +776,9 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     }
     if (other.Hour2Close != 0D) {
       Hour2Close = other.Hour2Close;
+    }
+    if (other.Day1Timestamp != 0D) {
+      Day1Timestamp = other.Day1Timestamp;
     }
     _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
   }
@@ -817,6 +847,10 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
           Hour2Close = input.ReadDouble();
           break;
         }
+        case 113: {
+          Day1Timestamp = input.ReadDouble();
+          break;
+        }
       }
     }
   #endif
@@ -882,6 +916,10 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
         }
         case 105: {
           Hour2Close = input.ReadDouble();
+          break;
+        }
+        case 113: {
+          Day1Timestamp = input.ReadDouble();
           break;
         }
       }

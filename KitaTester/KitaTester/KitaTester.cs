@@ -50,11 +50,6 @@ namespace cAlgo.Robots
 
         protected override void OnTick()
         {
-            SendQuoteMessageToPython();
-        }
-
-        void SendQuoteMessageToPython()
-        {
             // Step 1: Send a QuoteMessage to Python and wait for a response
             QuoteMessage quoteMessage = new QuoteMessage
             {
@@ -71,6 +66,7 @@ namespace cAlgo.Robots
                 Hour2High = mHour2bar.Last(1).High,
                 Hour2Low = mHour2bar.Last(1).Low,
                 Hour2Close = mHour2bar.Last(1).Close,
+                Day1Timestamp = mDay1bar.Last(1).OpenTime.ToNativeMs(),
             };
 
             // Write QuoteMessage to memory-mapped file

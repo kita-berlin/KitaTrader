@@ -46,15 +46,15 @@ class Symbol:
     lot_size: float = 0
     leverage: float = 0
     time_zone: tzinfo = tzinfo()
+    market_data_tz: tzinfo = tzinfo()
+    market_open_delta = timedelta()
+    market_close_delta = timedelta()
     normalized_hours_offset: int = 0
     swap_long: float = 0
     swap_short: float = 0
     avg_spread: float = 0
     digits: int = 0
     margin_required: float = 0
-    symbol_tz_id: str = ""
-    market_open_time = timedelta()
-    market_close_time = timedelta()
     min_volume: float = 0
     max_volume: float = 0
     lot_size: float = 0
@@ -261,6 +261,7 @@ class Symbol:
         daily_csv_writer = csv.writer(daily_csv_buffer)
         is_daily_written = False
         last_time: datetime = datetime.min
+        last_local_time: datetime = datetime.min
         last_stamp: int = 0
         one_day_provider_data: Bars = Bars(self.name, 0, 0)
 
@@ -289,12 +290,13 @@ class Symbol:
 
                     current_stamp = int(time.timestamp())
                     last_stamp = 0 if datetime.min == last_time else int(last_time.timestamp())
+                    local_time = time.astimezone(self.market_data_tz)
+                    market_open = (
+                        local_time.replace(hour=0, minute=0, second=0, microsecond=0) + self.market_open_delta
+                    )
 
                     # do day bar aggregation
-                    if (
-                        0 == last_stamp
-                        or current_stamp // Constants.SEC_PER_DAY != last_stamp // Constants.SEC_PER_DAY
-                    ):
+                    if 0 == last_stamp or last_local_time <= market_open < local_time:
                         if 0 != last_stamp:
                             # write daily data into the csv/zip file
                             self._write_daily_bar(daily_csv_writer, daily_bar)  # type:ignore
@@ -302,7 +304,7 @@ class Symbol:
 
                         # add a new empty daily bar
                         daily_bar = Bar(
-                            time.replace(hour=0, minute=0, second=0, microsecond=0),
+                            time.replace(minute=0, second=0, microsecond=0),
                             bid,
                             bid,
                             bid,
@@ -402,7 +404,7 @@ class Symbol:
                     )
 
                     last_time = time
-                    last_stamp = current_stamp
+                    last_local_time = local_time
 
                 # write out a daily ticks file; one file for each day
                 # csv file inside the zip file is empty if no ticks are available
