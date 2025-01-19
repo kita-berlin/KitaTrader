@@ -2,6 +2,7 @@
 import talib  # type: ignore
 import time
 import ctypes
+from pytz import UTC
 from Api.KitaApiEnums import *
 from Api.KitaApi import KitaApi, Symbol
 from Api.CoFu import *
@@ -42,6 +43,7 @@ class KitaTester(KitaApi):
     quote_ready_semaphore = None
     quote_acc_semaphore = None
     performance_prev_time: float = 0
+    is_first_run: bool = True
 
     def __init__(self):
         super().__init__()  # Importatnt, do not delete
@@ -73,10 +75,10 @@ class KitaTester(KitaApi):
 
         # 4. Define one or more bars (optional)
         self.sma_period = 2
-        symbol.request_bars(Constants.SEC_PER_HOUR)
-        symbol.request_bars(2 * Constants.SEC_PER_HOUR)
-        symbol.request_bars(Constants.SEC_PER_MINUTE)
-        symbol.request_bars(Constants.SEC_PER_DAY)
+        symbol.request_bars(Constants.SEC_PER_HOUR, 1)
+        symbol.request_bars(2 * Constants.SEC_PER_HOUR, 1)
+        symbol.request_bars(Constants.SEC_PER_MINUTE, 1)
+        symbol.request_bars(Constants.SEC_PER_DAY, 1)
 
         # Load kernel32.dll for semaphore operations
         self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -126,7 +128,25 @@ class KitaTester(KitaApi):
 
     ###################################
     def on_tick(self, symbol: Symbol):
+        # print the time of the first tick of a new day
+        # and the milliseconds it took to process the previous day
+        if symbol.time.date() != symbol.prev_time.date():
+            diff = (time.perf_counter() - self.performance_prev_time) * 1e3
+            print(
+                symbol.time.strftime("%Y-%m-%d %H:%M:%S"),
+                ", ",
+                symbol.time.strftime("%A"),
+                ", ",
+                f"{diff:.1f}",
+            )
+            self.performance_prev_time = time.perf_counter()
+
         if symbol.is_warm_up:
+            return
+
+        # Skip first tick from cTrader OnStart()
+        if self.is_first_run:
+            self.is_first_run = False
             return
 
         # Step 1: Wait for QuoteMessage
@@ -155,13 +175,34 @@ class KitaTester(KitaApi):
         if int(quote_message.timestamp / 1000) != int(symbol.time.timestamp()):  # type: ignore
             print(message_time, symbol.time)
             print(f"Timestamp mismatch: {quote_message.timestamp / 1000} != {symbol.time.timestamp()}")  # type: ignore
-        symbol.prev_time
 
         if quote_message.bid != symbol.bid:  # type: ignore
             print(f"Bid mismatch: {quote_message.bid} != {symbol.bid}")  # type: ignore
-            # type: ignore
+
         if quote_message.ask != symbol.ask:  # type: ignore
             print(f"Ask mismatch: {quote_message.ask} != {symbol.ask}")  # type: ignore
+
+        if quote_message.minute1Open != self.minute_bars.open_bids.last(1):  # type: ignore
+            print(f"Minute1Open mismatch: {quote_message.minute1Open} != {self.minute_bars.open_bids.last(1)}")  # type: ignore
+
+        if quote_message.hour1Open != self.hour_bars.open_bids.last(1):  # type: ignore
+            print(f"Hour1Open mismatch: {quote_message.hour1Open} != {self.hour_bars.open_bids.last(1)}")  # type: ignore
+
+        if quote_message.hour2Open != self.hour2_bars.open_bids.last(1):  # type: ignore
+            print(f"Hour2Open mismatch: {quote_message.hour2Open} != {self.hour2_bars.open_bids.last(1)}")  # type: ignore
+
+        if quote_message.minute1Open != self.minute_bars.open_bids.last(1):  # type: ignore
+            print(f"Minute1Close mismatch: {quote_message.minute1Open} != {self.minute_bars.close_bids.last(1)}")  # type: ignore
+
+        if quote_message.hour1Close != self.hour_bars.close_bids.last(1):  # type: ignore
+            print(f"Hour1Close mismatch: {quote_message.hour1Close} != {self.hour_bars.close_bids.last(1)}")  # type: ignore
+
+        if quote_message.hour2Close != self.hour2_bars.close_bids.last(1):  # type: ignore
+            print(f"Hour2Close mismatch: {quote_message.hour2Close} != {self.hour2_bars.close_bids.last(1)}")  # type: ignore
+
+        # if quote_message.day1Open != self.day_bars.open_bids.last(1):  # type: ignore
+        #     print(f"DayOpen mismatch: {quote_message.day1Open} != {self.day_bars.open_bids.last(1)}")  # type: ignore
+        #     print(self.day_bars.open_times.last(1))  # type: ignore
 
         # Respond with a PythonResponseMessage
         response = Robots.KitaTesterProto_pb2.PythonResponseMessage(  # type: ignore
@@ -180,21 +221,8 @@ class KitaTester(KitaApi):
         if not self.kernel32.ReleaseSemaphore(self.quote_acc_semaphore, 1, None):
             raise OSError("Failed to release ResultReady semaphore")
 
-        # print the time of the first tick of a new day
-        # and the milliseconds it took to process the previous day
-        if symbol.time.date() != symbol.prev_time.date():
-            diff = (time.perf_counter() - self.performance_prev_time) * 1e3
-            print(
-                symbol.time.strftime("%Y-%m-%d %H:%M:%S"),
-                ", ",
-                symbol.time.strftime("%A"),
-                ", ",
-                f"{diff:.1f}",
-            )
-            self.performance_prev_time = time.perf_counter()
-
     ###################################
-    def on_stop(self):
+    def on_stop(self, symbol: Symbol):
         """
         Release resources.
         """

@@ -601,8 +601,8 @@ class KitaApi:
         return False
 
     def stop(self):
-        # call bot
-        self.robot.on_stop()  # type: ignore
+        for symbol in self.symbol_dictionary.values():
+            self.robot.on_stop(symbol)  # type: ignore
 
         # calc performance numbers
         min_duration = timedelta.max
@@ -726,9 +726,7 @@ class KitaApi:
             "Max Current Equity Drawdown %: " + CoFu.double_to_string(max_current_equity_dd_percent, 2) + "\n"
         )
 
-        log_text += (
-            "Max start Equity Drawdown %: " + CoFu.double_to_string(max_start_equity_dd_percent, 2) + "\n"
-        )
+        log_text += "Max start Equity Drawdown %: " + CoFu.double_to_string(max_start_equity_dd_percent, 2) + "\n"
 
         log_text += (
             "Profit Factor: " + ("-" if losing_trades == 0 else CoFu.double_to_string(profit_factor, 2)) + "\n"

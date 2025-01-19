@@ -27,6 +27,10 @@ namespace cAlgo.Robots
         private MemoryMappedFile mMemoryMappedFile;
         private Semaphore mQuoteReady2PySemaphore;
         private Semaphore mQuoteAccFromPySemaphore;
+        private Bars mMinute1bar;
+        private Bars mHour1bar;
+        private Bars mHour2bar;
+        private Bars mDay1bar;
         //private Semaphore mResultReady2PySemaphore;
         #endregion
 
@@ -38,18 +42,35 @@ namespace cAlgo.Robots
             mMemoryMappedFile = MemoryMappedFile.CreateOrOpen("TaskMemoryMap", 1024);
             mQuoteReady2PySemaphore = new Semaphore(0, 1, "QuoteReady2PySemaphore");
             mQuoteAccFromPySemaphore = new Semaphore(0, 1, "QuoteAccFromPySemaphore");
-            //mResultReady2PySemaphore = new Semaphore(0, 1, "ResultReady2PySemaphore");
+            mMinute1bar = MarketData.GetBars(TimeFrame.Minute);
+            mHour1bar = MarketData.GetBars(TimeFrame.Hour);
+            mHour2bar = MarketData.GetBars(TimeFrame.Hour2);
+            mDay1bar = MarketData.GetBars(TimeFrame.Daily);
         }
 
         protected override void OnTick()
         {
+            SendQuoteMessageToPython();
+        }
+
+        void SendQuoteMessageToPython()
+        {
             // Step 1: Send a QuoteMessage to Python and wait for a response
             QuoteMessage quoteMessage = new QuoteMessage
             {
-                Id = 1,
                 Timestamp = Time.ToNativeMs(),
                 Bid = Symbol.Bid,
-                Ask = Symbol.Ask
+                Ask = Symbol.Ask,
+                Minute1Open = mMinute1bar.Last(1).Open,
+                Hour1Open = mHour1bar.Last(1).Open,
+                Hour2Open = mHour2bar.Last(1).Open,
+                Day1Open = mDay1bar.Last(1).Open,
+                Hour1High = mHour1bar.Last(1).High,
+                Hour1Low = mHour1bar.Last(1).Low,
+                Hour1Close = mHour1bar.Last(1).Close,
+                Hour2High = mHour2bar.Last(1).High,
+                Hour2Low = mHour2bar.Last(1).Low,
+                Hour2Close = mHour2bar.Last(1).Close,
             };
 
             // Write QuoteMessage to memory-mapped file
@@ -94,7 +115,6 @@ namespace cAlgo.Robots
             mQuoteAccFromPySemaphore?.Dispose();
             //mResultReady2PySemaphore?.Dispose();
         }
-
     }
 
     public static class Extensions

@@ -37,7 +37,7 @@ class MainConsole:
         # 2. Define the backtest time window
         # region
         # self.robot.BacktestStartUtc = datetime.min
-        self.robot.BacktestStartUtc = datetime.strptime("3.1.2025", "%d.%m.%Y")
+        self.robot.BacktestStartUtc = datetime.strptime("7.1.2025", "%d.%m.%Y")
 
         # self.robot.BacktestEndUtc = datetime.strptime("10.12.2024", "%d.%m.%Y")
         self.robot.BacktestEndUtc = datetime.max

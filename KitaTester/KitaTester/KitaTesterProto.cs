@@ -23,15 +23,19 @@ public static partial class KitaTesterProtoReflection {
     byte[] descriptorData = global::System.Convert.FromBase64String(
         string.Concat(
           "ChVLaXRhVGVzdGVyUHJvdG8ucHJvdG8iKwoEVGFzaxIPCgd0YXNrX2lkGAEg",
-          "ASgFEhIKCnBhcmFtZXRlcnMYAiADKAkiRwoMUXVvdGVNZXNzYWdlEgoKAmlk",
-          "GAEgASgFEhEKCXRpbWVzdGFtcBgCIAEoARILCgNiaWQYAyABKAESCwoDYXNr",
-          "GAQgASgBIkIKFVB5dGhvblJlc3BvbnNlTWVzc2FnZRIKCgJpZBgBIAEoBRIN",
+          "ASgFEhIKCnBhcmFtZXRlcnMYAiADKAki+gEKDFF1b3RlTWVzc2FnZRIRCgl0",
+          "aW1lc3RhbXAYASABKAESCwoDYmlkGAIgASgBEgsKA2FzaxgDIAEoARITCgtt",
+          "aW51dGUxT3BlbhgEIAEoARIRCglob3VyMU9wZW4YBSABKAESEQoJaG91cjJP",
+          "cGVuGAYgASgBEhAKCGRheTFPcGVuGAcgASgBEhEKCWhvdXIxSGlnaBgIIAEo",
+          "ARIQCghob3VyMUxvdxgJIAEoARISCgpob3VyMUNsb3NlGAogASgBEhEKCWhv",
+          "dXIySGlnaBgLIAEoARIQCghob3VyMkxvdxgMIAEoARISCgpob3VyMkNsb3Nl",
+          "GA0gASgBIkIKFVB5dGhvblJlc3BvbnNlTWVzc2FnZRIKCgJpZBgBIAEoBRIN",
           "CgVwYXJhMRgCIAEoCRIOCgZpc19lbmQYAyABKAhiBnByb3RvMw=="));
     descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
         new pbr::FileDescriptor[] { },
         new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
           new pbr::GeneratedClrTypeInfo(typeof(global::Task), global::Task.Parser, new[]{ "TaskId", "Parameters" }, null, null, null, null),
-          new pbr::GeneratedClrTypeInfo(typeof(global::QuoteMessage), global::QuoteMessage.Parser, new[]{ "Id", "Timestamp", "Bid", "Ask" }, null, null, null, null),
+          new pbr::GeneratedClrTypeInfo(typeof(global::QuoteMessage), global::QuoteMessage.Parser, new[]{ "Timestamp", "Bid", "Ask", "Minute1Open", "Hour1Open", "Hour2Open", "Day1Open", "Hour1High", "Hour1Low", "Hour1Close", "Hour2High", "Hour2Low", "Hour2Close" }, null, null, null, null),
           new pbr::GeneratedClrTypeInfo(typeof(global::PythonResponseMessage), global::PythonResponseMessage.Parser, new[]{ "Id", "Para1", "IsEnd" }, null, null, null, null)
         }));
   }
@@ -288,10 +292,19 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
   public QuoteMessage(QuoteMessage other) : this() {
-    id_ = other.id_;
     timestamp_ = other.timestamp_;
     bid_ = other.bid_;
     ask_ = other.ask_;
+    minute1Open_ = other.minute1Open_;
+    hour1Open_ = other.hour1Open_;
+    hour2Open_ = other.hour2Open_;
+    day1Open_ = other.day1Open_;
+    hour1High_ = other.hour1High_;
+    hour1Low_ = other.hour1Low_;
+    hour1Close_ = other.hour1Close_;
+    hour2High_ = other.hour2High_;
+    hour2Low_ = other.hour2Low_;
+    hour2Close_ = other.hour2Close_;
     _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
   }
 
@@ -301,20 +314,8 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     return new QuoteMessage(this);
   }
 
-  /// <summary>Field number for the "id" field.</summary>
-  public const int IdFieldNumber = 1;
-  private int id_;
-  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
-  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-  public int Id {
-    get { return id_; }
-    set {
-      id_ = value;
-    }
-  }
-
   /// <summary>Field number for the "timestamp" field.</summary>
-  public const int TimestampFieldNumber = 2;
+  public const int TimestampFieldNumber = 1;
   private double timestamp_;
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -326,7 +327,7 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
   }
 
   /// <summary>Field number for the "bid" field.</summary>
-  public const int BidFieldNumber = 3;
+  public const int BidFieldNumber = 2;
   private double bid_;
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -338,7 +339,7 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
   }
 
   /// <summary>Field number for the "ask" field.</summary>
-  public const int AskFieldNumber = 4;
+  public const int AskFieldNumber = 3;
   private double ask_;
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -346,6 +347,126 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     get { return ask_; }
     set {
       ask_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "minute1Open" field.</summary>
+  public const int Minute1OpenFieldNumber = 4;
+  private double minute1Open_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Minute1Open {
+    get { return minute1Open_; }
+    set {
+      minute1Open_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hour1Open" field.</summary>
+  public const int Hour1OpenFieldNumber = 5;
+  private double hour1Open_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Hour1Open {
+    get { return hour1Open_; }
+    set {
+      hour1Open_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hour2Open" field.</summary>
+  public const int Hour2OpenFieldNumber = 6;
+  private double hour2Open_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Hour2Open {
+    get { return hour2Open_; }
+    set {
+      hour2Open_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "day1Open" field.</summary>
+  public const int Day1OpenFieldNumber = 7;
+  private double day1Open_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Day1Open {
+    get { return day1Open_; }
+    set {
+      day1Open_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hour1High" field.</summary>
+  public const int Hour1HighFieldNumber = 8;
+  private double hour1High_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Hour1High {
+    get { return hour1High_; }
+    set {
+      hour1High_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hour1Low" field.</summary>
+  public const int Hour1LowFieldNumber = 9;
+  private double hour1Low_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Hour1Low {
+    get { return hour1Low_; }
+    set {
+      hour1Low_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hour1Close" field.</summary>
+  public const int Hour1CloseFieldNumber = 10;
+  private double hour1Close_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Hour1Close {
+    get { return hour1Close_; }
+    set {
+      hour1Close_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hour2High" field.</summary>
+  public const int Hour2HighFieldNumber = 11;
+  private double hour2High_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Hour2High {
+    get { return hour2High_; }
+    set {
+      hour2High_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hour2Low" field.</summary>
+  public const int Hour2LowFieldNumber = 12;
+  private double hour2Low_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Hour2Low {
+    get { return hour2Low_; }
+    set {
+      hour2Low_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hour2Close" field.</summary>
+  public const int Hour2CloseFieldNumber = 13;
+  private double hour2Close_;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public double Hour2Close {
+    get { return hour2Close_; }
+    set {
+      hour2Close_ = value;
     }
   }
 
@@ -364,10 +485,19 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     if (ReferenceEquals(other, this)) {
       return true;
     }
-    if (Id != other.Id) return false;
     if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Timestamp, other.Timestamp)) return false;
     if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Bid, other.Bid)) return false;
     if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Ask, other.Ask)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Minute1Open, other.Minute1Open)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour1Open, other.Hour1Open)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour2Open, other.Hour2Open)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Day1Open, other.Day1Open)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour1High, other.Hour1High)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour1Low, other.Hour1Low)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour1Close, other.Hour1Close)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour2High, other.Hour2High)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour2Low, other.Hour2Low)) return false;
+    if (!pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.Equals(Hour2Close, other.Hour2Close)) return false;
     return Equals(_unknownFields, other._unknownFields);
   }
 
@@ -375,10 +505,19 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
   public override int GetHashCode() {
     int hash = 1;
-    if (Id != 0) hash ^= Id.GetHashCode();
     if (Timestamp != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Timestamp);
     if (Bid != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Bid);
     if (Ask != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Ask);
+    if (Minute1Open != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Minute1Open);
+    if (Hour1Open != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour1Open);
+    if (Hour2Open != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour2Open);
+    if (Day1Open != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Day1Open);
+    if (Hour1High != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour1High);
+    if (Hour1Low != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour1Low);
+    if (Hour1Close != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour1Close);
+    if (Hour2High != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour2High);
+    if (Hour2Low != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour2Low);
+    if (Hour2Close != 0D) hash ^= pbc::ProtobufEqualityComparers.BitwiseDoubleEqualityComparer.GetHashCode(Hour2Close);
     if (_unknownFields != null) {
       hash ^= _unknownFields.GetHashCode();
     }
@@ -397,21 +536,57 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
   #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
     output.WriteRawMessage(this);
   #else
-    if (Id != 0) {
-      output.WriteRawTag(8);
-      output.WriteInt32(Id);
-    }
     if (Timestamp != 0D) {
-      output.WriteRawTag(17);
+      output.WriteRawTag(9);
       output.WriteDouble(Timestamp);
     }
     if (Bid != 0D) {
-      output.WriteRawTag(25);
+      output.WriteRawTag(17);
       output.WriteDouble(Bid);
     }
     if (Ask != 0D) {
-      output.WriteRawTag(33);
+      output.WriteRawTag(25);
       output.WriteDouble(Ask);
+    }
+    if (Minute1Open != 0D) {
+      output.WriteRawTag(33);
+      output.WriteDouble(Minute1Open);
+    }
+    if (Hour1Open != 0D) {
+      output.WriteRawTag(41);
+      output.WriteDouble(Hour1Open);
+    }
+    if (Hour2Open != 0D) {
+      output.WriteRawTag(49);
+      output.WriteDouble(Hour2Open);
+    }
+    if (Day1Open != 0D) {
+      output.WriteRawTag(57);
+      output.WriteDouble(Day1Open);
+    }
+    if (Hour1High != 0D) {
+      output.WriteRawTag(65);
+      output.WriteDouble(Hour1High);
+    }
+    if (Hour1Low != 0D) {
+      output.WriteRawTag(73);
+      output.WriteDouble(Hour1Low);
+    }
+    if (Hour1Close != 0D) {
+      output.WriteRawTag(81);
+      output.WriteDouble(Hour1Close);
+    }
+    if (Hour2High != 0D) {
+      output.WriteRawTag(89);
+      output.WriteDouble(Hour2High);
+    }
+    if (Hour2Low != 0D) {
+      output.WriteRawTag(97);
+      output.WriteDouble(Hour2Low);
+    }
+    if (Hour2Close != 0D) {
+      output.WriteRawTag(105);
+      output.WriteDouble(Hour2Close);
     }
     if (_unknownFields != null) {
       _unknownFields.WriteTo(output);
@@ -423,21 +598,57 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
   void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
-    if (Id != 0) {
-      output.WriteRawTag(8);
-      output.WriteInt32(Id);
-    }
     if (Timestamp != 0D) {
-      output.WriteRawTag(17);
+      output.WriteRawTag(9);
       output.WriteDouble(Timestamp);
     }
     if (Bid != 0D) {
-      output.WriteRawTag(25);
+      output.WriteRawTag(17);
       output.WriteDouble(Bid);
     }
     if (Ask != 0D) {
-      output.WriteRawTag(33);
+      output.WriteRawTag(25);
       output.WriteDouble(Ask);
+    }
+    if (Minute1Open != 0D) {
+      output.WriteRawTag(33);
+      output.WriteDouble(Minute1Open);
+    }
+    if (Hour1Open != 0D) {
+      output.WriteRawTag(41);
+      output.WriteDouble(Hour1Open);
+    }
+    if (Hour2Open != 0D) {
+      output.WriteRawTag(49);
+      output.WriteDouble(Hour2Open);
+    }
+    if (Day1Open != 0D) {
+      output.WriteRawTag(57);
+      output.WriteDouble(Day1Open);
+    }
+    if (Hour1High != 0D) {
+      output.WriteRawTag(65);
+      output.WriteDouble(Hour1High);
+    }
+    if (Hour1Low != 0D) {
+      output.WriteRawTag(73);
+      output.WriteDouble(Hour1Low);
+    }
+    if (Hour1Close != 0D) {
+      output.WriteRawTag(81);
+      output.WriteDouble(Hour1Close);
+    }
+    if (Hour2High != 0D) {
+      output.WriteRawTag(89);
+      output.WriteDouble(Hour2High);
+    }
+    if (Hour2Low != 0D) {
+      output.WriteRawTag(97);
+      output.WriteDouble(Hour2Low);
+    }
+    if (Hour2Close != 0D) {
+      output.WriteRawTag(105);
+      output.WriteDouble(Hour2Close);
     }
     if (_unknownFields != null) {
       _unknownFields.WriteTo(ref output);
@@ -449,9 +660,6 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
   public int CalculateSize() {
     int size = 0;
-    if (Id != 0) {
-      size += 1 + pb::CodedOutputStream.ComputeInt32Size(Id);
-    }
     if (Timestamp != 0D) {
       size += 1 + 8;
     }
@@ -459,6 +667,36 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
       size += 1 + 8;
     }
     if (Ask != 0D) {
+      size += 1 + 8;
+    }
+    if (Minute1Open != 0D) {
+      size += 1 + 8;
+    }
+    if (Hour1Open != 0D) {
+      size += 1 + 8;
+    }
+    if (Hour2Open != 0D) {
+      size += 1 + 8;
+    }
+    if (Day1Open != 0D) {
+      size += 1 + 8;
+    }
+    if (Hour1High != 0D) {
+      size += 1 + 8;
+    }
+    if (Hour1Low != 0D) {
+      size += 1 + 8;
+    }
+    if (Hour1Close != 0D) {
+      size += 1 + 8;
+    }
+    if (Hour2High != 0D) {
+      size += 1 + 8;
+    }
+    if (Hour2Low != 0D) {
+      size += 1 + 8;
+    }
+    if (Hour2Close != 0D) {
       size += 1 + 8;
     }
     if (_unknownFields != null) {
@@ -473,9 +711,6 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     if (other == null) {
       return;
     }
-    if (other.Id != 0) {
-      Id = other.Id;
-    }
     if (other.Timestamp != 0D) {
       Timestamp = other.Timestamp;
     }
@@ -484,6 +719,36 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
     }
     if (other.Ask != 0D) {
       Ask = other.Ask;
+    }
+    if (other.Minute1Open != 0D) {
+      Minute1Open = other.Minute1Open;
+    }
+    if (other.Hour1Open != 0D) {
+      Hour1Open = other.Hour1Open;
+    }
+    if (other.Hour2Open != 0D) {
+      Hour2Open = other.Hour2Open;
+    }
+    if (other.Day1Open != 0D) {
+      Day1Open = other.Day1Open;
+    }
+    if (other.Hour1High != 0D) {
+      Hour1High = other.Hour1High;
+    }
+    if (other.Hour1Low != 0D) {
+      Hour1Low = other.Hour1Low;
+    }
+    if (other.Hour1Close != 0D) {
+      Hour1Close = other.Hour1Close;
+    }
+    if (other.Hour2High != 0D) {
+      Hour2High = other.Hour2High;
+    }
+    if (other.Hour2Low != 0D) {
+      Hour2Low = other.Hour2Low;
+    }
+    if (other.Hour2Close != 0D) {
+      Hour2Close = other.Hour2Close;
     }
     _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
   }
@@ -500,20 +765,56 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
         default:
           _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
           break;
-        case 8: {
-          Id = input.ReadInt32();
-          break;
-        }
-        case 17: {
+        case 9: {
           Timestamp = input.ReadDouble();
           break;
         }
-        case 25: {
+        case 17: {
           Bid = input.ReadDouble();
           break;
         }
-        case 33: {
+        case 25: {
           Ask = input.ReadDouble();
+          break;
+        }
+        case 33: {
+          Minute1Open = input.ReadDouble();
+          break;
+        }
+        case 41: {
+          Hour1Open = input.ReadDouble();
+          break;
+        }
+        case 49: {
+          Hour2Open = input.ReadDouble();
+          break;
+        }
+        case 57: {
+          Day1Open = input.ReadDouble();
+          break;
+        }
+        case 65: {
+          Hour1High = input.ReadDouble();
+          break;
+        }
+        case 73: {
+          Hour1Low = input.ReadDouble();
+          break;
+        }
+        case 81: {
+          Hour1Close = input.ReadDouble();
+          break;
+        }
+        case 89: {
+          Hour2High = input.ReadDouble();
+          break;
+        }
+        case 97: {
+          Hour2Low = input.ReadDouble();
+          break;
+        }
+        case 105: {
+          Hour2Close = input.ReadDouble();
           break;
         }
       }
@@ -531,20 +832,56 @@ public sealed partial class QuoteMessage : pb::IMessage<QuoteMessage>
         default:
           _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
           break;
-        case 8: {
-          Id = input.ReadInt32();
-          break;
-        }
-        case 17: {
+        case 9: {
           Timestamp = input.ReadDouble();
           break;
         }
-        case 25: {
+        case 17: {
           Bid = input.ReadDouble();
           break;
         }
-        case 33: {
+        case 25: {
           Ask = input.ReadDouble();
+          break;
+        }
+        case 33: {
+          Minute1Open = input.ReadDouble();
+          break;
+        }
+        case 41: {
+          Hour1Open = input.ReadDouble();
+          break;
+        }
+        case 49: {
+          Hour2Open = input.ReadDouble();
+          break;
+        }
+        case 57: {
+          Day1Open = input.ReadDouble();
+          break;
+        }
+        case 65: {
+          Hour1High = input.ReadDouble();
+          break;
+        }
+        case 73: {
+          Hour1Low = input.ReadDouble();
+          break;
+        }
+        case 81: {
+          Hour1Close = input.ReadDouble();
+          break;
+        }
+        case 89: {
+          Hour2High = input.ReadDouble();
+          break;
+        }
+        case 97: {
+          Hour2Low = input.ReadDouble();
+          break;
+        }
+        case 105: {
+          Hour2Close = input.ReadDouble();
           break;
         }
       }

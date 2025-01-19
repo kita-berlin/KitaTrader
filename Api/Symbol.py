@@ -193,13 +193,13 @@ class Symbol:
         return "Bars have not been requested in on_init()", Bars(self.name, timeframe, 0)
 
     def check_historical_data(self):
-        # if all data requested, find the first quote
-        start_dt = self.api.AllDataStartUtc
+        # if all data are requested (datetime.min == self.api.AllDataStartUtc), find the first quote
+        quote_provider_dt = self.api.AllDataStartUtc
         if datetime.min == self.api.AllDataStartUtc:
             print("Finding first quote of " + self.name)
-            error, start_dt = self.quote_provider.get_first_datetime()
+            error, quote_provider_dt = self.quote_provider.get_first_datetime()
             assert "" == error, error
-        self.api.AllDataStartUtc = start_dt.replace(tzinfo=UTC)
+        self.api.AllDataStartUtc = quote_provider_dt.replace(tzinfo=UTC)
 
         # max is up to yesterday because data might not be completed for today
         if datetime.max == self.api.AllDataEndUtc:
@@ -262,11 +262,15 @@ class Symbol:
         is_daily_written = False
         last_time: datetime = datetime.min
         last_stamp: int = 0
+        one_day_provider_data: Bars = Bars(self.name, 0, 0)
 
         while True:
+            if run_utc >= self.api.AllDataEndUtc - timedelta(days=1):
+                print()
+
             # daily loop
             if not os.path.exists(os.path.join(tick_folder, run_utc.strftime("%Y%m%d_quote.zip"))):
-                error, start_dt, one_day_provider_data = self.quote_provider.get_day_at_utc(run_utc)
+                error, quote_provider_dt, one_day_provider_data = self.quote_provider.get_day_at_utc(run_utc)
                 assert "" == error, error
 
                 print("Getting " + run_utc.strftime("%d.%m.%Y"))
@@ -292,22 +296,8 @@ class Symbol:
                         or current_stamp // Constants.SEC_PER_DAY != last_stamp // Constants.SEC_PER_DAY
                     ):
                         if 0 != last_stamp:
-                            # write daily minute data into the csv/zip file
-                            daily_csv_writer.writerow(
-                                [
-                                    daily_bar.open_time.strftime("%Y%m%d %H:%M"),
-                                    f"{daily_bar.open_bid:.{self.digits}f}",
-                                    f"{daily_bar.high_bid:.{self.digits}f}",
-                                    f"{daily_bar.low_bid:.{self.digits}f}",
-                                    f"{daily_bar.close_bid:.{self.digits}f}",
-                                    f"{daily_bar.volume_bid:.2f}",
-                                    f"{daily_bar.open_ask:.{self.digits}f}",
-                                    f"{daily_bar.high_ask:.{self.digits}f}",
-                                    f"{daily_bar.low_ask:.{self.digits}f}",
-                                    f"{daily_bar.close_ask:.{self.digits}f}",
-                                    f"{daily_bar.volume_ask:.2f}",
-                                ]
-                            )
+                            # write daily data into the csv/zip file
+                            self._write_daily_bar(daily_csv_writer, daily_bar)  # type:ignore
                             is_daily_written = True
 
                         # add a new empty daily bar
@@ -335,21 +325,7 @@ class Symbol:
                     ):
                         if 0 != last_stamp:
                             # write daily minute data into the csv/zip file
-                            hour_csv_writer.writerow(
-                                [
-                                    hour_bar.open_time.strftime("%Y%m%d %H:%M"),
-                                    f"{hour_bar.open_bid:.{self.digits}f}",
-                                    f"{hour_bar.high_bid:.{self.digits}f}",
-                                    f"{hour_bar.low_bid:.{self.digits}f}",
-                                    f"{hour_bar.close_bid:.{self.digits}f}",
-                                    f"{hour_bar.volume_bid:.2f}",
-                                    f"{hour_bar.open_ask:.{self.digits}f}",
-                                    f"{hour_bar.high_ask:.{self.digits}f}",
-                                    f"{hour_bar.low_ask:.{self.digits}f}",
-                                    f"{hour_bar.close_ask:.{self.digits}f}",
-                                    f"{hour_bar.volume_ask:.2f}",
-                                ]
-                            )
+                            self._write_hour_bar(hour_csv_writer, hour_bar)  # type:ignore
                             is_hour_written = True
 
                         # add a new empty hour bar
@@ -428,9 +404,14 @@ class Symbol:
                     last_time = time
                     last_stamp = current_stamp
 
-                # write tick daily file
+                # write out a daily ticks file; one file for each day
+                # csv file inside the zip file is empty if no ticks are available
+                # we need the zip file to keep track of stored data files
                 self._write_zip_file(tick_folder, "", run_utc, daily_tick_csv_buffer, "tick")
+
+                # write out a daily minutes file; one file for each day
                 if 0 == len(one_day_provider_data.open_times.data):
+                    # csv file inside the zip file is empty if no ticks are available
                     daily_minute_csv_writer.writerow("")
                 else:
                     daily_minute_csv_writer.writerow(
@@ -451,21 +432,58 @@ class Symbol:
                             f"{minute_bar.volume_ask:.2f}",
                         ]
                     )
-
-                # write minute daily file
                 self._write_zip_file(minute_folder, "", run_utc, daily_minute_csv_buffer, "minute")
 
             run_utc += timedelta(days=1)
 
+            # check if end reached
             if run_utc >= self.api.AllDataEndUtc:
                 if is_hour_written:
+                    # write out the one hour file
+                    self._write_hour_bar(hour_csv_writer, hour_bar)  # type:ignore   flush last hour
                     self._write_zip_file(hour_folder, self.name, datetime.min, hour_csv_buffer, "hour")
 
                 if is_daily_written:
+                    # write out the one daily file
+                    self._write_daily_bar(daily_csv_writer, daily_bar)  # type:ignore   flush last hour
                     self._write_zip_file(daily_folder, self.name, datetime.min, daily_csv_buffer, "daily")
                 break
 
         return
+
+    def _write_hour_bar(self, hour_csv_writer, hour_bar: Bar):  # type:ignore
+        hour_csv_writer.writerow(  # type:ignore
+            [
+                hour_bar.open_time.strftime("%Y%m%d %H:%M"),
+                f"{hour_bar.open_bid:.{self.digits}f}",
+                f"{hour_bar.high_bid:.{self.digits}f}",
+                f"{hour_bar.low_bid:.{self.digits}f}",
+                f"{hour_bar.close_bid:.{self.digits}f}",
+                f"{hour_bar.volume_bid:.2f}",
+                f"{hour_bar.open_ask:.{self.digits}f}",
+                f"{hour_bar.high_ask:.{self.digits}f}",
+                f"{hour_bar.low_ask:.{self.digits}f}",
+                f"{hour_bar.close_ask:.{self.digits}f}",
+                f"{hour_bar.volume_ask:.2f}",
+            ]
+        )
+
+    def _write_daily_bar(self, daily_csv_writer, daily_bar: Bar):  # type:ignore
+        daily_csv_writer.writerow(  # type:ignore
+            [
+                daily_bar.open_time.strftime("%Y%m%d %H:%M"),
+                f"{daily_bar.open_bid:.{self.digits}f}",
+                f"{daily_bar.high_bid:.{self.digits}f}",
+                f"{daily_bar.low_bid:.{self.digits}f}",
+                f"{daily_bar.close_bid:.{self.digits}f}",
+                f"{daily_bar.volume_bid:.2f}",
+                f"{daily_bar.open_ask:.{self.digits}f}",
+                f"{daily_bar.high_ask:.{self.digits}f}",
+                f"{daily_bar.low_ask:.{self.digits}f}",
+                f"{daily_bar.close_ask:.{self.digits}f}",
+                f"{daily_bar.volume_ask:.2f}",
+            ]
+        )
 
     def load_datarate_and_bars(self) -> str:
         if datetime.min == self.api.robot.BacktestStartUtc:
@@ -674,7 +692,6 @@ class Symbol:
     def _load_minute_bars(self, start: datetime) -> datetime:
         bars = self.bars_dictonary[Constants.SEC_PER_MINUTE]
         look_back_run = bars.look_back
-        files: list[tuple[datetime, str]] = []
         folder = os.path.join(
             self.api.DataPath,
             self.quote_provider.provider_name,
@@ -689,11 +706,12 @@ class Symbol:
         start_idx = bisect_left(file_dates, start)
 
         # Process additional lookback bars if needed
-        while look_back_run > 0 and start_idx > 0:
+        while look_back_run > 0:
             start_idx -= 1
-            file_date, file_name = files[start_idx]
-            zip_path = os.path.join(folder, file_name)
+            if start_idx < 0:
+                break
 
+            zip_path = os.path.join(folder, file_dates[start_idx].strftime("%Y%m%d_quote.zip"))
             with ZipFile(zip_path, "r") as zip_file:
                 csv_file_name = zip_file.namelist()[0]
                 with zip_file.open(csv_file_name) as csv_file:

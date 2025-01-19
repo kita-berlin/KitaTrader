@@ -6,10 +6,19 @@ message Task {
 }
 
 message QuoteMessage {
-  int32 id = 1;
-  double timestamp = 2;
-  double bid = 3;
-  double ask = 4;
+   double timestamp = 1;
+   double bid = 2;
+   double ask = 3;
+   double minute1Open = 4;
+   double hour1Open = 5;
+   double hour2Open = 6;
+   double day1Open = 7;
+   double hour1High = 8;
+   double hour1Low = 9;
+   double hour1Close = 10;
+   double hour2High = 11;
+   double hour2Low = 12;
+   double hour2Close = 13;
 }
 
 message PythonResponseMessage {
