@@ -27,10 +27,14 @@ class MainConsole:
         # Historical data path
         self.robot.DataPath = "$(OneDrive)/KitaData/cfd"
 
+        # Preload data for the whole period or load data during the backtest run
+        self.robot.DataMode = DataMode.Online
+
         # Paper trading initial account settings
         self.robot.AccountInitialBalance = 10000
         self.robot.AccountLeverage = 500
-        # until full currency conversion is implemented, the quote currency of the traded symbol is used as the account currency
+        # until full currency conversion is implemented, the quote currency of the traded symbol 
+        # is used as the account currency
         self.robot.AccountCurrency = "EUR"
         # endregion
 
@@ -45,24 +49,24 @@ class MainConsole:
 
         # 3. Initialize the platform and the robot
         # region
-        self.robot.init()  # type: ignore
+        self.robot.do_init()  # type: ignore
         # endregion
 
         # 4. Start the platform and the robot
         # region
-        self.robot.start()  # type: ignore
+        self.robot.do_start()  # type: ignore
         # endregion
 
         # 5. loop over the give time range
         # region
         while True:
-            if self.robot.tick():
+            if self.robot.do_tick():
                 break
         # endregion
 
         # 6. Stop the robot and the platform
         # region
-        self.robot.stop()
+        self.robot.do_stop()
         # endregion
 
 

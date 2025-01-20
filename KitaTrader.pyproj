@@ -68,6 +68,8 @@
     <Compile Include="Api\Position.py" />
     <Compile Include="Api\PyLogger.py" />
     <Compile Include="Api\QuoteProvider.py" />
+    <Compile Include="Api\ring_buffer.py" />
+    <Compile Include="Api\ring_buffer_time_price.py" />
     <Compile Include="Api\Symbol.py" />
     <Compile Include="Api\TimeSeries.py" />
     <Compile Include="Api\TradeProvider.py" />

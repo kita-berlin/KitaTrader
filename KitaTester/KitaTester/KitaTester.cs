@@ -116,6 +116,43 @@ namespace cAlgo.Robots
 
         protected override void OnStop()
         {
+            // Step 1: Send a QuoteMessage to Python and wait for a response
+            QuoteMessage quoteMessage = new QuoteMessage
+            {
+                Timestamp = -1,
+                Bid = Symbol.Bid,
+                Ask = Symbol.Ask,
+                Minute1Open = mMinute1bar.Last(1).Open,
+                Hour1Open = mHour1bar.Last(1).Open,
+                Hour2Open = mHour2bar.Last(1).Open,
+                Day1Open = mDay1bar.Last(1).Open,
+                Hour1High = mHour1bar.Last(1).High,
+                Hour1Low = mHour1bar.Last(1).Low,
+                Hour1Close = mHour1bar.Last(1).Close,
+                Hour2High = mHour2bar.Last(1).High,
+                Hour2Low = mHour2bar.Last(1).Low,
+                Hour2Close = mHour2bar.Last(1).Close,
+                Day1Timestamp = mDay1bar.Last(1).OpenTime.ToNativeMs(),
+                Sma1 = mSma1.Result.Last(1),
+                Bb1Main = mBb1.Main.Last(1),
+                Bb1Hi = mBb1.Top.Last(1),
+                Bb1Lo = mBb1.Bottom.Last(1)
+            };
+
+            // Write QuoteMessage to memory-mapped file
+            using (var accessor = mMemoryMappedFile.CreateViewStream())
+            {
+                using (var codedOutput = new CodedOutputStream(accessor))
+                {
+                    int messageSize = quoteMessage.CalculateSize();
+                    accessor.Write(BitConverter.GetBytes(messageSize), 0, 4); // Write size as 4-byte integer
+                    quoteMessage.WriteTo(codedOutput);
+                    codedOutput.Flush();
+                }
+            }
+
+            // Signal Python that the QuoteMessage is ready
+            mQuoteReady2PySemaphore.Release();
             mMemoryMappedFile?.Dispose();
             mQuoteAccFromPySemaphore?.Dispose();
             //mResultReady2PySemaphore?.Dispose();

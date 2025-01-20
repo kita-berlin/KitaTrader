@@ -56,7 +56,7 @@ class KitaTester(KitaApi):
         # 1. Define quote_provider(s)
         # data_rate is in seconds, 0 means fastetst possible (i.e. Ticks)
         quote_provider = QuoteCtraderCache(
-            data_rate=60,
+            data_rate=0,
             parameter=r"$(USERPROFILE)\AppData\Roaming\Spotware\Cache\pepperstone\BacktestingCache\V1\live_ad845a9a",
         )
         # quote_provider = BrokerMt5( data_rate=0, "62060378, pepperstone_uk-Demo, tFue0y*akr")
@@ -171,6 +171,11 @@ class KitaTester(KitaApi):
             print(f"Error parsing QuoteMessage: {e}")
             print(f"Raw data: {serialized_data}")  # type: ignore
             raise
+
+        if -1 == quote_message.timestamp:
+            print("Received exit signal from C#")
+            self.stop()
+            return
 
         # Convert quote_message.timestamp from milliseconds to seconds and ensure it's in UTC
         message_time = datetime.fromtimestamp(quote_message.timestamp / 1000, tz=pytz.UTC)  # type: ignore

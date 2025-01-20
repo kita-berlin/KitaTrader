@@ -489,7 +489,7 @@ class Symbol:
             ]
         )
 
-    def load_datarate_and_bars(self) -> str:
+    def make_time_aware(self):
         if datetime.min == self.api.robot.BacktestStartUtc:
             self.api.robot.BacktestStartUtc = self.api.AllDataStartUtc
             print("Warning: BacktestStartUtc is set to minimum, no lookback data are possible")
@@ -510,7 +510,8 @@ class Symbol:
             hours=self.normalized_hours_offset
         )
 
-        # find smallest start time of all data rates and bars
+    def load_datarate_and_bars(self) -> str:
+        # find smallest start time of all data rates and bars while loading all bars
         min_start = self.api.AllDataEndUtc
         for timeframe in self.bars_dictonary:
             start = self._load_bars(timeframe, self.api.robot.BacktestStartUtc)
@@ -591,36 +592,40 @@ class Symbol:
                         reader = csv.reader(decoded.splitlines())
                         for row in reader:
                             if len(row) > 0:
-                                bars.open_times.data.append(
+                                bars.open_times.append(
                                     (file_date + timedelta(milliseconds=int(row[0]))).replace(tzinfo=pytz.UTC)
                                 )
-                                bars.open_bids.data.append(float(row[1]))
-                                bars.open_asks.data.append(float(row[2]))
+                                bars.open_bids.append(float(row[1]))
+                                bars.open_asks.append(float(row[2]))
         return bars
 
     def _load_bars(self, timeframe: int, start: datetime) -> datetime:
         print(f"\nLoading {self.name} {timeframe} seconds OHLC bars from " + start.strftime("%d.%m.%Y"))
-        start_look_back = datetime.min
+        look_back_start_datetime = datetime.min
 
         if timeframe < Constants.SEC_PER_HOUR:
             if Constants.SEC_PER_MINUTE == timeframe:
-                start_look_back = self._load_minute_bars(start)  # load 1 minute bars
+                look_back_start_datetime = self._load_minute_bars(start)  # load 1 minute bars
             else:
-                start_look_back = self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
+                look_back_start_datetime = self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
 
         elif timeframe < Constants.SEC_PER_DAY:
             if Constants.SEC_PER_HOUR == timeframe:
-                start_look_back = self._load_hour_or_daily_bar(Constants.SEC_PER_HOUR, start)  # load 1 hour bars
+                look_back_start_datetime = self._load_hour_or_daily_bar(
+                    Constants.SEC_PER_HOUR, start
+                )  # load 1 hour bars
             else:
-                start_look_back = self._resample(self.bars_dictonary[Constants.SEC_PER_HOUR], timeframe)
+                look_back_start_datetime = self._resample(self.bars_dictonary[Constants.SEC_PER_HOUR], timeframe)
 
         else:
             if Constants.SEC_PER_DAY == timeframe:
-                start_look_back = self._load_hour_or_daily_bar(Constants.SEC_PER_DAY, start)  # load 1 day bars
+                look_back_start_datetime = self._load_hour_or_daily_bar(
+                    Constants.SEC_PER_DAY, start
+                )  # load 1 day bars
             else:
-                start_look_back = self._resample(self.bars_dictonary[Constants.SEC_PER_DAY], timeframe)
+                look_back_start_datetime = self._resample(self.bars_dictonary[Constants.SEC_PER_DAY], timeframe)
 
-        return start_look_back
+        return look_back_start_datetime
 
     def _resample(self, bars: Bars, new_timeframe_seconds: int) -> datetime:
         # Extract the data into a DataFrame
@@ -748,20 +753,20 @@ class Symbol:
                         reader = csv.reader(decoded.splitlines())
                         for row in reader:
                             if len(row) > 0:
-                                bars.open_times.data.append(
+                                bars.open_times.append(
                                     (file_date + timedelta(milliseconds=int(row[0]))).astimezone(self.time_zone)
                                     + timedelta(hours=self.normalized_hours_offset)
                                 )
-                                bars.open_bids.data.append(float(row[1]))
-                                bars.high_bids.data.append(float(row[2]))
-                                bars.low_bids.data.append(float(row[3]))
-                                bars.close_bids.data.append(float(row[4]))
-                                bars.volume_bids.data.append(float(row[5]))
-                                bars.open_asks.data.append(float(row[6]))
-                                bars.high_asks.data.append(float(row[7]))
-                                bars.low_asks.data.append(float(row[8]))
-                                bars.close_asks.data.append(float(row[9]))
-                                bars.volume_asks.data.append(float(row[10]))
+                                bars.open_bids.append(float(row[1]))
+                                bars.high_bids.append(float(row[2]))
+                                bars.low_bids.append(float(row[3]))
+                                bars.close_bids.append(float(row[4]))
+                                bars.volume_bids.append(float(row[5]))
+                                bars.open_asks.append(float(row[6]))
+                                bars.high_asks.append(float(row[7]))
+                                bars.low_asks.append(float(row[8]))
+                                bars.close_asks.append(float(row[9]))
+                                bars.volume_asks.append(float(row[10]))
 
         return bars.open_times.data[0]
 
@@ -807,17 +812,17 @@ class Symbol:
             line_datetime = line_datetime.astimezone(self.time_zone) + timedelta(
                 hours=self.normalized_hours_offset
             )
-            bars.open_times.data.append(line_datetime)
-            bars.open_bids.data.append(float(row[1]))
-            bars.high_bids.data.append(float(row[2]))
-            bars.low_bids.data.append(float(row[3]))
-            bars.close_bids.data.append(float(row[4]))
-            bars.volume_bids.data.append(float(row[5]))
-            bars.open_asks.data.append(float(row[6]))
-            bars.high_asks.data.append(float(row[7]))
-            bars.low_asks.data.append(float(row[8]))
-            bars.close_asks.data.append(float(row[9]))
-            bars.volume_asks.data.append(float(row[10]))
+            bars.open_times.append(line_datetime)
+            bars.open_bids.append(float(row[1]))
+            bars.high_bids.append(float(row[2]))
+            bars.low_bids.append(float(row[3]))
+            bars.close_bids.append(float(row[4]))
+            bars.volume_bids.append(float(row[5]))
+            bars.open_asks.append(float(row[6]))
+            bars.high_asks.append(float(row[7]))
+            bars.low_asks.append(float(row[8]))
+            bars.close_asks.append(float(row[9]))
+            bars.volume_asks.append(float(row[10]))
 
         return bars.open_times.data[0]
 

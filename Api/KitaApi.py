@@ -33,6 +33,7 @@ class KitaApi:
     BacktestEndUtc: datetime
     RunningMode: RunMode = RunMode.SilentBacktesting
     DataPath: str = ""
+    DataMode: DataMode = DataMode.Preload
     AccountInitialBalance: float = 10000.0
     AccountLeverage: int = 500
     AccountCurrency: str = "EUR"
@@ -42,6 +43,7 @@ class KitaApi:
     # region
     robot: KitaApi
     logger: PyLogger = None  # type:ignore
+    _stop_requested: bool = False
     # endregion
 
     def __init__(self):
@@ -120,6 +122,9 @@ class KitaApi:
             resolved_path = resolved_path.replace(f"$({match})", env_value)
 
         return resolved_path
+
+    def stop(self):
+        self._stop_requested = True
 
     # endregion
 
@@ -512,7 +517,7 @@ class KitaApi:
     # Methods
     # region
 
-    def init(self):
+    def do_init(self):
         self.robot = self
         self.account: Account = Account(self)
         self.account.balance = self.AccountInitialBalance
@@ -552,20 +557,21 @@ class KitaApi:
         # load bars and data rate
         for symbol in self.symbol_dictionary.values():
             symbol.check_historical_data()  # make sure data do exist since AllDataStartUtc
+            symbol.make_time_aware()  # make sure all start/end datetimes are time zone aware
             symbol.load_datarate_and_bars()
 
-    def start(self):
+    def do_start(self):
         for symbol in self.symbol_dictionary.values():
             self.robot.on_start(symbol)  # type: ignore
 
-    def tick(self):
+    def do_tick(self):
         # Update quote, bars, indicators, account, bot
         # 1st tick must update all bars and Indicators which have been inized in on_init()
         for symbol in self.symbol_dictionary.values():
 
             # Update quote, bars, indicators which are bound to this symbol
             error = symbol.symbol_on_tick()
-            if "" != error or symbol.time > symbol.end_tz_dt:
+            if "" != error or symbol.time > symbol.end_tz_dt or self._stop_requested:
                 return True  # end reached
 
             # Update Account
@@ -602,7 +608,7 @@ class KitaApi:
 
         return False
 
-    def stop(self):
+    def do_stop(self):
         for symbol in self.symbol_dictionary.values():
             self.robot.on_stop(symbol)  # type: ignore
 
