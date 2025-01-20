@@ -20,6 +20,10 @@ message QuoteMessage {
    double hour2Low = 12;
    double hour2Close = 13;
    double day1Timestamp = 14;
+   double sma1 = 15;
+   double bb1main = 16;
+   double bb1hi = 17;
+   double bb1lo = 18;
 }
 
 message PythonResponseMessage {

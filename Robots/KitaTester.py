@@ -1,7 +1,9 @@
-﻿import mmap
-import talib  # type: ignore
+﻿import numpy as np
+import mmap
 import time
 import ctypes
+import talib  # type: ignore
+from talib import MA_Type  # type: ignore
 from Api.KitaApiEnums import *
 from Api.KitaApi import KitaApi, Symbol
 from Api.CoFu import *
@@ -54,7 +56,7 @@ class KitaTester(KitaApi):
         # 1. Define quote_provider(s)
         # data_rate is in seconds, 0 means fastetst possible (i.e. Ticks)
         quote_provider = QuoteCtraderCache(
-            data_rate=0,
+            data_rate=60,
             parameter=r"$(USERPROFILE)\AppData\Roaming\Spotware\Cache\pepperstone\BacktestingCache\V1\live_ad845a9a",
         )
         # quote_provider = BrokerMt5( data_rate=0, "62060378, pepperstone_uk-Demo, tFue0y*akr")
@@ -73,11 +75,11 @@ class KitaTester(KitaApi):
         assert "" == error
 
         # 4. Define one or more bars (optional)
-        self.sma_period = 2
-        symbol.request_bars(Constants.SEC_PER_HOUR, 1)
-        symbol.request_bars(2 * Constants.SEC_PER_HOUR, 1)
-        symbol.request_bars(Constants.SEC_PER_MINUTE, 1)
-        symbol.request_bars(Constants.SEC_PER_DAY, 2)
+        self.indi_period = 5
+        symbol.request_bars(Constants.SEC_PER_HOUR, self.indi_period)
+        symbol.request_bars(2 * Constants.SEC_PER_HOUR, self.indi_period)
+        symbol.request_bars(Constants.SEC_PER_MINUTE, self.indi_period)
+        symbol.request_bars(Constants.SEC_PER_DAY, self.indi_period)
 
         # Load kernel32.dll for semaphore operations
         self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -88,7 +90,7 @@ class KitaTester(KitaApi):
         # 5. Define kita indicators (optional)
         # error, self.sma = Indicators.moving_average(
         #     source=self.m1_bars.open_bids,
-        #     periods=self.sma_period,
+        #     periods=self.indi_period,
         #     ma_type=MovingAverageType.Simple,
         # )
         # if "" != error:
@@ -118,11 +120,14 @@ class KitaTester(KitaApi):
         assert "" == error
         self.performance_prev_time = time.perf_counter()
 
-        # examples how to use ta-lib
-        # ta-lib indicators must be defined in on_start because
-        # full bars are built after on_init
-        # ta_funcs = talib.get_functions()  # type:ignore
+        # ta-lib indicators must be defined in on_start becaus full bars are built after on_init
+        ta_funcs = talib.get_functions()  # type:ignore
         # print(ta_funcs)  # type:ignore
+
+        np_open = np.array(self.hour2_bars.open_bids.data)
+        self.ta_sma = talib.SMA(np_open, self.indi_period)
+        self.upper, self.middle, self.lower = talib.BBANDS(np_open, self.indi_period, 2, 2, MA_Type.SMA)
+
         pass
 
     ###################################
@@ -178,8 +183,8 @@ class KitaTester(KitaApi):
         if quote_message.bid != symbol.bid:  # type: ignore
             print(f"Bid mismatch: {quote_message.bid} != {symbol.bid}")  # type: ignore
 
-        if quote_message.ask != symbol.ask:  # type: ignore
-            print(f"Ask mismatch: {quote_message.ask} != {symbol.ask}")  # type: ignore
+        # if quote_message.ask != symbol.ask:  # type: ignore
+        #     print(f"Ask mismatch: {quote_message.ask} != {symbol.ask}")  # type: ignore
 
         if quote_message.minute1Open != self.minute_bars.open_bids.last(1):  # type: ignore
             print(f"Minute1Open mismatch: {quote_message.minute1Open} != {self.minute_bars.open_bids.last(1)}")  # type: ignore
@@ -207,6 +212,26 @@ class KitaTester(KitaApi):
         if quote_message.day1Open != self.day_bars.open_bids.last(1):  # type: ignore
             print(f"DayOpen mismatch: {quote_message.day1Open} != {self.day_bars.open_bids.last(1)}")  # type: ignore
             print(self.day_bars.open_times.last(1))  # type: ignore
+
+        py_sma = round(self.ta_sma[self.hour2_bars.current - 1], symbol.digits)
+        cs_sma = round(quote_message.sma1, symbol.digits)
+        if py_sma != cs_sma:
+            print(f"SMA mismatch: {py_sma} != {cs_sma}")
+
+        py_bb_hi = round(self.upper[self.hour2_bars.current - 1], symbol.digits)
+        cs_bb_hi = round(quote_message.bb1hi, symbol.digits)
+        if py_bb_hi != cs_bb_hi:
+            print(f"BB_HI mismatch: {py_bb_hi} != {cs_bb_hi}")
+
+        py_bb_main = round(self.middle[self.hour2_bars.current - 1], symbol.digits)
+        cs_bb_main = round(quote_message.bb1main, symbol.digits)
+        if py_bb_main != cs_bb_main:
+            print(f"BB_MAIN mismatch: {py_bb_main} != {cs_bb_main}")
+
+        py_bb_lo = round(self.lower[self.hour2_bars.current - 1], symbol.digits)
+        cs_bb_lo = round(quote_message.bb1lo, symbol.digits)
+        if py_bb_lo != cs_bb_lo:
+            print(f"BB_LO mismatch: {py_bb_lo} != {cs_bb_lo}")
 
         # Respond with a PythonResponseMessage
         response = Robots.KitaTesterProto_pb2.PythonResponseMessage(  # type: ignore

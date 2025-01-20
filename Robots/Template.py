@@ -1,7 +1,6 @@
 ﻿import numpy as np
 import talib  # type: ignore
 import time
-from math import sqrt
 from Api.KitaApiEnums import *
 from Api.KitaApi import KitaApi, Symbol
 from Api.CoFu import *

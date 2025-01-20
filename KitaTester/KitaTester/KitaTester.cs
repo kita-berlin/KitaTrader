@@ -31,6 +31,9 @@ namespace cAlgo.Robots
         private Bars mHour1bar;
         private Bars mHour2bar;
         private Bars mDay1bar;
+        private SimpleMovingAverage mSma1;
+        private BollingerBands mBb1;
+
         //private Semaphore mResultReady2PySemaphore;
         #endregion
 
@@ -46,6 +49,8 @@ namespace cAlgo.Robots
             mHour1bar = MarketData.GetBars(TimeFrame.Hour);
             mHour2bar = MarketData.GetBars(TimeFrame.Hour2);
             mDay1bar = MarketData.GetBars(TimeFrame.Daily);
+            mSma1 = Indicators.SimpleMovingAverage(mHour2bar.OpenPrices, 5);
+            mBb1 = Indicators.BollingerBands(mHour2bar.OpenPrices, 5, 2, MovingAverageType.Simple);
         }
 
         protected override void OnTick()
@@ -67,6 +72,10 @@ namespace cAlgo.Robots
                 Hour2Low = mHour2bar.Last(1).Low,
                 Hour2Close = mHour2bar.Last(1).Close,
                 Day1Timestamp = mDay1bar.Last(1).OpenTime.ToNativeMs(),
+                Sma1 = mSma1.Result.Last(1),
+                Bb1Main = mBb1.Main.Last(1),
+                Bb1Hi = mBb1.Top.Last(1),
+                Bb1Lo = mBb1.Bottom.Last(1)
             };
 
             // Write QuoteMessage to memory-mapped file

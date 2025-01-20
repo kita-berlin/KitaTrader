@@ -40,6 +40,8 @@ class Symbol:
     end_tz_dt: datetime = datetime.min
     bid: float = 0
     ask: float = 0
+    prev_bid: float = 0
+    prev_ask: float = 0
     broker_symbol_name: str = ""
     min_volume: float = 0
     max_volume: float = 0
@@ -513,6 +515,8 @@ class Symbol:
         for timeframe in self.bars_dictonary:
             start = self._load_bars(timeframe, self.api.robot.BacktestStartUtc)
             min_start = min(min_start, start)  # type:ignore
+
+        min_start = min_start.replace(hour=0, minute=0, second=0, microsecond=0)
 
         # check if tick data rate rquested and load it
         if 0 == self.quote_provider.data_rate:

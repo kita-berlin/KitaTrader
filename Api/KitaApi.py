@@ -597,6 +597,8 @@ class KitaApi:
             # endregion
 
             symbol.prev_time = symbol.time
+            symbol.prev_bid = symbol.bid
+            symbol.prev_ask = symbol.ask
 
         return False
 
