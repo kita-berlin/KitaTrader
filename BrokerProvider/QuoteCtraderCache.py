@@ -8,6 +8,7 @@ from Api.KitaApi import KitaApi, Symbol
 from Api.Bars import Bars
 from Api.KitaApiEnums import BidAsk
 from Api.QuoteProvider import QuoteProvider
+from Api.KitaApiEnums import *
 
 
 class QuoteCtraderCache(QuoteProvider):
@@ -28,7 +29,7 @@ class QuoteCtraderCache(QuoteProvider):
         self.cache_path = os.path.join(ctrader_path, self.symbol.name, "t1")
 
     def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, Bars]:
-        day_data: Bars = Bars(self.symbol.name, 0, 0)  # 0 = tick timeframe
+        day_data: Bars = Bars(self.symbol.name, 0, 0, DataMode.Preload)  # 0 = tick timeframe
         self.last_utc = run_utc = utc.replace(hour=0, minute=0, second=0, microsecond=0)
 
         path = os.path.join(self.cache_path, run_utc.strftime("%Y%m%d") + ".zticks")
@@ -39,13 +40,15 @@ class QuoteCtraderCache(QuoteProvider):
 
             # Process the byte array to extract data
             source_ndx = 0
+            self._prev_bid = self._prev_ask = 0
             while source_ndx < len(ba):
                 # Read epoc milliseconds timestamp (8 bytes long)
                 # Ensure the timestamp is localized to UTC
                 # Append the UTC time to day_data.open_times.data
-                day_data.open_times.data.append(
-                    datetime.fromtimestamp(struct.unpack_from("<q", ba, source_ndx)[0] / 1000.0, tz=pytz.UTC)
+                append_datetime = datetime.fromtimestamp(
+                    struct.unpack_from("<q", ba, source_ndx)[0] / 1000.0, tz=pytz.UTC
                 )
+
                 source_ndx += 8
 
                 # Read bid (8 bytes long)
@@ -64,26 +67,25 @@ class QuoteCtraderCache(QuoteProvider):
                     self._prev_ask = self._get_prevs_(utc, BidAsk.Ask, bid)
 
                 # Assign bid and ask values, rounding will be done by the caller
-                day_data.open_bids.data.append(
-                    (
-                        bid
-                        if bid != 0
-                        else (day_data.open_bids.data[-1] if len(day_data.open_bids.data) > 0 else self._prev_bid)
-                    )
-                )
-                day_data.open_asks.data.append(
-                    (
-                        ask
-                        if ask != 0
-                        else (day_data.open_asks.data[-1] if len(day_data.open_asks.data) > 0 else self._prev_ask)
-                    )
+                append_bid = bid if bid != 0 else self._prev_bid
+                append_ask = ask if ask != 0 else self._prev_ask
+
+                day_data.append(
+                    append_datetime,
+                    append_bid,
+                    0,
+                    0,
+                    0,
+                    0 if 0 == bid else 1,
+                    append_ask,
+                    0,
+                    0,
+                    0,
+                    0 if 0 == ask else 1,
                 )
 
-                day_data.volume_asks.data.append(1)
-                day_data.volume_bids.data.append(1)
-
-                self._prev_bid = day_data.open_bids.data[-1]
-                self._prev_ask = day_data.open_asks.data[-1]
+                self._prev_bid = append_bid
+                self._prev_ask = append_ask
 
         return "", self.last_utc, day_data
 

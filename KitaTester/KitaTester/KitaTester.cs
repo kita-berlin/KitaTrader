@@ -42,6 +42,7 @@ namespace cAlgo.Robots
             if (IsLaunchDebugger)
                 Debugger.Launch();
 
+            var indiPeriod = 5;
             mMemoryMappedFile = MemoryMappedFile.CreateOrOpen("TaskMemoryMap", 1024);
             mQuoteReady2PySemaphore = new Semaphore(0, 1, "QuoteReady2PySemaphore");
             mQuoteAccFromPySemaphore = new Semaphore(0, 1, "QuoteAccFromPySemaphore");
@@ -49,8 +50,8 @@ namespace cAlgo.Robots
             mHour1bar = MarketData.GetBars(TimeFrame.Hour);
             mHour2bar = MarketData.GetBars(TimeFrame.Hour2);
             mDay1bar = MarketData.GetBars(TimeFrame.Daily);
-            mSma1 = Indicators.SimpleMovingAverage(mHour2bar.OpenPrices, 5);
-            mBb1 = Indicators.BollingerBands(mHour2bar.OpenPrices, 5, 2, MovingAverageType.Simple);
+            mSma1 = Indicators.SimpleMovingAverage(mHour2bar.OpenPrices, indiPeriod);
+            mBb1 = Indicators.BollingerBands(mHour2bar.OpenPrices, indiPeriod, 2, MovingAverageType.Simple);
         }
 
         protected override void OnTick()

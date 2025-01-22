@@ -16,7 +16,7 @@ class MainConsole:
 
         # self.robot.AllDataStartUtc = datetime.min means earliest possible what the source can provide
         # End datetime always is yesterday. Cannot be today because today's data are not complete yet
-        self.robot.AllDataStartUtc = datetime.strptime("5.12.2024", "%d.%m.%Y")
+        self.robot.AllDataStartUtc = datetime.strptime("2.1.2025", "%d.%m.%Y")
         # self.robot.AllDataStartUtc = datetime.min
 
         # Platform mode how the robot will be used by the platform
@@ -28,7 +28,7 @@ class MainConsole:
         self.robot.DataPath = "$(OneDrive)/KitaData/cfd"
 
         # Preload data for the whole period or load data during the backtest run
-        self.robot.DataMode = DataMode.Online
+        self.robot.DataMode = DataMode.Preload
 
         # Paper trading initial account settings
         self.robot.AccountInitialBalance = 10000
@@ -41,7 +41,7 @@ class MainConsole:
         # 2. Define the backtest time window
         # region
         # self.robot.BacktestStartUtc = datetime.min
-        self.robot.BacktestStartUtc = datetime.strptime("7.1.2025", "%d.%m.%Y")
+        self.robot.BacktestStartUtc = datetime.strptime("8.1.2025", "%d.%m.%Y")
 
         # self.robot.BacktestEndUtc = datetime.strptime("10.12.2024", "%d.%m.%Y")
         self.robot.BacktestEndUtc = datetime.max

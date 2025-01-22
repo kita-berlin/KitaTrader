@@ -76,10 +76,10 @@ class KitaTester(KitaApi):
 
         # 4. Define one or more bars (optional)
         self.indi_period = 5
-        symbol.request_bars(Constants.SEC_PER_HOUR, self.indi_period)
+        symbol.request_bars(Constants.SEC_PER_HOUR, 2)
         symbol.request_bars(2 * Constants.SEC_PER_HOUR, self.indi_period)
-        symbol.request_bars(Constants.SEC_PER_MINUTE, self.indi_period)
-        symbol.request_bars(Constants.SEC_PER_DAY, self.indi_period)
+        symbol.request_bars(Constants.SEC_PER_MINUTE, 2)
+        symbol.request_bars(Constants.SEC_PER_DAY, 2)
 
         # Load kernel32.dll for semaphore operations
         self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -172,7 +172,7 @@ class KitaTester(KitaApi):
             print(f"Raw data: {serialized_data}")  # type: ignore
             raise
 
-        if -1 == quote_message.timestamp:
+        if -1 == quote_message.timestamp:  # type: ignore
             print("Received exit signal from C#")
             self.stop()
             return
@@ -188,8 +188,8 @@ class KitaTester(KitaApi):
         if quote_message.bid != symbol.bid:  # type: ignore
             print(f"Bid mismatch: {quote_message.bid} != {symbol.bid}")  # type: ignore
 
-        # if quote_message.ask != symbol.ask:  # type: ignore
-        #     print(f"Ask mismatch: {quote_message.ask} != {symbol.ask}")  # type: ignore
+        if quote_message.ask != symbol.ask:  # type: ignore
+            print(f"Ask mismatch: {quote_message.ask} != {symbol.ask}")  # type: ignore
 
         if quote_message.minute1Open != self.minute_bars.open_bids.last(1):  # type: ignore
             print(f"Minute1Open mismatch: {quote_message.minute1Open} != {self.minute_bars.open_bids.last(1)}")  # type: ignore
@@ -200,8 +200,8 @@ class KitaTester(KitaApi):
         if quote_message.hour2Open != self.hour2_bars.open_bids.last(1):  # type: ignore
             print(f"Hour2Open mismatch: {quote_message.hour2Open} != {self.hour2_bars.open_bids.last(1)}")  # type: ignore
 
-        if quote_message.minute1Open != self.minute_bars.open_bids.last(1):  # type: ignore
-            print(f"Minute1Close mismatch: {quote_message.minute1Open} != {self.minute_bars.close_bids.last(1)}")  # type: ignore
+        if quote_message.day1Open != self.day_bars.open_bids.last(1):  # type: ignore
+            print(f"DayOpen mismatch: {quote_message.day1Open} != {self.day_bars.open_bids.last(1)}")  # type: ignore
 
         if quote_message.hour1Close != self.hour_bars.close_bids.last(1):  # type: ignore
             print(f"Hour1Close mismatch: {quote_message.hour1Close} != {self.hour_bars.close_bids.last(1)}")  # type: ignore
@@ -214,26 +214,22 @@ class KitaTester(KitaApi):
             print(message_time, symbol.time)
             print(f"Timestamp mismatch: {quote_message.timestamp / 1000} != {symbol.time.timestamp()}")  # type: ignore
 
-        if quote_message.day1Open != self.day_bars.open_bids.last(1):  # type: ignore
-            print(f"DayOpen mismatch: {quote_message.day1Open} != {self.day_bars.open_bids.last(1)}")  # type: ignore
-            print(self.day_bars.open_times.last(1))  # type: ignore
-
-        py_sma = round(self.ta_sma[self.hour2_bars.current - 1], symbol.digits)
+        py_sma = round(self.ta_sma[self.hour2_bars.read_index-2], symbol.digits)
         cs_sma = round(quote_message.sma1, symbol.digits)
         if py_sma != cs_sma:
             print(f"SMA mismatch: {py_sma} != {cs_sma}")
 
-        py_bb_hi = round(self.upper[self.hour2_bars.current - 1], symbol.digits)
+        py_bb_hi = round(self.upper[self.hour2_bars.read_index - 2], symbol.digits)
         cs_bb_hi = round(quote_message.bb1hi, symbol.digits)
         if py_bb_hi != cs_bb_hi:
             print(f"BB_HI mismatch: {py_bb_hi} != {cs_bb_hi}")
 
-        py_bb_main = round(self.middle[self.hour2_bars.current - 1], symbol.digits)
+        py_bb_main = round(self.middle[self.hour2_bars.read_index - 2], symbol.digits)
         cs_bb_main = round(quote_message.bb1main, symbol.digits)
         if py_bb_main != cs_bb_main:
             print(f"BB_MAIN mismatch: {py_bb_main} != {cs_bb_main}")
 
-        py_bb_lo = round(self.lower[self.hour2_bars.current - 1], symbol.digits)
+        py_bb_lo = round(self.lower[self.hour2_bars.read_index - 2], symbol.digits)
         cs_bb_lo = round(quote_message.bb1lo, symbol.digits)
         if py_bb_lo != cs_bb_lo:
             print(f"BB_LO mismatch: {py_bb_lo} != {cs_bb_lo}")
