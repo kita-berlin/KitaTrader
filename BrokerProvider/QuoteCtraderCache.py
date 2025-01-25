@@ -86,6 +86,8 @@ class QuoteCtraderCache(QuoteProvider):
 
                 self._prev_bid = append_bid
                 self._prev_ask = append_ask
+        else:
+            return "No data", self.last_utc, day_data
 
         return "", self.last_utc, day_data
 
