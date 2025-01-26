@@ -347,20 +347,34 @@ class Symbol:
                     self._append_rows_to_zip(hour_folder, run_utc, self.name, rows)
 
                     # do the daily bars; a new day starts at market open times, not at UTC :-(
+                    is_have_yesterday = True
                     if 0 == yesterday_minutes.count:
-                        error, quote_provider_dt, yesterday_ticks = self.quote_provider.get_day_at_utc(run_utc - timedelta(1))
-                        assert "" == error, error
-                        self._resize_bars(yesterday_ticks)
-                        yesterday_minutes = self._resample(yesterday_ticks, Constants.SEC_PER_MINUTE)
+                        error, quote_provider_dt, yesterday_ticks = self.quote_provider.get_day_at_utc(
+                            run_utc - timedelta(1)
+                        )
+                        if "No data" == error:
+                            is_have_yesterday = False
+                        else:
+                            assert "" == error, error
+                            self._resize_bars(yesterday_ticks)
+                            yesterday_minutes = self._resample(yesterday_ticks, Constants.SEC_PER_MINUTE)
 
-                    if len(minute_bars.open_times.data) > 0 and len(yesterday_minutes.open_times.data) > 0:
-                        utc_open_delta = self._local_time_of_day_to_utc(self.market_open_delta, self.market_data_tz)
+                    if (
+                        len(minute_bars.open_times.data) > 0
+                        and is_have_yesterday
+                        and len(yesterday_minutes.open_times.data) > 0
+                    ):
+                        utc_open_delta = self._local_time_of_day_to_utc(
+                            self.market_open_delta, self.market_data_tz
+                        )
 
                         market_open_utc_yesterday = (
                             yesterday_minutes.open_times.data[0].replace(hour=0, minute=0, second=0, microsecond=0)
                             + utc_open_delta
                         )
-                        idx_start_yesterday = bisect_left(yesterday_minutes.open_times.data, market_open_utc_yesterday)
+                        idx_start_yesterday = bisect_left(
+                            yesterday_minutes.open_times.data, market_open_utc_yesterday
+                        )
 
                         market_open_utc_today = (
                             minute_bars.open_times.data[0].replace(hour=0, minute=0, second=0, microsecond=0)
@@ -383,70 +397,70 @@ class Symbol:
                                 yesterday_minutes.open_bids.data[idx_start_yesterday:],
                                 minute_bars.open_bids.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
                         local_minute_bars.high_bids.data = np.concatenate(
                             (
                                 yesterday_minutes.high_bids.data[idx_start_yesterday:],
                                 minute_bars.high_bids.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
                         local_minute_bars.low_bids.data = np.concatenate(
                             (
                                 yesterday_minutes.low_bids.data[idx_start_yesterday:],
                                 minute_bars.low_bids.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
                         local_minute_bars.close_bids.data = np.concatenate(
                             (
                                 yesterday_minutes.close_bids.data[idx_start_yesterday:],
                                 minute_bars.close_bids.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
                         local_minute_bars.volume_bids.data = np.concatenate(
                             (
                                 yesterday_minutes.volume_bids.data[idx_start_yesterday:],
                                 minute_bars.volume_bids.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
 
                         local_minute_bars.open_asks.data = np.concatenate(
                             (
                                 yesterday_minutes.open_asks.data[idx_start_yesterday:],
                                 minute_bars.open_asks.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
                         local_minute_bars.high_asks.data = np.concatenate(
                             (
                                 yesterday_minutes.high_asks.data[idx_start_yesterday:],
                                 minute_bars.high_asks.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
                         local_minute_bars.low_asks.data = np.concatenate(
                             (
                                 yesterday_minutes.low_asks.data[idx_start_yesterday:],
                                 minute_bars.low_asks.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
                         local_minute_bars.close_asks.data = np.concatenate(
                             (
                                 yesterday_minutes.close_asks.data[idx_start_yesterday:],
                                 minute_bars.close_asks.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
                         local_minute_bars.volume_asks.data = np.concatenate(
                             (
                                 yesterday_minutes.volume_asks.data[idx_start_yesterday:],
                                 minute_bars.volume_asks.data[:idx_start_today],
                             )
-                        )  # type: ignore
+                        )
 
                         daily_bars = self._resample(local_minute_bars, Constants.SEC_PER_DAY)
-                        daily_bars.open_times.data += utc_open_delta  # type:ignore
+                        daily_bars.open_times.data += utc_open_delta  # type: ignore
                         rows: list[list[Any]] = []
                         for i in range(daily_bars.count):
                             rows.append(  # type:ignore
                                 [
-                                    daily_bars.open_times.data[i].strftime("%Y%m%d %H:%M"),
+                                    daily_bars.open_times.data[i].strftime("%Y%m%d %H:%M"),  # type: ignore
                                     f"{daily_bars.open_bids.data[i]:.{self.digits}f}",
                                     f"{daily_bars.high_bids.data[i]:.{self.digits}f}",
                                     f"{daily_bars.low_bids.data[i]:.{self.digits}f}",
