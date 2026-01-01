@@ -59,7 +59,11 @@ class TimeSeries:
         """
         if index >= self._parent.count:
             return datetime.min
-        return self.data[(self._parent.read_index - index - 1) % self._size]
+        # The data is appended sequentially.
+        # read_index points to the current active bar index (0 to count-1)
+        # last(0) calls for data at read_index
+        # last(1) calls for data at read_index - 1
+        return self.data[(self._parent.read_index - index) % self._size]
 
 
 # end of file

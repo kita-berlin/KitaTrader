@@ -20,10 +20,11 @@ class QuoteProvider(ABC):
     assets_path: str
     provider_name: str
     bar_folder: dict[int, str] = {
-        0: "tick",
-        60: "minute",
-        3600: "hour",
-        86400: "daily",
+        0: "t1",
+        60: "m1",
+        3600: "h1",
+        14400: "h4",
+        86400: "D1",
     }
     symbols: list[str] = []
 

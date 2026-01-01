@@ -1,0 +1,4 @@
+Name,Price,Spread,RollLong,RollShort,PIP,PIPCost,MarginCost,MarketOpen-Closing TimeOfDay,MinimumVolume,Commission,QCSymbol,Leverage,Lotsize,Base,Quote,Country,Group,Description
+GBPUSD,1.27000,0.00002,0,0,0.0001,10,0,UTC,1000,0,GBPUSD,500,100000,GBP,USD,US,FOREX,British Pound vs US Dollar
+EURUSD,1.10000,0.00002,0,0,0.0001,10,0,UTC,1000,0,EURUSD,500,100000,EUR,USD,US,FOREX,Euro vs US Dollar
+

@@ -140,7 +140,7 @@ class Symbol:
             self,
         )
         if "" != error:
-            print(error)
+            # Error - messages removed (use log files)
             exit()
 
     def normalize_volume_in_units(
@@ -200,7 +200,7 @@ class Symbol:
         # if all data are requested (datetime.min == self.api.AllDataStartUtc), find the first quote
         quote_provider_dt = self.api.AllDataStartUtc
         if datetime.min == self.api.AllDataStartUtc:
-            print("Finding first quote of " + self.name)
+            # Finding first quote - messages removed
             error, quote_provider_dt = self.quote_provider.get_first_datetime()
             assert "" == error, error
         self.api.AllDataStartUtc = quote_provider_dt.replace(tzinfo=UTC)
@@ -253,7 +253,7 @@ class Symbol:
         )
         os.makedirs(daily_folder, exist_ok=True)
 
-        print(f"Checking {self.name} from " + self.api.AllDataStartUtc.strftime("%d.%m.%Y"))
+        # Checking symbol - messages removed
         run_utc = self.api.AllDataStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
         one_day_provider_data: Bars = Bars(self.name, 0, 0, self.api.DataMode)
         yesterday_minutes = Bars(self.name, Constants.SEC_PER_MINUTE, 0, self.api.DataMode)
@@ -268,7 +268,7 @@ class Symbol:
                     assert "" == error, error
                 self._resize_bars(one_day_provider_data)
 
-                print("Getting " + run_utc.strftime("%d.%m.%Y"))
+                # Getting data - messages removed
                 daily_tick_csv_buffer = StringIO()
                 daily_tick_csv_writer = csv.writer(daily_tick_csv_buffer)
                 daily_minute_csv_buffer = StringIO()
@@ -525,41 +525,78 @@ class Symbol:
         bars.volume_asks.data = np.delete(bars.volume_asks.data, np.s_[bars.count :])
 
     def _resample(self, bars: Bars, new_timeframe_seconds: int) -> Bars:
+        # Slice all data arrays to match bars.count (only use valid data, not the full buffer)
+        # The data arrays may be larger than bars.count due to buffer pre-allocation
+        count = bars.count
+        
         # Extract the data into a DataFrame
         if 0 == bars.timeframe_seconds:
             data = {
-                "open_bids": bars.open_bids.data,
-                "high_bids": bars.open_bids.data,
-                "low_bids": bars.open_bids.data,
-                "close_bids": bars.open_bids.data,
-                "volume_bids": bars.volume_bids.data,
-                "open_asks": bars.open_asks.data,
-                "high_asks": bars.open_asks.data,
-                "low_asks": bars.open_asks.data,
-                "close_asks": bars.open_asks.data,
-                "volume_asks": bars.volume_asks.data,
+                "open_bids": bars.open_bids.data[:count],
+                "high_bids": bars.open_bids.data[:count],
+                "low_bids": bars.open_bids.data[:count],
+                "close_bids": bars.open_bids.data[:count],
+                "volume_bids": bars.volume_bids.data[:count],
+                "open_asks": bars.open_asks.data[:count],
+                "high_asks": bars.open_asks.data[:count],
+                "low_asks": bars.open_asks.data[:count],
+                "close_asks": bars.open_asks.data[:count],
+                "volume_asks": bars.volume_asks.data[:count],
             }
         else:
             data = {
-                "open_bids": bars.open_bids.data,
-                "high_bids": bars.high_bids.data,
-                "low_bids": bars.low_bids.data,
-                "close_bids": bars.close_bids.data,
-                "volume_bids": bars.volume_bids.data,
-                "open_asks": bars.open_asks.data,
-                "high_asks": bars.high_asks.data,
-                "low_asks": bars.low_asks.data,
-                "close_asks": bars.close_asks.data,
-                "volume_asks": bars.volume_asks.data,
+                "open_bids": bars.open_bids.data[:count],
+                "high_bids": bars.high_bids.data[:count],
+                "low_bids": bars.low_bids.data[:count],
+                "close_bids": bars.close_bids.data[:count],
+                "volume_bids": bars.volume_bids.data[:count],
+                "open_asks": bars.open_asks.data[:count],
+                "high_asks": bars.high_asks.data[:count],
+                "low_asks": bars.low_asks.data[:count],
+                "close_asks": bars.close_asks.data[:count],
+                "volume_asks": bars.volume_asks.data[:count],
             }
 
-        index = pd.to_datetime(bars.open_times.data)  # type: ignore
+        # Convert numpy array of datetime objects to pandas DatetimeIndex
+        # bars.open_times.data is a numpy array with dtype=object containing datetime objects
+        # We need to convert it properly for pandas
+        if count > 0:
+            # Get only the valid data (first count elements)
+            times_array = bars.open_times.data[:count]
+            # Convert to list if needed, then to pandas DatetimeIndex
+            # pandas.to_datetime can handle numpy arrays of datetime objects, but we need to ensure proper format
+            try:
+                index = pd.to_datetime(times_array)  # type: ignore
+            except (TypeError, ValueError):
+                # Fallback: convert to list of datetime objects first
+                times_list = [dt for dt in times_array if dt is not None]
+                index = pd.to_datetime(times_list)  # type: ignore
+        else:
+            # Empty bars - create empty DatetimeIndex
+            index = pd.DatetimeIndex([])  # type: ignore
+        
         df = pd.DataFrame(data, index=index)  # type: ignore
 
         # Resample the DataFrame
         rule = self._seconds_to_pandas_timeframe(new_timeframe_seconds)  # Resampling rule
+        
+        # Match cTrader alignment (Anchor to 17:00 New York Time)
+        origin = 'start_day' # Default
+        # Apply to all intraday bars larger than or equal to 1 hour, and Daily bars
+        if new_timeframe_seconds >= 3600 and not df.empty:
+            first_dt = df.index[0] # UTC timestamp
+            ny_tz = pytz.timezone('America/New_York')
+            # Convert first timestamp to NY time
+            ny_dt = first_dt.astimezone(ny_tz)
+            # Anchor to 17:00 NY of the same day
+            # Use 17:00 NY of the date of the first tick
+            anchor_ny = ny_dt.replace(hour=17, minute=0, second=0, microsecond=0)
+            # Convert back to UTC to use as origin
+            origin = anchor_ny.astimezone(pytz.UTC)
+            # DEBUG: Resample - messages removed
+
         resampled = (
-            df.resample(rule)  # type: ignore
+            df.resample(rule, origin=origin)  # type: ignore
             .apply(
                 {
                     "open_bids": "first",
@@ -593,7 +630,8 @@ class Symbol:
         new_bars.close_asks.data = resampled["close_asks"].to_numpy(dtype=np.float64)  # type: ignore
         new_bars.volume_asks.data = resampled["volume_asks"].to_numpy(dtype=np.float64)  # type: ignore
 
-        new_bars.count = new_bars.size  # indicate full
+        new_bars.count = len(resampled)
+        # DEBUG: Resampled - messages removed
         return new_bars
 
     def _append_rows_to_zip(self, folder: str, run_utc: datetime, symbol: str, new_rows: list[list[Any]]) -> None:
@@ -630,7 +668,7 @@ class Symbol:
     def make_time_aware(self):
         if datetime.min == self.api.robot.BacktestStartUtc:
             self.api.robot.BacktestStartUtc = self.api.AllDataStartUtc
-            print("Warning: BacktestStartUtc is set to minimum, no lookback data are possible")
+            # Warning: BacktestStartUtc is set to minimum - messages removed
         else:
             self.api.robot.BacktestStartUtc = self.api.robot.BacktestStartUtc.replace(tzinfo=UTC)
 
@@ -640,28 +678,50 @@ class Symbol:
             self.api.robot.BacktestEndUtc = self.api.robot.BacktestEndUtc.replace(tzinfo=UTC)
 
         # set symbol's local time zones
-        self.start_tz_dt = self.api.BacktestStartUtc.astimezone(self.time_zone) + timedelta(
+        self.start_tz_dt = self.api.robot.BacktestStartUtc.astimezone(self.time_zone) + timedelta(
             hours=self.normalized_hours_offset
         )
 
-        self.end_tz_dt = self.api.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
+        self.end_tz_dt = self.api.robot.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
             hours=self.normalized_hours_offset
         )
 
     def load_datarate_and_bars(self) -> str:
-        # find smallest start time of all data rates and bars while loading all bars
-        min_start = self.api.AllDataEndUtc
-        for timeframe in self.bars_dictonary:
-            start = self._load_bars(timeframe, self.api.robot.BacktestStartUtc)
+        # check if tick data rate requested and load it first
+        # This is needed to resample bars from ticks if bar files don't exist
+        min_start = self.api.AllDataStartUtc
+        if 0 == self.quote_provider.data_rate:
+            # Load ticks first - we'll need them to build bars if files don't exist
+            self.rate_data = self._load_ticks(min_start)
+            if self.rate_data.count > 0:
+                min_start = self.rate_data.open_times.data[0]
+            else:
+                min_start = self.api.robot.BacktestStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            if min_start.tzinfo is None:
+                min_start = min_start.replace(tzinfo=pytz.UTC)
+        
+    # find smallest start time of all data rates and bars while loading all bars
+        for timeframe in list(self.bars_dictonary.keys()):  # Convert to list to avoid RuntimeError during iteration
+            start = self._load_bars(timeframe, self.api.AllDataStartUtc)
+            if start is None:
+                start = datetime.min.replace(tzinfo=pytz.UTC)
+            elif start.tzinfo is None and start != datetime.min:
+                start = start.replace(tzinfo=pytz.UTC)
+            # Ensure min_start is also aware if start is aware, or handle datetime.min
+            if min_start.tzinfo is None and min_start != datetime.min:
+                 min_start = min_start.replace(tzinfo=pytz.UTC)
+            
+            # If one is min (naive) and other is aware, replace min with aware min
+            if start == datetime.min: start = start.replace(tzinfo=pytz.UTC)
+            if min_start == datetime.min: min_start = min_start.replace(tzinfo=pytz.UTC)
+
             min_start = min(min_start, start)  # type:ignore
 
         min_start = min_start.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        # check if tick data rate rquested and load it
-        if 0 == self.quote_provider.data_rate:
-            # get ticks from quote provider
-            self.rate_data = self._load_ticks(min_start)
-        else:
+        # If using bar data rate, set rate_data to that
+        if 0 != self.quote_provider.data_rate:
             self.rate_data = self.bars_dictonary[self.quote_provider.data_rate]
 
         self.symbol_on_tick()  # set initial time, bid, ask for on_start()
@@ -710,90 +770,84 @@ class Symbol:
             f.write(zip_buffer.getvalue())
 
     def _load_ticks(self, start: datetime) -> Bars:
-        print(f"\nLoading {self.name} ticks from " + start.strftime("%d.%m.%Y"))
-        bars = Bars(self.name, 0, 0, self.api.DataMode)
-        folder = os.path.join(
-            self.api.DataPath,
-            self.quote_provider.provider_name,
-            "tick",
-            f"{self.name}",
-        )
-
-        # Gather and sort files by date
-        file_dates = self._get_sorted_file_dates(folder)
-
-        # Perform binary search
-        start_idx = bisect_left(file_dates, start)
-
-        # line example: 79212312,1.65616,1.65694
-        # milliseconds offset, bid, ask
-        # Loop over the files starting from start_idx
-        for file_date in file_dates[start_idx:]:
-            print("Loading " + self.name + " " + file_date.strftime("%Y-%m-%d"))
-            if file_date > self.api.robot.BacktestEndUtc:
-                break
-
-            # Path to the zip file
-            zip_path = os.path.join(folder, file_date.strftime("%Y%m%d_quote.zip"))
-
-            # Unzip and load data from CSV
-            with ZipFile(zip_path, "r") as zip_file:
-                for csv_file_name in zip_file.namelist():
-                    with zip_file.open(csv_file_name) as csv_file:
-                        # Read and decode CSV file contents
-                        decoded = csv_file.read().decode("utf-8")
-                        reader = csv.reader(decoded.splitlines())
-                        for row in reader:
-                            if len(row) > 0:
-                                bars.append(
-                                    (file_date + timedelta(milliseconds=float(row[0]))).replace(tzinfo=pytz.UTC),
-                                    float(row[1]),  # open_bid
-                                    0,  # high_bid
-                                    0,  # low_bid
-                                    0,  # close_bid
-                                    1,  # volume_bid
-                                    float(row[2]),  # open_ask
-                                    0,  # high_ask
-                                    0,  # low_ask
-                                    0,  # close_ask
-                                    1,  # volume_ask
-                                )
-
-        return bars
+        # Loading messages removed - use log files for debugging
+        all_ticks = Bars(self.name, 0, 0, self.api.DataMode)
+        
+        # Ensure start is aware
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=pytz.UTC)
+            
+        current_day = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_day = self.api.robot.BacktestEndUtc.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        days_to_load = (end_day - current_day).days + 1
+        loaded_count = 0
+        
+        while current_day <= end_day:
+            error, _, day_bars = self.quote_provider.get_day_at_utc(current_day)
+            if error == "":
+                # Merge day_bars into all_ticks
+                # We need to access internal arrays for performance
+                count = day_bars.count
+                if count > 0:
+                    for i in range(count):
+                        all_ticks.append(
+                            day_bars.open_times.data[i],
+                            day_bars.open_bids.data[i],
+                            0, 0, 0, # high, low, close bid
+                            day_bars.volume_bids.data[i],
+                            day_bars.open_asks.data[i],
+                            0, 0, 0, # high, low, close ask
+                            day_bars.volume_asks.data[i]
+                        )
+            
+            loaded_count += 1
+            # Progress messages removed - use log files for debugging
+                
+            current_day += timedelta(days=1)
+            
+        # Summary message removed - use log files for debugging
+            
+        return all_ticks
 
     def _load_bars(self, timeframe: int, start: datetime) -> datetime:
-        print(f"\nLoading {self.name} {timeframe} seconds OHLC bars from " + start.strftime("%d.%m.%Y"))
-        look_back_start_datetime = datetime.min
+        # Loading messages removed - use log files for debugging
+        
+        # Ensure start is aware
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=pytz.UTC)
+            
+        look_back_start_datetime = datetime.min.replace(tzinfo=pytz.UTC)
 
-        if timeframe < Constants.SEC_PER_HOUR:
-            if Constants.SEC_PER_MINUTE == timeframe:
-                minute_bars = self._load_minute_bars(timeframe, start)  # load 1 minute bars
-                self.bars_dictonary[timeframe] = minute_bars
-                look_back_start_datetime = minute_bars.open_times.data[0]  # get absolute 1st element
-            else:
-                resampled_bars = self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
-                self.bars_dictonary[timeframe] = resampled_bars
-                look_back_start_datetime = resampled_bars.open_times.data[0]  # get absolute 1st element
+        # 1. Attempt to load from historical bar files (zip)
+        try:
+            look_back_start_datetime = self._load_hour_or_daily_bar(timeframe, start)
+            if timeframe in self.bars_dictonary and self.bars_dictonary[timeframe].count > 0:
+                # Bar file loaded - messages removed
+                return look_back_start_datetime
+        except Exception as e:
+            # Bar file load skipped or failed - messages removed
+            pass
 
-        elif timeframe < Constants.SEC_PER_DAY:
-            if Constants.SEC_PER_HOUR == timeframe:
-                look_back_start_datetime = self._load_hour_or_daily_bar(
-                    Constants.SEC_PER_HOUR, start
-                )  # load 1 hour bars
-            else:
-                resampled_bars = self._resample(self.bars_dictonary[Constants.SEC_PER_HOUR], timeframe)
-                self.bars_dictonary[timeframe] = resampled_bars
-                look_back_start_datetime = resampled_bars.open_times.data[0]  # get absolute 1st element
+        # 2. Fallback: Resample from M1 bars if available (only for H1+)
+        if timeframe >= Constants.SEC_PER_HOUR:
+            if Constants.SEC_PER_MINUTE in self.bars_dictonary and self.bars_dictonary[Constants.SEC_PER_MINUTE].count > 0:
+                # Resampling from M1 bars - messages removed
+                resampled = self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
+                self.bars_dictonary[timeframe] = resampled
+                if resampled.count > 0:
+                    return resampled.open_times.data[0]
 
-        else:
-            if Constants.SEC_PER_DAY == timeframe:
-                look_back_start_datetime = self._load_hour_or_daily_bar(
-                    Constants.SEC_PER_DAY, start
-                )  # load 1 day bars
-            else:
-                resampled_bars = self._resample(self.bars_dictonary[Constants.SEC_PER_DAY], timeframe)
-                self.bars_dictonary[timeframe] = resampled_bars
-                look_back_start_datetime = resampled_bars.open_times.data[0]  # get absolute 1st element
+        # 3. Fallback: Resample from Ticks
+        if hasattr(self, 'rate_data') and self.rate_data.count > 0:
+            # Resampling from ticks - messages removed
+            resampled = self._resample(self.rate_data, timeframe)
+            self.bars_dictonary[timeframe] = resampled
+            if resampled.count > 0:
+                return resampled.open_times.data[0]
+
+        # Warning: No data found - messages removed
+        return look_back_start_datetime
 
         return look_back_start_datetime
 
@@ -850,9 +904,13 @@ class Symbol:
                     else:
                         look_back_run = 0  # break
 
+        # Count files to load for summary
+        files_to_load = [fd for fd in file_dates[start_idx:] if fd <= self.api.robot.BacktestEndUtc]
+        total_files = len(files_to_load)
+        loaded_count = 0
+
         # Process files starting from BacktestStartUtc
         for file_date in file_dates[start_idx:]:
-            print("Loading " + self.name + " " + file_date.strftime("%Y-%m-%d"))
             if file_date > self.api.robot.BacktestEndUtc:
                 break
 
@@ -880,6 +938,16 @@ class Symbol:
                                     float(row[9]),
                                     float(row[10]),
                                 )
+            
+            loaded_count += 1
+            # Print progress every 10 files or at start/end
+            if loaded_count == 1 or loaded_count == total_files or loaded_count % 10 == 0:
+                # Loading bar files - messages removed
+                pass
+
+        if total_files > 0:
+            # Bar files loaded - messages removed
+            pass
 
         return bars
         self.bars_dictonary[Constants.SEC_PER_MINUTE]

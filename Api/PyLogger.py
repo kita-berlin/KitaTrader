@@ -32,8 +32,7 @@ class PyLogger:
         return ret_val
 
     def make_log_path(self):
-        # terminal_common_data_path = os.path.join(os.environ.get("CALGO_SOURCES"), "..", "LogFiles")
-        return os.path.join("Files", "Algo.csv")
+        return os.path.join(r"C:\Users\HMz\Documents\cAlgo\Logfiles", "Algo.csv")
 
     def add_text(self, text: str):
         if not self.is_open:

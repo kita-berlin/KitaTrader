@@ -1,0 +1,114 @@
+{
+  "description": "Ultron Strategy Optimizer Configuration - KitaTrader",
+  "version": "1.0",
+  
+  "data": {
+    "source_path": "G:\\Meine Ablage\\ShareFile\\RoadToSuccess - General\\Historical Data - UTC\\NinjaTrader\\6B\\QuantConnect Seconds",
+    "symbol": "EURUSD",
+    "start_date": "2025-01-01",
+    "end_date": "2025-12-31",
+    "cache_path": "data"
+  },
+  
+  "optimization": {
+    "method": "genetic",
+    "train_days": 6,
+    "test_days": 2,
+    "anchor": false,
+    "population_size": 100,
+    "generations": 30,
+    "cpu_cores_percent": 0.5,
+    "fitness_function": "calmar"
+  },
+  
+  "parameter_bounds": {
+    "period1": {
+      "min": 2,
+      "max": 15,
+      "step": 1,
+      "type": "int",
+      "description": "Fast WMA period"
+    },
+    "period2": {
+      "min": 2,
+      "max": 15,
+      "step": 1,
+      "type": "int",
+      "description": "Medium-fast WMA period"
+    },
+    "period3": {
+      "min": 30,
+      "max": 70,
+      "step": 1,
+      "type": "int",
+      "description": "Medium-slow SMA period"
+    },
+    "period4": {
+      "min": 2,
+      "max": 15,
+      "step": 1,
+      "type": "int",
+      "description": "Slow SMA period"
+    },
+    "ma3_ma4_diff_max_val": {
+      "min": 0.0001,
+      "max": 0.001,
+      "step": 0.0001,
+      "type": "float",
+      "description": "MA3-MA4 max difference filter"
+    },
+    "ma1_ma2_min_val": {
+      "min": 0.00001,
+      "max": 0.0005,
+      "step": 0.00001,
+      "type": "float",
+      "description": "Minimum MA1-MA2 difference filter"
+    },
+    "ma1_ma2_max_val": {
+      "min": 0.0001,
+      "max": 0.001,
+      "step": 0.0001,
+      "type": "float",
+      "description": "Maximum MA1-MA2 difference filter"
+    },
+    "take_profit_ticks": {
+      "min": 50,
+      "max": 2000,
+      "step": 50,
+      "type": "int",
+      "description": "Take profit in ticks (1 tick = 0.00001)"
+    },
+    "stop_loss_ticks": {
+      "min": 50,
+      "max": 2000,
+      "step": 50,
+      "type": "int",
+      "description": "Stop loss in ticks (1 tick = 0.00001)"
+    }
+  },
+  
+  "fitness_weights": {
+    "calmar_ratio": 100,
+    "profit_bonus": 5,
+    "trades_min": 2,
+    "trades_good": 5,
+    "inactive_penalty": 100
+  },
+  
+  "default_strategy_params": {
+    "period1": 10,
+    "period2": 20,
+    "period3": 50,
+    "period4": 100,
+    "ma1_ma2_min_val": 0.00005,
+    "ma1_ma2_max_val": 0.00025,
+    "ma3_ma4_diff_max_val": 0.00025,
+    "take_profit_ticks": 1000,
+    "stop_loss_ticks": 500,
+    "volume": 1,
+    "trade_direction": "Both",
+    "symbol_name": "GBPUSD",
+    "data_source": "QuantConnect"
+  }
+}
+

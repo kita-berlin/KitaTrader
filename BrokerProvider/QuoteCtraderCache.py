@@ -34,12 +34,14 @@ class QuoteCtraderCache(QuoteProvider):
 
         path = os.path.join(self.cache_path, run_utc.strftime("%Y%m%d") + ".zticks")
         if os.path.exists(path):
+            print(f"Loading cache file: {path}")
             # Read the compressed file into a byte array
             with gzip.open(path, "rb") as decompressor:
                 ba = decompressor.read()
 
             # Process the byte array to extract data
             source_ndx = 0
+            count = 0
             self._prev_bid = self._prev_ask = 0
             while source_ndx < len(ba):
                 # Read epoc milliseconds timestamp (8 bytes long)
@@ -66,9 +68,10 @@ class QuoteCtraderCache(QuoteProvider):
                 if 0 == self._prev_ask and 0 == ask:
                     self._prev_ask = self._get_prevs_(utc, BidAsk.Ask, bid)
 
-                # Assign bid and ask values, rounding will be done by the caller
-                append_bid = bid if bid != 0 else self._prev_bid
-                append_ask = ask if ask != 0 else self._prev_ask
+                # Assign bid and ask values
+                # Ensure rounding to symbol digits to avoid floating point artifacts
+                append_bid = round(bid if bid != 0 else self._prev_bid, self.symbol.digits)
+                append_ask = round(ask if ask != 0 else self._prev_ask, self.symbol.digits)
 
                 day_data.append(
                     append_datetime,

@@ -44,7 +44,7 @@ class Bars:
         self.timeframe_seconds = timeframe_seconds
         self.look_back = look_back
         self.data_mode = data_mode
-        self.read_index = 0  # gets a +1 at symbol_on_tick before accessing the data
+        self.read_index = -1  # gets a +1 at symbol_on_tick before accessing the data
         size = 1000  # initial size of the buffer
 
         # Create initial OHLC data
@@ -117,9 +117,23 @@ class Bars:
 
         if DataMode.Preload == self.data_mode:
             # synchronize the bars with  the tick time open time by setting their read_index index
-            while self.read_index < self.count and time >= self.open_times.last(-1):
-                self.read_index += 1
-                self.is_new_bar = True
+            # Check for range to avoid index out of bounds
+            # last(-1) refers to the NEXT bar (because last(0) is current)
+            # wait, last(index) -> data[read_index - index]
+            # last(-1) -> data[read_index + 1] which is the NEXT bar to move into.
+            
+            while self.read_index + 1 < self.count:
+                 next_bar_time = self.open_times.data[self.read_index + 1]
+                 if next_bar_time is None: # Should not happen if count logic is correct
+                     break
+                 if time >= next_bar_time:
+                    self.read_index += 1
+                    self.is_new_bar = True
+                 else:
+                    break
+            
+            # if self.is_new_bar:
+            #    print(f"DEBUG: Bars {self.timeframe_seconds}s synced to {time}. Current bar: {self.open_times.data[self.read_index]}")
         else:
             pass
 

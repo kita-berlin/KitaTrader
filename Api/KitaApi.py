@@ -15,6 +15,8 @@ from Api.KitaApiEnums import BidAsk, TradeType, ProfitMode
 from Api.QuoteProvider import QuoteProvider
 from Api.Symbol import Symbol
 from Api.CoFu import CoFu
+from Indicators.Indicators import Indicators
+from Api.MarketData import MarketData
 
 # Define a TypeVar that can be float or int
 T = TypeVar("T", float, int)
@@ -44,10 +46,17 @@ class KitaApi:
     robot: KitaApi
     logger: PyLogger = None  # type:ignore
     _stop_requested: bool = False
+    quote_provider: QuoteProvider = None  # type:ignore  # Can be set from MainConsole
+    trade_provider: TradeProvider = None  # type:ignore  # Can be set from MainConsole
+    Indicators: Indicators = None  # type:ignore  # Central API for creating indicators
+    MarketData: MarketData = None  # type:ignore  # Central API for accessing bars (similar to cTrader's mBot.MarketData)
     # endregion
 
     def __init__(self):
-        pass
+        # Initialize Indicators accessor (similar to cTrader's mBot.Indicators)
+        self.Indicators = Indicators(api=self)
+        # Initialize MarketData accessor (similar to cTrader's mBot.MarketData)
+        self.MarketData = MarketData(api=self)
 
     # API for robots
     # region
@@ -517,6 +526,109 @@ class KitaApi:
     # Methods
     # region
 
+    def _calculate_indicator_warmup_period(self) -> timedelta:
+        """
+        Calculate the warm-up period needed for all indicators across all symbols.
+        Returns the LONGEST warm-up period needed (across all indicators) plus 2 days buffer.
+        
+        Uses three methods in priority order:
+        1. Check Indicators API tracked indicators (best - created via self.Indicators.*)
+        2. Check actual indicators if they exist (created directly)
+        3. Use look_back from request_bars calls (available in on_init) as fallback
+        """
+        from Api.Constants import Constants
+        
+        max_warmup_seconds = 0
+        max_warmup_info = None  # Track which indicator requires the longest warm-up
+        
+        # METHOD 1: Use Indicators API tracked indicators (most reliable - created via self.Indicators.*)
+        if self.Indicators is not None and len(self.Indicators._created_indicators) > 0:
+            for info in self.Indicators._created_indicators:
+                warmup_seconds = info.periods * info.timeframe_seconds
+                if warmup_seconds > max_warmup_seconds:
+                    max_warmup_seconds = warmup_seconds
+                    max_warmup_info = f"{info.indicator_name}(periods={info.periods}) on {info.timeframe_seconds}s bars (via Indicators API)"
+        
+        # Iterate through all symbols
+        for symbol in self.symbol_dictionary.values():
+            # Iterate through all bars for this symbol
+            for timeframe, bars in symbol.bars_dictonary.items():
+                # METHOD 2: Check actual indicators (if created directly, not via Indicators API)
+                # Get all DataSeries that might have indicators
+                data_series_list = [
+                    bars.open_bids, bars.high_bids, bars.low_bids, bars.close_bids,
+                    bars.open_asks, bars.high_asks, bars.low_asks, bars.close_asks,
+                ]
+                
+                # Check each DataSeries for indicators
+                for data_series in data_series_list:
+                    # Check if indicator_list exists (it's created when first indicator is added)
+                    if hasattr(data_series, 'indicator_list') and len(data_series.indicator_list) > 0:
+                        for indicator in data_series.indicator_list:
+                            indicator_name = indicator.__class__.__name__
+                            
+                            # Get the period from the indicator
+                            if hasattr(indicator, 'periods'):
+                                periods = indicator.periods
+                                # Calculate warm-up time: periods * timeframe_seconds
+                                warmup_seconds = periods * bars.timeframe_seconds
+                                if warmup_seconds > max_warmup_seconds:
+                                    max_warmup_seconds = warmup_seconds
+                                    max_warmup_info = f"{indicator_name}(periods={periods}) on {bars.timeframe_seconds}s bars"
+                            
+                            # Some indicators might have nested indicators (e.g., BollingerBands has MovingAverage)
+                            # Check for nested indicators - use the LONGEST period from nested indicators
+                            if hasattr(indicator, 'MovingAverage') and hasattr(indicator.MovingAverage, 'periods'):
+                                periods = indicator.MovingAverage.periods
+                                warmup_seconds = periods * bars.timeframe_seconds
+                                if warmup_seconds > max_warmup_seconds:
+                                    max_warmup_seconds = warmup_seconds
+                                    max_warmup_info = f"{indicator_name}.MovingAverage(periods={periods}) on {bars.timeframe_seconds}s bars"
+                            
+                            if hasattr(indicator, 'StandardDeviation') and hasattr(indicator.StandardDeviation, 'periods'):
+                                periods = indicator.StandardDeviation.periods
+                                warmup_seconds = periods * bars.timeframe_seconds
+                                if warmup_seconds > max_warmup_seconds:
+                                    max_warmup_seconds = warmup_seconds
+                                    max_warmup_info = f"{indicator_name}.StandardDeviation(periods={periods}) on {bars.timeframe_seconds}s bars"
+                            
+                            # Check for MACD indicators (they have long_cycle which is the longest period)
+                            if hasattr(indicator, 'long_cycle'):
+                                periods = indicator.long_cycle
+                                warmup_seconds = periods * bars.timeframe_seconds
+                                if warmup_seconds > max_warmup_seconds:
+                                    max_warmup_seconds = warmup_seconds
+                                    max_warmup_info = f"{indicator_name}(long_cycle={periods}) on {bars.timeframe_seconds}s bars"
+                            
+                            # Check for RSI (it uses EMA with period 2*periods-1, which is longer than base period)
+                            if hasattr(indicator, '_ema_gain') and hasattr(indicator._ema_gain, 'periods'):
+                                periods = indicator._ema_gain.periods
+                                warmup_seconds = periods * bars.timeframe_seconds
+                                if warmup_seconds > max_warmup_seconds:
+                                    max_warmup_seconds = warmup_seconds
+                                    max_warmup_info = f"{indicator_name}._ema_gain(periods={periods}) on {bars.timeframe_seconds}s bars"
+                
+                # METHOD 3: Use look_back from request_bars as fallback (available in on_init)
+                # This catches cases where indicators are created in on_start but request_bars was called in on_init
+                if bars.look_back > 0:
+                    # look_back is the number of bars needed, convert to seconds
+                    warmup_seconds_from_lookback = bars.look_back * bars.timeframe_seconds
+                    if warmup_seconds_from_lookback > max_warmup_seconds:
+                        max_warmup_seconds = warmup_seconds_from_lookback
+                        max_warmup_info = f"request_bars look_back={bars.look_back} bars on {bars.timeframe_seconds}s timeframe"
+        
+        # Convert to timedelta and add 2 days buffer
+        warmup_timedelta = timedelta(seconds=max_warmup_seconds) + timedelta(days=2)
+        
+        # Log the longest warm-up requirement if found
+        if max_warmup_info:
+            warmup_days = warmup_timedelta.total_seconds() / Constants.SEC_PER_DAY
+            print(f"Indicator warm-up calculation: Longest requirement is {max_warmup_info} = {max_warmup_seconds/Constants.SEC_PER_DAY:.2f} days, plus 2 days buffer = {warmup_days:.2f} days total")
+        elif max_warmup_seconds == 0:
+            print("Indicator warm-up calculation: No indicators or look_back found, using 2 days buffer only")
+        
+        return warmup_timedelta
+
     def do_init(self):
         self.robot = self
         self.account: Account = Account(self)
@@ -554,6 +666,37 @@ class KitaApi:
         # call robot's OnInit
         self.robot.on_init()  # type: ignore
 
+        # Calculate warm-up period needed for all indicators
+        warmup_period = self._calculate_indicator_warmup_period()
+        
+        # Store original AllDataStartUtc if it was explicitly set
+        # Note: self.robot = self, so self.robot.AllDataStartUtc is the same as self.AllDataStartUtc
+        original_all_data_start = getattr(self, 'AllDataStartUtc', None)
+        
+        # Set AllDataStartUtc to BacktestStartUtc minus warm-up period
+        # Only calculate automatically if AllDataStartUtc was not explicitly set (or was datetime.min)
+        if original_all_data_start is None or original_all_data_start == datetime.min:
+            if hasattr(self, 'BacktestStartUtc') and self.BacktestStartUtc != datetime.min:
+                self.AllDataStartUtc = self.BacktestStartUtc - warmup_period
+                print(f"Calculated AllDataStartUtc: {self.AllDataStartUtc} (BacktestStartUtc: {self.BacktestStartUtc} - warmup: {warmup_period})")
+            else:
+                # If BacktestStartUtc is also not set, use a default (will be set later)
+                self.AllDataStartUtc = datetime.min
+        else:
+            # AllDataStartUtc was explicitly set, use it as-is
+            self.AllDataStartUtc = original_all_data_start
+        
+        # Set AllDataEndUtc if not explicitly set
+        original_all_data_end = getattr(self, 'AllDataEndUtc', None)
+        if original_all_data_end is None or original_all_data_end == datetime.max:
+            if hasattr(self, 'BacktestEndUtc') and self.BacktestEndUtc != datetime.max:
+                self.AllDataEndUtc = self.BacktestEndUtc
+            else:
+                self.AllDataEndUtc = datetime.max
+        else:
+            # AllDataEndUtc was explicitly set, use it as-is
+            self.AllDataEndUtc = original_all_data_end
+
         # load bars and data rate
         for symbol in self.symbol_dictionary.values():
             symbol.check_historical_data()  # make sure data do exist since AllDataStartUtc
@@ -568,17 +711,25 @@ class KitaApi:
         # Update quote, bars, indicators, account, bot
         # 1st tick must update all bars and Indicators which have been inized in on_init()
         for symbol in self.symbol_dictionary.values():
-
             # Update quote, bars, indicators which are bound to this symbol
+            # This builds bars and updates indicators during warm-up phase
             error = symbol.symbol_on_tick()
+            
             if "" != error or symbol.time > symbol.end_tz_dt or self._stop_requested:
                 return True  # end reached
+
+            # During warm-up phase, only build bars and update indicators, skip OnTick
+            if symbol.is_warm_up:
+                symbol.prev_time = symbol.time
+                symbol.prev_bid = symbol.bid
+                symbol.prev_ask = symbol.ask
+                continue  # Skip OnTick and account updates during warm-up
 
             # Update Account
             if len(self.positions) >= 1:
                 symbol.trade_provider.update_account()
 
-            # call the robot
+            # call the robot - only called when not in warm-up phase
             self.robot.on_tick(symbol)  # type: ignore
 
             # do max/min calcs
@@ -625,9 +776,12 @@ class KitaApi:
         net_profit = sum(x.net_profit for x in self.history)
         trading_days = 0
         for symbol in self.symbol_dictionary.values():
-            trading_days = (  # 365 - 2*52 = 261 - 9 holidays = 252
-                (symbol.time - symbol.start_tz_dt).days / 365.0 * 252.0
-            )
+            if symbol.time == datetime.min or symbol.time.tzinfo is None:
+                trading_days = 0
+            else:
+                trading_days = (  # 365 - 2*52 = 261 - 9 holidays = 252
+                    (symbol.time - symbol.start_tz_dt).days / 365.0 * 252.0
+                )
             break
 
         if 0 == trading_days:
@@ -766,7 +920,7 @@ class KitaApi:
         #                 histoRestSum += investCountHisto[i]
         #     if histoRestSum != 0:
         #         log_text += ("histo_rest_quotient: " + CoFu.double_to_string(m_histo_rest_quotient = investCountHisto[1] / histoRestSum,
-        print(log_text.replace(":,", ": "))
+        # Stats printed to log file only - stdout removed
         self.log_add_text_line(log_text)
         self.log_close()
 

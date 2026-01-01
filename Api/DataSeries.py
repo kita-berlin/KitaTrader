@@ -22,14 +22,18 @@ class DataSeries:
         self._parent = _parent
         self._size = _size
         self.data = np.full(self._size, np.nan)  # Pre-fill with NaN
+        self.indicator_list = []  # List of indicators attached to this DataSeries
 
     def __getitem__(self, index: int) -> float:
         """
         Retrieve an item by its relative index.
+        [0] = first bar, [1] = second bar, etc.
+        Since data is stored sequentially via append(), we read directly from sequential positions.
         """
         if index < 0 or index >= self._parent.count:
             return float("nan")
-        return self.data[(self._parent.read_index + index - 1) % self._size]
+        # Data is stored sequentially, so index directly maps to position
+        return self.data[index]
 
     def __iter__(self) -> Iterator[float]:
         """
@@ -58,10 +62,18 @@ class DataSeries:
     def last(self, index: int) -> float:
         """
         Retrieve the last `index`-th element from the buffer.
+        last(0) = current bar, last(1) = 1 bar ago, etc.
+        Since data is stored sequentially via append(), we read directly from sequential positions.
         """
         if index >= self._parent.count:
             return float("nan")
-        return self.data[(self._parent.read_index - index - 1) % self._size]
+        # Data is stored sequentially: data[0] = first bar, data[count-1] = last bar
+        # last(0) = current bar = data[count - 1]
+        # last(1) = previous bar = data[count - 2]
+        pos = self._parent.count - 1 - index
+        if pos < 0 or pos >= len(self.data):
+            return float("nan")
+        return self.data[pos]
 
     def get_average(self) -> float:
         """

@@ -1,0 +1,35 @@
+sep =,sep=,
+Number,NetProfit,Symbol,Mode,Lots,OpenDate,CloseDate,OpenPrice,ClosePrice,BollingerUpper,BollingerLower,BollingerMain
+Backtest completed: Kanga2 V1.0
+Total Trades: 0
+Winning Trades: 0
+Losing Trades: 0
+Consecutive Winners: 0
+Consecutive Losers: 0
+Win Rate: 0.00%
+Net Profit: 0.00 EUR
+Gross Profit: 0.00 EUR
+Gross Loss: 0.00 EUR
+Profit Factor: N/A
+Average Trade: 0.00 EUR
+Average Win: 0.00 {self.account.currency}
+Average Loss: 0.00 {self.account.currency}
+Max Balance Drawdown: 0.00 EUR (0.00%)
+Max Equity Drawdown: 0.00 EUR (0.00%)
+
+
+Net Profit:,0.00, Long:,0.00, Short:,0.00
+All Trades:,0, Winners:,0, Losers:,0
+Max Balance Drawdown Value: EUR 0.00; @ 01.01.0001 00:00:00; Count# 0
+Max Balance Drawdown%: 0.00
+Max Equity Drawdown Value: EUR 0.00; @ 01.01.0001 00:00:00; Count# 0
+Max Current Equity Drawdown %: 0.00
+Max start Equity Drawdown %: 0.00
+Profit Factor: -
+Sharpe Ratio: nan
+Sortino Ratio: nan
+Calmar Ratio: 0.00
+Winning Ratio: 0.00
+Trades Per Month: 0.00
+Average Annual Profit Percent: 0.00
+

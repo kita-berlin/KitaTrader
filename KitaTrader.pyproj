@@ -12,7 +12,8 @@
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <InterpreterId>MSBuild|env|$(MSBuildProjectFullPath)</InterpreterId>
+    <InterpreterId>
+    </InterpreterId>
     <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <Name>kita_trader</Name>
@@ -79,10 +80,15 @@
     <Compile Include="BrokerProvider\QuoteDukascopy.py" />
     <Compile Include="BrokerProvider\QuoteNinjaFiles.py" />
     <Compile Include="Indicators\BollingerBands.py" />
+    <Compile Include="Indicators\ExponentialMovingAverage.py" />
     <Compile Include="Indicators\Indicators.py" />
+    <Compile Include="Indicators\MacdCrossOver.py" />
+    <Compile Include="Indicators\MacdHistogram.py" />
     <Compile Include="Indicators\MovingAverage.py" />
+    <Compile Include="Indicators\RelativeStrengthIndex.py" />
     <Compile Include="Indicators\SimpleMovingAverage.py" />
     <Compile Include="Indicators\StandardDeviation.py" />
+    <Compile Include="Indicators\Vidya.py" />
     <Compile Include="MainConsole.py" />
     <Compile Include="BrokerProvider\QuoteCsv.py" />
     <Compile Include="BrokerProvider\TradePaper.py" />
@@ -94,20 +100,6 @@
     <Compile Include="Robots\Template.py" />
     <Compile Include="Robots\Martingale.py" />
     <Compile Include="Robots\Ultron.py" />
-  </ItemGroup>
-  <ItemGroup>
-    <InterpreterReference Include="Global|PythonCore|3.9" />
-  </ItemGroup>
-  <ItemGroup>
-    <Interpreter Include="env\">
-      <Id>env</Id>
-      <Version>3.9</Version>
-      <Description>env (Python 3.9 (64-bit))</Description>
-      <InterpreterPath>Scripts\python.exe</InterpreterPath>
-      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
-      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
-      <Architecture>X64</Architecture>
-    </Interpreter>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="BrokerProvider\NinjaFiles\NinjaFiles.csproj">
