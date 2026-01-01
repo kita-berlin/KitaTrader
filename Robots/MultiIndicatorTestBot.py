@@ -134,7 +134,7 @@ class MultiIndicatorTestBot(KitaApi):
             return
         
         # Prevent logging historical bars before backtest start
-        if bar_time < self.BacktestStartUtc:
+        if bar_time < self._BacktestStartUtc:
             return
 
         self.last_bar_time = bar_time

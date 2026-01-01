@@ -311,7 +311,7 @@ class Quantrobot:
                 entry_time = entry_time.replace(tzinfo=UTC)
             
             # Only log trades that start within the backtest period
-            if entry_time < self.bot.BacktestStartUtc or entry_time >= self.bot.BacktestEndUtc:
+            if entry_time < self.bot._BacktestStartUtc or entry_time >= self.bot._BacktestEndUtc:
                 return  # Skip trades outside backtest period
             
             close_price = position.closing_price

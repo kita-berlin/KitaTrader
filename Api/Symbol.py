@@ -666,23 +666,23 @@ class Symbol:
             zipf.writestr(csv_filename, temp_buffer.getvalue())
 
     def make_time_aware(self):
-        if datetime.min == self.api.robot.BacktestStartUtc:
-            self.api.robot.BacktestStartUtc = self.api.AllDataStartUtc
-            # Warning: BacktestStartUtc is set to minimum - messages removed
+        # Use internal UTC versions of BacktestStart/BacktestEnd
+        if datetime.min == self.api.robot._BacktestStartUtc:
+            self.api.robot._BacktestStartUtc = self.api.AllDataStartUtc
         else:
-            self.api.robot.BacktestStartUtc = self.api.robot.BacktestStartUtc.replace(tzinfo=UTC)
+            self.api.robot._BacktestStartUtc = self.api.robot._BacktestStartUtc.replace(tzinfo=UTC)
 
-        if datetime.max == self.api.robot.BacktestEndUtc:
-            self.api.robot.BacktestEndUtc = self.api.AllDataEndUtc
+        if datetime.max == self.api.robot._BacktestEndUtc:
+            self.api.robot._BacktestEndUtc = self.api.AllDataEndUtc
         else:
-            self.api.robot.BacktestEndUtc = self.api.robot.BacktestEndUtc.replace(tzinfo=UTC)
+            self.api.robot._BacktestEndUtc = self.api.robot._BacktestEndUtc.replace(tzinfo=UTC)
 
         # set symbol's local time zones
-        self.start_tz_dt = self.api.robot.BacktestStartUtc.astimezone(self.time_zone) + timedelta(
+        self.start_tz_dt = self.api.robot._BacktestStartUtc.astimezone(self.time_zone) + timedelta(
             hours=self.normalized_hours_offset
         )
 
-        self.end_tz_dt = self.api.robot.BacktestEndUtc.astimezone(self.time_zone) + timedelta(
+        self.end_tz_dt = self.api.robot._BacktestEndUtc.astimezone(self.time_zone) + timedelta(
             hours=self.normalized_hours_offset
         )
 
@@ -696,7 +696,7 @@ class Symbol:
             if self.rate_data.count > 0:
                 min_start = self.rate_data.open_times.data[0]
             else:
-                min_start = self.api.robot.BacktestStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
+                min_start = self.api.robot._BacktestStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
             
             if min_start.tzinfo is None:
                 min_start = min_start.replace(tzinfo=pytz.UTC)
@@ -778,7 +778,7 @@ class Symbol:
             start = start.replace(tzinfo=pytz.UTC)
             
         current_day = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_day = self.api.robot.BacktestEndUtc.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_day = self.api.robot._BacktestEndUtc.replace(hour=0, minute=0, second=0, microsecond=0)
         
         days_to_load = (end_day - current_day).days + 1
         loaded_count = 0
@@ -880,7 +880,7 @@ class Symbol:
         # Gather and sort files by date
         file_dates = self._get_sorted_file_dates(folder)
 
-        # Start loading from BacktestStartUtc
+        # Start loading from _BacktestStartUtc
         start_idx = bisect_left(file_dates, start)
 
         # Process additional lookback bars if needed
@@ -905,13 +905,13 @@ class Symbol:
                         look_back_run = 0  # break
 
         # Count files to load for summary
-        files_to_load = [fd for fd in file_dates[start_idx:] if fd <= self.api.robot.BacktestEndUtc]
+        files_to_load = [fd for fd in file_dates[start_idx:] if fd <= self.api.robot._BacktestEndUtc]
         total_files = len(files_to_load)
         loaded_count = 0
 
-        # Process files starting from BacktestStartUtc
+        # Process files starting from _BacktestStartUtc
         for file_date in file_dates[start_idx:]:
-            if file_date > self.api.robot.BacktestEndUtc:
+            if file_date > self.api.robot._BacktestEndUtc:
                 break
 
             # Path to the zip file
@@ -989,7 +989,7 @@ class Symbol:
         for i in range(start_index - bars.look_back, len(lines)):
             row = lines[i].split(",")
             line_datetime = datetime.strptime(row[0], "%Y%m%d %H:%M").replace(tzinfo=pytz.UTC)
-            if line_datetime > self.api.robot.BacktestEndUtc:
+            if line_datetime > self.api.robot._BacktestEndUtc:
                 break
 
             line_datetime = line_datetime.astimezone(self.time_zone) + timedelta(
@@ -1067,7 +1067,9 @@ class Symbol:
         self.bid = self.rate_data.open_bids.last(0)
         self.ask = self.rate_data.open_asks.last(0)
 
-        self.is_warm_up = self.time < self.start_tz_dt
+        # Compare symbol.time (UTC) directly with _BacktestStartUtc (UTC) to avoid timezone conversion issues
+        # symbol.time is in UTC from tick data, so compare with UTC start time
+        self.is_warm_up = self.time < self.api.robot._BacktestStartUtc
 
         for bars in self.bars_dictonary.values():
             if RunMode.RealTime != self.api.robot.RunningMode:

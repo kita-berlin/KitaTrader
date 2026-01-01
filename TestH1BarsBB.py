@@ -44,8 +44,9 @@ class TestH1BarsBB:
         self.robot.AccountCurrency = "EUR"
         
         # 2. Define the backtest time window - December 2025
-        self.robot.BacktestStartUtc = datetime.strptime("01.12.2025", "%d.%m.%Y").replace(tzinfo=pytz.UTC)
-        self.robot.BacktestEndUtc = datetime.strptime("31.12.2025", "%d.%m.%Y").replace(tzinfo=pytz.UTC)
+        # BacktestStart/BacktestEnd are interpreted as UTC 00:00 (matches cTrader CLI)
+        self.robot.BacktestStart = datetime.strptime("01.12.2025", "%d.%m.%Y")
+        self.robot.BacktestEnd = datetime.strptime("30.12.2025", "%d.%m.%Y")
 
         # 3. Initialize the platform and the robot
         self.robot.do_init()

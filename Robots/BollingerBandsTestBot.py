@@ -138,7 +138,7 @@ class BollingerBandsTestBot(KitaApi):
                 continue  # Skip bars without valid BB values
             
             # Only log bars within the backtest period (matching cTrader behavior)
-            if bar_time < self.BacktestStartUtc or bar_time >= self.BacktestEndUtc:
+            if bar_time < self._BacktestStartUtc or bar_time >= self._BacktestEndUtc:
                 continue  # Skip bars outside backtest period
             
             # Format and log

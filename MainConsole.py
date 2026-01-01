@@ -50,8 +50,10 @@ class MainConsole:
         # 2. Define the backtest time window
         # region
         # Full December 2025 (for comparison with cTrader CLI)
-        self.robot.BacktestStartUtc = datetime.strptime("01.12.2025", "%d.%m.%Y").replace(tzinfo=pytz.UTC)
-        self.robot.BacktestEndUtc = datetime.strptime("31.12.2025", "%d.%m.%Y").replace(tzinfo=pytz.UTC)
+        # BacktestStart/BacktestEnd are interpreted as UTC 00:00 (midnight UTC)
+        # This matches cTrader CLI behavior where dates are interpreted as UTC 00:00
+        self.robot.BacktestStart = datetime.strptime("01.12.2025", "%d.%m.%Y")
+        self.robot.BacktestEnd = datetime.strptime("30.12.2025", "%d.%m.%Y")
         # endregion
 
         # 3. Initialize the platform and the robot

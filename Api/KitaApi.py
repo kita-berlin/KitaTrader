@@ -4,6 +4,7 @@ import re
 import math
 from typing import TypeVar
 from datetime import datetime, timedelta
+import pytz
 from Api.KitaApiEnums import *
 from Api.TradeProvider import TradeProvider
 from Api.PyLogger import PyLogger
@@ -31,8 +32,10 @@ class KitaApi:
     # If not set from there, the given default values will be used
     AllDataStartUtc: datetime
     AllDataEndUtc: datetime = datetime.max
-    BacktestStartUtc: datetime
-    BacktestEndUtc: datetime
+    BacktestStart: datetime  # UTC 00:00 (interpreted as UTC midnight, matches cTrader CLI behavior)
+    BacktestEnd: datetime    # UTC 00:00 (interpreted as UTC midnight, matches cTrader CLI behavior)
+    _BacktestStartUtc: datetime = datetime.min  # Internal: UTC version of BacktestStart
+    _BacktestEndUtc: datetime = datetime.max    # Internal: UTC version of BacktestEnd
     RunningMode: RunMode = RunMode.SilentBacktesting
     DataPath: str = ""
     DataMode: DataMode = DataMode.Preload
@@ -629,6 +632,21 @@ class KitaApi:
         
         return warmup_timedelta
 
+    def _convert_date_to_utc_midnight(self, date_datetime: datetime) -> datetime:
+        """
+        Convert a date to UTC 00:00 (midnight UTC).
+        This matches cTrader CLI behavior where dates are interpreted as UTC 00:00.
+        
+        Args:
+            date_datetime: datetime with date only (time will be set to 00:00 UTC)
+        
+        Returns:
+            datetime at UTC 00:00 (naive, for compatibility)
+        """
+        # Set time to 00:00 UTC (midnight)
+        utc_datetime = date_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+        return utc_datetime  # Return naive UTC datetime for compatibility
+
     def do_init(self):
         self.robot = self
         self.account: Account = Account(self)
@@ -663,6 +681,23 @@ class KitaApi:
         # set working data path
         self.robot.DataPath = self.resolve_env_variables(self.robot.DataPath)
 
+        # Convert BacktestStart/BacktestEnd to UTC 00:00 (matches cTrader CLI behavior)
+        if hasattr(self, 'BacktestStart') and self.BacktestStart != datetime.min:
+            self._BacktestStartUtc = self._convert_date_to_utc_midnight(self.BacktestStart)
+            print(f"BacktestStart: {self.BacktestStart} -> UTC 00:00: {self._BacktestStartUtc}")
+        else:
+            self._BacktestStartUtc = datetime.min
+        
+        if hasattr(self, 'BacktestEnd') and self.BacktestEnd != datetime.max:
+            # For end date, set to start of next day (00:00:00) to make it inclusive
+            # This allows processing all ticks on the end date (inclusive)
+            # The check "symbol.time > symbol.end_tz_dt" will stop at next day 00:00, including all of end date
+            next_day = self.BacktestEnd + timedelta(days=1)
+            self._BacktestEndUtc = next_day.replace(hour=0, minute=0, second=0, microsecond=0)
+            print(f"BacktestEnd: {self.BacktestEnd} (inclusive) -> UTC next day 00:00: {self._BacktestEndUtc}")
+        else:
+            self._BacktestEndUtc = datetime.max
+
         # call robot's OnInit
         self.robot.on_init()  # type: ignore
 
@@ -670,17 +705,17 @@ class KitaApi:
         warmup_period = self._calculate_indicator_warmup_period()
         
         # Store original AllDataStartUtc if it was explicitly set
-        # Note: self.robot = self, so self.robot.AllDataStartUtc is the same as self.AllDataStartUtc
         original_all_data_start = getattr(self, 'AllDataStartUtc', None)
         
-        # Set AllDataStartUtc to BacktestStartUtc minus warm-up period
-        # Only calculate automatically if AllDataStartUtc was not explicitly set (or was datetime.min)
+        # Set AllDataStartUtc to _BacktestStartUtc minus warm-up period
+        # No timezone buffer needed since we're using UTC 00:00 directly
         if original_all_data_start is None or original_all_data_start == datetime.min:
-            if hasattr(self, 'BacktestStartUtc') and self.BacktestStartUtc != datetime.min:
-                self.AllDataStartUtc = self.BacktestStartUtc - warmup_period
-                print(f"Calculated AllDataStartUtc: {self.AllDataStartUtc} (BacktestStartUtc: {self.BacktestStartUtc} - warmup: {warmup_period})")
+            if self._BacktestStartUtc != datetime.min:
+                # Start loading data from UTC 00:00, minus warmup period
+                self.AllDataStartUtc = self._BacktestStartUtc - warmup_period
+                print(f"Calculated AllDataStartUtc: {self.AllDataStartUtc} (BacktestStart UTC: {self._BacktestStartUtc} - warmup: {warmup_period})")
             else:
-                # If BacktestStartUtc is also not set, use a default (will be set later)
+                # If BacktestStart is also not set, use a default (will be set later)
                 self.AllDataStartUtc = datetime.min
         else:
             # AllDataStartUtc was explicitly set, use it as-is
@@ -689,8 +724,9 @@ class KitaApi:
         # Set AllDataEndUtc if not explicitly set
         original_all_data_end = getattr(self, 'AllDataEndUtc', None)
         if original_all_data_end is None or original_all_data_end == datetime.max:
-            if hasattr(self, 'BacktestEndUtc') and self.BacktestEndUtc != datetime.max:
-                self.AllDataEndUtc = self.BacktestEndUtc
+            if self._BacktestEndUtc != datetime.max:
+                # Use the end time as-is (already set to end of day 23:59:59.999)
+                self.AllDataEndUtc = self._BacktestEndUtc
             else:
                 self.AllDataEndUtc = datetime.max
         else:
@@ -715,7 +751,9 @@ class KitaApi:
             # This builds bars and updates indicators during warm-up phase
             error = symbol.symbol_on_tick()
             
-            if "" != error or symbol.time > symbol.end_tz_dt or self._stop_requested:
+            # Compare symbol.time (UTC) directly with _BacktestEndUtc (UTC) to avoid timezone conversion issues
+            # symbol.time is in UTC from tick data, so compare with UTC end time
+            if "" != error or symbol.time > self._BacktestEndUtc or self._stop_requested:
                 return True  # end reached
 
             # During warm-up phase, only build bars and update indicators, skip OnTick
