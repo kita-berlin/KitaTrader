@@ -1,28 +1,21 @@
+"""
+OHLC Test Console - Compare OHLC values between C# and Python
+Runs OHLCTestBot to log all bar OHLC values
+"""
 import os
 import pytz
 from datetime import datetime
 from Api.KitaApiEnums import *
-from Robots.Template import Template  # type: ignore
-from Robots.Downloader import Downloader  # type: ignore
-from Robots.Template import Template  # type: ignore
-from Robots.Ultron import Ultron  # type: ignore
-from Robots.NinjaFiles import NinjaFiles  # type: ignore
-from Robots.KitaTester import KitaTester  # type: ignore
-from Robots.PriceVerifyBot import PriceVerifyBot
-from Robots.BollingerBandsTestBot import BollingerBandsTestBot
-from Robots.EmaTestBot import EmaTestBot
-from Robots.Kanga2 import Kanga2
+from Robots.OHLCTestBot import OHLCTestBot
 from BrokerProvider.QuoteCtraderCache import QuoteCtraderCache
 from BrokerProvider.TradePaper import TradePaper
 
-class MainConsole:
+
+class TestOHLC:
     def __init__(self):
         # 1. Set the parameters of the platform
         # region
-        self.robot = Kanga2()  # Define here which robot should be used
-
-        # AllDataStartUtc and AllDataEndUtc will be calculated automatically based on indicator warm-up requirements
-        # AllDataEndUtc defaults to max, will be set during initialization
+        self.robot = OHLCTestBot()  # Use OHLC test bot
 
         # Platform mode how the robot will be used by the platform
         self.robot.RunningMode = RunMode.SilentBacktesting
@@ -47,46 +40,42 @@ class MainConsole:
         self.robot.AccountLeverage = 500
         self.robot.AccountCurrency = "EUR"
         # endregion
+        
         # 2. Define the backtest time window
         # region
         # Test 3 days: 1.12.25 to 3.12.25 (inclusive)
         # BacktestStart/BacktestEnd are interpreted as UTC 00:00 (midnight UTC)
-        # This matches cTrader CLI behavior where dates are interpreted as UTC 00:00
+        # Set end to 06.12.2025 (04.12.2025 + 2 days) to allow Python to process more ticks
         self.robot.BacktestStart = datetime.strptime("01.12.2025", "%d.%m.%Y")
-        self.robot.BacktestEnd = datetime.strptime("04.12.2025", "%d.%m.%Y")  # End of day 3 (inclusive)
+        self.robot.BacktestEnd = datetime.strptime("06.12.2025", "%d.%m.%Y")  # End date (exclusive, +2 days from C#)
         # endregion
 
         # 3. Initialize the platform and the robot
         # region
-        self.robot._debug_log("[DEBUG] Starting do_init()...")
         self.robot.do_init()  # type: ignore
-        self.robot._debug_log("[DEBUG] do_init() completed")
         # endregion
 
         # 4. Start the platform and the robot
         # region
-        self.robot._debug_log("[DEBUG] Starting do_start()...")
         self.robot.do_start()  # type: ignore
-        self.robot._debug_log("[DEBUG] do_start() completed")
         # endregion
 
-        # 5. loop over the give time range
+        # 5. Loop over the given time range
         # region
         import time
         start_time = time.time()
         tick_count = 0
-        self.robot._debug_log("[DEBUG] Starting tick loop...")
+        # All debug output goes to robot's debug log file, nothing to stdout
         while True:
             tick_count += 1
             if tick_count % 100000 == 0:
-                self.robot._debug_log(f"[DEBUG] Processed {tick_count:,} ticks...")
+                self.robot._debug_log(f"Processed {tick_count:,} ticks...")
             result = self.robot.do_tick()
             if result:
-                self.robot._debug_log(f"[DEBUG] Tick loop ended after {tick_count:,} ticks")
+                self.robot._debug_log(f"Tick loop ended after {tick_count:,} ticks")
                 break
         elapsed_time = time.time() - start_time
-        self.robot._debug_log(f"Backtest completed: {tick_count:,} ticks processed in {elapsed_time:.2f} seconds ({elapsed_time/60:.2f} minutes)")
-        self.robot._debug_log(f"Performance: {tick_count/elapsed_time:.0f} ticks/second")
+        self.robot._debug_log(f"Backtest completed: {tick_count:,} ticks processed in {elapsed_time:.2f} seconds")
         # endregion
 
         # 6. Stop the robot and the platform
@@ -95,6 +84,7 @@ class MainConsole:
         # endregion
 
 
-MainConsole()  # starts the main loop
+if __name__ == "__main__":
+    TestOHLC()
 
-# end of file
+

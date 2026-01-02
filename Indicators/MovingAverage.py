@@ -13,10 +13,12 @@ class MovingAverage(IIndicator, ABC):
     ):
         self.source: DataSeries = source
         self.periods: int = periods
-        # DataSeries requires both parent and size
+        # Get parent for result DataSeries
         parent_bars = self.source._parent if hasattr(self.source, '_parent') else self.source.parent
-        size = getattr(parent_bars, 'size', 1000) if hasattr(parent_bars, 'size') else 1000
-        self.result = DataSeries(parent_bars, size)
+        
+        # For indicator results, use ring buffer with size exactly matching the period
+        # This saves memory and ensures we only keep the necessary data
+        self.result = DataSeries(parent_bars, self.periods, is_indicator_result=True)
 
     pass
 

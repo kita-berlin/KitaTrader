@@ -126,9 +126,6 @@ class RelativeStrengthIndex(IIndicator):
             rs = self.avg_gain / self.avg_loss
             self.result.data[index] = 100.0 - (100.0 / (1.0 + rs))
     
-    def __getitem__(self, index: int) -> float:
-        """Allow array-style access to results"""
-        return self.result[index]
 
 
 # end of file

@@ -47,8 +47,14 @@ def load_log_detailed(filepath):
     return trades
 
 # Find latest C# and Python logs
-cs_log = r"C:\Users\HMz\Documents\cAlgo\Logfiles\Kanga2 _4.csv"
-py_log = r"C:\Users\HMz\Documents\cAlgo\Logfiles\Kanga2 _5.csv"
+log_dir_path = Path(log_dir)
+# Find C# log (pattern: Kanga2 _N.csv)
+cs_logs = sorted(log_dir_path.glob("Kanga2 _*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
+# Find Python log (pattern: Kanga2*_Python.csv or Kanga2*Python.csv)
+py_logs = sorted(log_dir_path.glob("Kanga2*Python*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+cs_log = str(cs_logs[0]) if cs_logs else None
+py_log = str(py_logs[0]) if py_logs else None
 
 print("Comparing Kanga2 Log Results")
 print("=" * 80)

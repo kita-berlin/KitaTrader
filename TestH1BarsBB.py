@@ -64,7 +64,7 @@ class TestH1BarsBB:
             if result:
                 break
         elapsed_time = time.time() - start_time
-        print(f"\nTest completed: {tick_count:,} ticks processed in {elapsed_time:.2f} seconds", flush=True)
+        self.robot._debug_log(f"Test completed: {tick_count:,} ticks processed in {elapsed_time:.2f} seconds")
 
         # 6. Stop the robot and the platform
         self.robot.do_stop()

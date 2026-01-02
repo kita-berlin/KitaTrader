@@ -9,7 +9,7 @@ class Ringbuffer(Generic[T]):
         Initializes a ring _buffer with the specified _size.
         """
         self._size = _size
-        self._buffer: list[Optional[T]] = [] * _size
+        self._buffer: list[Optional[T]] = [None] * _size  # Fix: use [None] * _size, not [] * _size
         self._position = 0
         self._count = 0
         self._add_count = 0

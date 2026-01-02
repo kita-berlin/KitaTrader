@@ -67,6 +67,9 @@ class Symbol:
     currency_quote: str = ""
     dynamic_leverage: list[LeverageTier] = []
     is_warm_up: bool = True
+    _indicator_cache: dict = None  # Cache for indicators by source type for fast lookup
+    _last_high_prices: dict = None  # Track last high price per bars for optimization
+    _last_low_prices: dict = None  # Track last low price per bars for optimization
 
     @property
     def point_size(self) -> float:
@@ -169,32 +172,32 @@ class Symbol:
             if Constants.SEC_PER_MINUTE != timeframe:
                 minute_look_back = look_back * timeframe // Constants.SEC_PER_MINUTE
                 self.bars_dictonary[Constants.SEC_PER_MINUTE] = Bars(
-                    self.name, Constants.SEC_PER_MINUTE, minute_look_back, self.api.DataMode
+                    self.name, Constants.SEC_PER_MINUTE, minute_look_back, self.api.DataMode, symbol=self
                 )
 
         elif timeframe < Constants.SEC_PER_DAY:
             if Constants.SEC_PER_HOUR != timeframe:
                 hour_look_back = look_back * timeframe // Constants.SEC_PER_HOUR
                 self.bars_dictonary[Constants.SEC_PER_HOUR] = Bars(
-                    self.name, Constants.SEC_PER_HOUR, hour_look_back, self.api.DataMode
+                    self.name, Constants.SEC_PER_HOUR, hour_look_back, self.api.DataMode, symbol=self
                 )
 
         elif Constants.SEC_PER_DAY != timeframe:
             daily_look_back = look_back * timeframe // Constants.SEC_PER_DAY
             self.bars_dictonary[Constants.SEC_PER_DAY] = Bars(
-                self.name, Constants.SEC_PER_HOUR, daily_look_back, self.api.DataMode
+                self.name, Constants.SEC_PER_HOUR, daily_look_back, self.api.DataMode, symbol=self
             )
 
         if timeframe in self.bars_dictonary:
             if look_back > self.bars_dictonary[timeframe].look_back:
                 self.bars_dictonary[timeframe].look_back = look_back
         else:
-            self.bars_dictonary[timeframe] = Bars(self.name, timeframe, look_back, self.api.DataMode)
+            self.bars_dictonary[timeframe] = Bars(self.name, timeframe, look_back, self.api.DataMode, symbol=self)
 
     def get_bars(self, timeframe: int) -> tuple[str, Bars]:
         if timeframe in self.bars_dictonary:
             return "", self.bars_dictonary[timeframe]
-        return "Bars have not been requested in on_init()", Bars(self.name, timeframe, 0, self.api.DataMode)
+        return "Bars have not been requested in on_init()", Bars(self.name, timeframe, 0, self.api.DataMode, symbol=self)
 
     def check_historical_data(self):
         # if all data are requested (datetime.min == self.api.AllDataStartUtc), find the first quote
@@ -255,8 +258,8 @@ class Symbol:
 
         # Checking symbol - messages removed
         run_utc = self.api.AllDataStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
-        one_day_provider_data: Bars = Bars(self.name, 0, 0, self.api.DataMode)
-        yesterday_minutes = Bars(self.name, Constants.SEC_PER_MINUTE, 0, self.api.DataMode)
+        one_day_provider_data: Bars = Bars(self.name, 0, 0, self.api.DataMode, symbol=self)
+        yesterday_minutes = Bars(self.name, Constants.SEC_PER_MINUTE, 0, self.api.DataMode, symbol=self)
 
         while True:
             # daily loop
@@ -382,7 +385,7 @@ class Symbol:
                         )
                         idx_start_today = bisect_left(minute_bars.open_times.data, market_open_utc_today)
 
-                        local_minute_bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0, self.api.DataMode)
+                        local_minute_bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0, self.api.DataMode, symbol=self)
                         local_minute_bars.open_times.data = np.concatenate(
                             (
                                 yesterday_minutes.open_times.data[idx_start_yesterday:],
@@ -615,7 +618,7 @@ class Symbol:
         )  # Drop rows with NaN values after resampling
 
         # Create a new Bars instance for the lower timeframe
-        new_bars = Bars(bars.symbol_name, new_timeframe_seconds, bars.look_back, self.api.DataMode)
+        new_bars = Bars(bars.symbol_name, new_timeframe_seconds, bars.look_back, self.api.DataMode, symbol=self)
 
         # Populate the new Bars instance
         new_bars.open_times.data = np.array(resampled.index.to_pydatetime(), dtype=object)  # type: ignore
@@ -691,13 +694,37 @@ class Symbol:
         # This is needed to resample bars from ticks if bar files don't exist
         min_start = self.api.AllDataStartUtc
         if 0 == self.quote_provider.data_rate:
-            # Load ticks first - we'll need them to build bars if files don't exist
-            self.rate_data = self._load_ticks(min_start)
-            if self.rate_data.count > 0:
-                min_start = self.rate_data.open_times.data[0]
+            # Initialize tick stream - ticks will be processed one at a time, not stored
+            self.api._debug_log(f"[load_datarate_and_bars] Initializing tick stream starting from {min_start}")
+            self._init_tick_stream(min_start)
+            # Get first tick to determine min_start (peek at first tick without consuming it)
+            # Save current state
+            saved_day = self._tick_current_day
+            saved_day_bars = self._tick_day_bars
+            saved_day_index = self._tick_day_index
+            saved_day_count = self._tick_day_count
+            
+            # Get first tick
+            first_tick = self._get_next_tick()
+            if first_tick:
+                min_start = first_tick[0]  # time
+                self.api._debug_log(f"[load_datarate_and_bars] First tick time: {min_start}")
+                # Restore stream state to start from beginning
+                self._tick_current_day = saved_day
+                self._tick_day_bars = saved_day_bars
+                self._tick_day_index = saved_day_index
+                self._tick_day_count = saved_day_count
+                self._tick_total_processed = 0
             else:
                 min_start = self.api.robot._BacktestStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
+                self.api._debug_log(f"[load_datarate_and_bars] No ticks found, using BacktestStart: {min_start}")
             
+            if min_start is not None and min_start.tzinfo is None:
+                min_start = min_start.replace(tzinfo=pytz.UTC)
+        
+        # Ensure min_start is not None before proceeding
+        if min_start is None:
+            min_start = self.api.robot._BacktestStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
             if min_start.tzinfo is None:
                 min_start = min_start.replace(tzinfo=pytz.UTC)
         
@@ -709,7 +736,7 @@ class Symbol:
             elif start.tzinfo is None and start != datetime.min:
                 start = start.replace(tzinfo=pytz.UTC)
             # Ensure min_start is also aware if start is aware, or handle datetime.min
-            if min_start.tzinfo is None and min_start != datetime.min:
+            if min_start is not None and min_start.tzinfo is None and min_start != datetime.min:
                  min_start = min_start.replace(tzinfo=pytz.UTC)
             
             # If one is min (naive) and other is aware, replace min with aware min
@@ -723,6 +750,9 @@ class Symbol:
         # If using bar data rate, set rate_data to that
         if 0 != self.quote_provider.data_rate:
             self.rate_data = self.bars_dictonary[self.quote_provider.data_rate]
+
+        # Initialize indicator cache for fast lookup
+        self._build_indicator_cache()
 
         self.symbol_on_tick()  # set initial time, bid, ask for on_start()
         return ""
@@ -769,49 +799,99 @@ class Symbol:
         with open(file, "wb") as f:
             f.write(zip_buffer.getvalue())
 
-    def _load_ticks(self, start: datetime) -> Bars:
-        # Loading messages removed - use log files for debugging
-        all_ticks = Bars(self.name, 0, 0, self.api.DataMode)
-        
+    def _init_tick_stream(self, start: datetime) -> None:
+        """
+        Initialize tick stream - ticks will be processed one at a time, not stored.
+        Creates an iterator that yields ticks from the quote provider.
+        """
         # Ensure start is aware
         if start.tzinfo is None:
             start = start.replace(tzinfo=pytz.UTC)
             
-        current_day = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_day = self.api.robot._BacktestEndUtc.replace(hour=0, minute=0, second=0, microsecond=0)
+        self._tick_current_day = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        # For end day, we want to process all ticks up to but not including the end date
+        # _BacktestEndUtc is exclusive (e.g., 2025-12-06 00:00:00 means process up to but not including 12/06)
+        # So we set _tick_end_day to the end date itself (2025-12-06), and we'll stop when current_day exceeds it
+        # This way, we'll process all ticks from 12/05 (the last day before the end date)
+        # and stop when current_day becomes 2025-12-06 (which is the end date, so we don't process it)
+        self._tick_end_day = self.api.robot._BacktestEndUtc.replace(hour=0, minute=0, second=0, microsecond=0)
+        self._tick_day_bars = None
+        self._tick_day_index = 0
+        self._tick_day_count = 0
+        self._tick_total_processed = 0
         
-        days_to_load = (end_day - current_day).days + 1
-        loaded_count = 0
+        # Create a minimal rate_data object for compatibility (no storage, just for API)
+        # For tick streaming, we don't need to store ticks - just track read_index
+        self.rate_data = Bars(self.name, 0, 0, self.api.DataMode, symbol=self)
+        self.rate_data.read_index = -1  # Will be incremented before each tick
+        self.rate_data.count = 999999999  # Large number so read_index never exceeds it (not used for streaming)
         
-        while current_day <= end_day:
-            error, _, day_bars = self.quote_provider.get_day_at_utc(current_day)
+        self.api._debug_log(f"[_init_tick_stream] Initialized tick stream from {self._tick_current_day} to {self._tick_end_day}")
+    
+    def _get_next_tick(self) -> tuple[datetime, float, float] | None:
+        """
+        Get the next tick from the stream.
+        Returns (time, bid, ask) or None if no more ticks.
+        """
+        # Load next day if current day is exhausted
+        while self._tick_day_index >= self._tick_day_count:
+            # Stop when current_day exceeds end_day (end_day is inclusive, so process all ticks from end_day)
+            # _BacktestEndUtc is exclusive (e.g., 2025-12-06 00:00:00 means process up to but not including 12/06)
+            # But _tick_end_day is set to 2025-12-06 00:00:00, so we want to process all ticks from 12/06
+            # and stop when current_day becomes 2025-12-07 00:00:00
+            if self._tick_current_day > self._tick_end_day:
+                return None  # No more ticks
+            
+            # Load next day
+            error, _, day_bars = self.quote_provider.get_day_at_utc(self._tick_current_day)
             if error == "":
-                # Merge day_bars into all_ticks
-                # We need to access internal arrays for performance
-                count = day_bars.count
-                if count > 0:
-                    for i in range(count):
-                        all_ticks.append(
-                            day_bars.open_times.data[i],
-                            day_bars.open_bids.data[i],
-                            0, 0, 0, # high, low, close bid
-                            day_bars.volume_bids.data[i],
-                            day_bars.open_asks.data[i],
-                            0, 0, 0, # high, low, close ask
-                            day_bars.volume_asks.data[i]
-                        )
+                self._tick_day_bars = day_bars
+                self._tick_day_count = day_bars.count
+                self._tick_day_index = 0
+                if self._tick_day_count > 0:
+                    self.api._debug_log(f"[_get_next_tick] Loaded {self._tick_day_count} ticks for {self._tick_current_day.strftime('%Y-%m-%d')}")
+            else:
+                self.api._debug_log(f"[_get_next_tick] Error loading {self._tick_current_day.strftime('%Y-%m-%d')}: {error}")
+                self._tick_day_bars = None
+                self._tick_day_count = 0
+                self._tick_day_index = 0
             
-            loaded_count += 1
-            # Progress messages removed - use log files for debugging
-                
-            current_day += timedelta(days=1)
-            
-        # Summary message removed - use log files for debugging
-            
-        return all_ticks
+            self._tick_current_day += timedelta(days=1)
+        
+        # Get tick from current day
+        if self._tick_day_bars is None or self._tick_day_index >= self._tick_day_count:
+            return None
+        
+        # Validate indices before accessing
+        if (self._tick_day_index >= len(self._tick_day_bars.open_times.data) or
+            self._tick_day_index >= len(self._tick_day_bars.open_bids.data) or
+            self._tick_day_index >= len(self._tick_day_bars.open_asks.data)):
+            # Index out of range - move to next day
+            self._tick_day_index = self._tick_day_count  # Force load next day
+            return self._get_next_tick()  # Recursively get next tick
+        
+        time = self._tick_day_bars.open_times.data[self._tick_day_index]
+        bid = self._tick_day_bars.open_bids.data[self._tick_day_index]
+        ask = self._tick_day_bars.open_asks.data[self._tick_day_index]
+        
+        # Validate tick data
+        import math
+        if (time is None or 
+            bid is None or math.isnan(bid) or 
+            ask is None or math.isnan(ask)):
+            # Invalid tick - skip and try next
+            self._tick_day_index += 1
+            return self._get_next_tick()  # Recursively get next tick
+        
+        self._tick_day_index += 1
+        self._tick_total_processed += 1
+        
+        return (time, bid, ask)
 
     def _load_bars(self, timeframe: int, start: datetime) -> datetime:
-        # Loading messages removed - use log files for debugging
+        # Bars should NOT be preloaded - they will be built incrementally from ticks
+        # This function only ensures the Bars object exists and is initialized
+        # Actual bar building happens in bars_on_tick() as ticks arrive
         
         # Ensure start is aware
         if start.tzinfo is None:
@@ -819,37 +899,14 @@ class Symbol:
             
         look_back_start_datetime = datetime.min.replace(tzinfo=pytz.UTC)
 
-        # 1. Attempt to load from historical bar files (zip)
-        try:
-            look_back_start_datetime = self._load_hour_or_daily_bar(timeframe, start)
-            if timeframe in self.bars_dictonary and self.bars_dictonary[timeframe].count > 0:
-                # Bar file loaded - messages removed
+        # Ensure bars object exists (it should already be created in request_bars)
+        if timeframe not in self.bars_dictonary:
+            # This should not happen if request_bars was called correctly
                 return look_back_start_datetime
-        except Exception as e:
-            # Bar file load skipped or failed - messages removed
-            pass
-
-        # 2. Fallback: Resample from M1 bars if available (only for H1+)
-        if timeframe >= Constants.SEC_PER_HOUR:
-            if Constants.SEC_PER_MINUTE in self.bars_dictonary and self.bars_dictonary[Constants.SEC_PER_MINUTE].count > 0:
-                # Resampling from M1 bars - messages removed
-                resampled = self._resample(self.bars_dictonary[Constants.SEC_PER_MINUTE], timeframe)
-                self.bars_dictonary[timeframe] = resampled
-                if resampled.count > 0:
-                    return resampled.open_times.data[0]
-
-        # 3. Fallback: Resample from Ticks
-        if hasattr(self, 'rate_data') and self.rate_data.count > 0:
-            # Resampling from ticks - messages removed
-            resampled = self._resample(self.rate_data, timeframe)
-            self.bars_dictonary[timeframe] = resampled
-            if resampled.count > 0:
-                return resampled.open_times.data[0]
-
-        # Warning: No data found - messages removed
-        return look_back_start_datetime
-
-        return look_back_start_datetime
+        
+        # Bars are initialized with count=0 and will be built incrementally from ticks
+        # Return the start datetime for reference, but don't preload bars
+        return start
 
     def _seconds_to_pandas_timeframe(self, seconds: int) -> str:
         if seconds % 60 != 0:
@@ -868,148 +925,32 @@ class Symbol:
                 return f"{days}D"
 
     def _load_minute_bars(self, timeframe: int, start: datetime) -> Bars:
+        # Bars should NOT be preloaded - they will be built incrementally from ticks
+        # This function is kept for compatibility but does not preload bars
+        # Actual bar building happens in bars_on_tick() as ticks arrive
+        
         bars = self.bars_dictonary[timeframe]
-        look_back_run = bars.look_back
-        folder = os.path.join(
-            self.api.DataPath,
-            self.quote_provider.provider_name,
-            self.quote_provider.bar_folder[Constants.SEC_PER_MINUTE],
-            f"{self.name}",
-        )
-
-        # Gather and sort files by date
-        file_dates = self._get_sorted_file_dates(folder)
-
-        # Start loading from _BacktestStartUtc
-        start_idx = bisect_left(file_dates, start)
-
-        # Process additional lookback bars if needed
-        while look_back_run > 0:
-            start_idx -= 1
-            if start_idx < 0:
-                break
-
-            zip_path = os.path.join(folder, file_dates[start_idx].strftime("%Y%m%d_quote.zip"))
-            with ZipFile(zip_path, "r") as zip_file:
-                csv_file_name = zip_file.namelist()[0]
-                with zip_file.open(csv_file_name) as csv_file:
-                    decoded = csv_file.read().decode("utf-8")
-                    reader = csv.reader(decoded.splitlines())
-                    rows = list(reader)  # Read all rows to count bars
-                    num_bars = len(rows)
-
-                    if num_bars <= look_back_run:
-                        # Load all bars if the file doesn't fulfill look_back
-                        look_back_run -= num_bars
-                    else:
-                        look_back_run = 0  # break
-
-        # Count files to load for summary
-        files_to_load = [fd for fd in file_dates[start_idx:] if fd <= self.api.robot._BacktestEndUtc]
-        total_files = len(files_to_load)
-        loaded_count = 0
-
-        # Process files starting from _BacktestStartUtc
-        for file_date in file_dates[start_idx:]:
-            if file_date > self.api.robot._BacktestEndUtc:
-                break
-
-            # Path to the zip file
-            zip_path = os.path.join(folder, file_date.strftime("%Y%m%d_quote.zip"))
-
-            with ZipFile(zip_path, "r") as zip_file:
-                for csv_file_name in zip_file.namelist():
-                    with zip_file.open(csv_file_name) as csv_file:
-                        decoded = csv_file.read().decode("utf-8")
-                        reader = csv.reader(decoded.splitlines())
-                        for row in reader:
-                            if len(row) > 0:
-                                bars.append(
-                                    (file_date + timedelta(milliseconds=int(row[0]))).astimezone(self.time_zone)
-                                    + timedelta(hours=self.normalized_hours_offset),
-                                    float(row[1]),
-                                    float(row[2]),
-                                    float(row[3]),
-                                    float(row[4]),
-                                    float(row[5]),
-                                    float(row[6]),
-                                    float(row[7]),
-                                    float(row[8]),
-                                    float(row[9]),
-                                    float(row[10]),
-                                )
-            
-            loaded_count += 1
-            # Print progress every 10 files or at start/end
-            if loaded_count == 1 or loaded_count == total_files or loaded_count % 10 == 0:
-                # Loading bar files - messages removed
-                pass
-
-        if total_files > 0:
-            # Bar files loaded - messages removed
-            pass
-
+        
+        # Ensure start is aware
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=pytz.UTC)
+        
+        # Bars are initialized with count=0 and will be built incrementally from ticks
+        # Return the bars object (with count=0)
         return bars
-        self.bars_dictonary[Constants.SEC_PER_MINUTE]
-        return bars.open_times.data[0]  # get absolute 1st element
 
     def _load_hour_or_daily_bar(self, timeframe: int, start: datetime) -> datetime:
-        # file name example: gbp_usd.zip
-        zipfile = os.path.join(
-            self.api.DataPath,
-            self.quote_provider.provider_name,
-            self.quote_provider.bar_folder[timeframe],
-            f"{self.name}.zip",
-        )
-
-        with ZipFile(zipfile, "r") as z:
-            # Assuming there's only one file in the zip archive
-            file_name = z.namelist()[0]
-            with z.open(file_name) as f:
-                # Read and decode the lines
-                lines = f.read().decode("utf-8").strip().split("\n")
-
-        # one line example:
-        # date time, bid_open, bid_high, bid_low, bid_close, bid_volume, open_ask, high_ask, low_ask, close_ask, volume_ask
-        # 20140101 22:00,1.65616,1.65778,1.65529,1.65778,0,1.65694,1.658,1.65618,1.658,0
-        # Perform binary search to find the start line
-        assert len(lines) > 0
-        assert len(lines[0]) > 0
-
-        # Convert the list of strings to datetime objects
-        datetime_list = [
-            datetime.strptime(line.split(",")[0], "%Y%m%d %H:%M").replace(tzinfo=pytz.UTC) for line in lines
-        ]
-
-        # Find the index
-        start_index = bisect_left(datetime_list, start)
-
-        # load bars from the start index up to the end datetime
-        bars = self.bars_dictonary[timeframe]
-        for i in range(start_index - bars.look_back, len(lines)):
-            row = lines[i].split(",")
-            line_datetime = datetime.strptime(row[0], "%Y%m%d %H:%M").replace(tzinfo=pytz.UTC)
-            if line_datetime > self.api.robot._BacktestEndUtc:
-                break
-
-            line_datetime = line_datetime.astimezone(self.time_zone) + timedelta(
-                hours=self.normalized_hours_offset
-            )
-            bars.append(
-                line_datetime,
-                float(row[1]),
-                float(row[2]),
-                float(row[3]),
-                float(row[4]),
-                float(row[5]),
-                float(row[6]),
-                float(row[7]),
-                float(row[8]),
-                float(row[9]),
-                float(row[10]),
-            )
-
-        return bars.open_times.data[0]  # get absolute 1st element
+        # Bars should NOT be preloaded - they will be built incrementally from ticks
+        # This function is kept for compatibility but does not preload bars
+        # Actual bar building happens in bars_on_tick() as ticks arrive
+        
+        # Ensure start is aware
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=pytz.UTC)
+        
+        # Bars are initialized with count=0 and will be built incrementally from ticks
+        # Return the start datetime for reference, but don't preload bars
+        return start
 
     def _get_sorted_file_dates(self, folder: str) -> list[datetime]:
         files: list[tuple[datetime, str]] = []
@@ -1059,27 +1000,327 @@ class Symbol:
 
     # @jit()
     def symbol_on_tick(self) -> str:
-        self.rate_data.read_index += 1
-        if self.rate_data.read_index >= self.rate_data.count:
-            return "End reached"
+        """
+        Internal tick processing workflow:
+        1. Get next tick from stream (one at a time, not stored)
+        2. Build all bars (bars_on_tick) - new bars go into ring buffers
+        3. Calculate dependent indicators first (e.g., SMA before Bollinger Bands)
+        4. Calculate independent indicators
+        5. When BacktestStart is reached, call user's OnTick
+        """
+        # Get next tick from stream (one at a time, not stored)
+        if 0 == self.quote_provider.data_rate:
+            # Tick data: get from stream
+            tick_data = self._get_next_tick()
+            if tick_data is None:
+                self.api._debug_log(f"[symbol_on_tick] End reached: processed {self._tick_total_processed} ticks, current_day={self._tick_current_day}, end_day={self._tick_end_day}")
+                return "End reached"
+            self.time, self.bid, self.ask = tick_data
+            self.rate_data.read_index += 1  # Track for compatibility
+            # Log every 10000 ticks to track progress
+            if self._tick_total_processed % 10000 == 0:
+                self.api._debug_log(f"[symbol_on_tick] Processed {self._tick_total_processed} ticks, current time={self.time}, BacktestEndUtc={self.api.robot._BacktestEndUtc}")
+        else:
+            # Bar data: use DataSeries (not implemented for streaming yet)
+            self.rate_data.read_index += 1
+            if self.rate_data.read_index >= self.rate_data.count:
+                return "End reached"
+            self.time = self.rate_data.open_times.last(0)
+            self.bid = self.rate_data.open_bids.last(0)
+            self.ask = self.rate_data.open_asks.last(0)
 
-        self.time = self.rate_data.open_times.last(0)
-        self.bid = self.rate_data.open_bids.last(0)
-        self.ask = self.rate_data.open_asks.last(0)
+        # Debug first few ticks
+        if self.rate_data.read_index < 3:
+            self.api._debug_log(f"[symbol_on_tick] Tick {self.rate_data.read_index}: time={self.time}, bid={self.bid}, ask={self.ask}")
+
+        # Safety check: ensure time is not None
+        if self.time is None:
+            self.api._debug_log(f"[symbol_on_tick] ERROR: time is None for read_index {self.rate_data.read_index}")
+            return "End reached"
 
         # Compare symbol.time (UTC) directly with _BacktestStartUtc (UTC) to avoid timezone conversion issues
         # symbol.time is in UTC from tick data, so compare with UTC start time
         self.is_warm_up = self.time < self.api.robot._BacktestStartUtc
 
+        # Step 1: Build all bars first (evolve bars from ticks)
+        # This happens for ALL ticks, even during warm-up (bars need to be built for indicators)
+        bars_changed = False
         for bars in self.bars_dictonary.values():
             if RunMode.RealTime != self.api.robot.RunningMode:
-                bars.bars_on_tick(self.time)
+                previous_count = bars.count
+                previous_read_index = bars.read_index
+                bars.bars_on_tick(self.time, self.bid, self.ask)  # Pass bid/ask to build bars from ticks
+                # Check if bars actually changed (count increased, read_index changed, or new bar formed)
+                if bars.count != previous_count or bars.read_index != previous_read_index or bars.is_new_bar:
+                    bars_changed = True
+                    # Debug bar creation
+                    if bars.count != previous_count:
+                        self.api._debug_log(f"[symbol_on_tick] Bar created: count={bars.count}, timeframe={bars.timeframe_seconds}s, time={self.time}")
 
             # on real time trading we have to build the bars ourselves
             # create on bars based on ticks ()
             # bars.bars_on_tick_create_bars(self.time, self.bid, self.ask)
 
+        # Step 2: Calculate indicators in dependency order
+        # Only calculate indicators when their source DataSeries has changed:
+        # - open: only on new bar
+        # - high/low: only when new high/low is found
+        # - close: on every tick
+        # Only calculate if something changed or if close indicators need updating
+        if bars_changed or self._has_close_indicators():
+            self._calculate_indicators_optimized(bars_changed)
+
         return ""
+    
+    def _calculate_indicators(self) -> None:
+        """
+        Calculate all indicators in dependency order for the current bar.
+        Only calculates indicators when their source DataSeries has changed:
+        - open: only on new bar (is_new_bar)
+        - high: only when new high is found (high_changed)
+        - low: only when new low is found (low_changed)
+        - close: on every tick (always update)
+        
+        Workflow:
+        1. First: Calculate sub-indicators (e.g., SMA, StandardDeviation)
+        2. Then: Calculate top-level indicators that depend on sub-indicators (e.g., BollingerBands)
+        """
+        # Collect all indicators from all bars and DataSeries
+        all_indicators = []
+        indicator_to_bars = {}  # Map indicator to its bars and source DataSeries
+        indicator_to_source = {}  # Map indicator to its source DataSeries type
+        
+        for bars in self.bars_dictonary.values():
+            current_bar_idx = bars.read_index
+            
+            # Only calculate if we have enough bars
+            if current_bar_idx < 0:
+                continue
+            
+            # Check what changed for this bar
+            is_new_bar = bars.is_new_bar
+            # Check if current price creates a new high or low
+            high_changed = bars.high_changed(self.bid)
+            low_changed = bars.low_changed(self.bid)
+            
+            # Collect indicators from all DataSeries, but only if their source has changed
+            # Open indicators: only on new bar
+            if is_new_bar:
+                for data_series in [bars.open_bids, bars.open_asks]:
+                    if hasattr(data_series, 'indicator_list') and data_series.indicator_list:
+                        for indicator in data_series.indicator_list:
+                            if hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                                if indicator not in all_indicators:
+                                    all_indicators.append(indicator)
+                                    indicator_to_bars[indicator] = (bars, current_bar_idx)
+                                    indicator_to_source[indicator] = 'open'
+            
+            # High indicators: only when new high found
+            if high_changed:
+                for data_series in [bars.high_bids, bars.high_asks]:
+                    if hasattr(data_series, 'indicator_list') and data_series.indicator_list:
+                        for indicator in data_series.indicator_list:
+                            if hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                                if indicator not in all_indicators:
+                                    all_indicators.append(indicator)
+                                    indicator_to_bars[indicator] = (bars, current_bar_idx)
+                                    indicator_to_source[indicator] = 'high'
+            
+            # Low indicators: only when new low found
+            if low_changed:
+                for data_series in [bars.low_bids, bars.low_asks]:
+                    if hasattr(data_series, 'indicator_list') and data_series.indicator_list:
+                        for indicator in data_series.indicator_list:
+                            if hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                                if indicator not in all_indicators:
+                                    all_indicators.append(indicator)
+                                    indicator_to_bars[indicator] = (bars, current_bar_idx)
+                                    indicator_to_source[indicator] = 'low'
+            
+            # Close indicators: always update (on every tick)
+            for data_series in [bars.close_bids, bars.close_asks]:
+                if hasattr(data_series, 'indicator_list') and data_series.indicator_list:
+                    for indicator in data_series.indicator_list:
+                        if hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                            if indicator not in all_indicators:
+                                all_indicators.append(indicator)
+                                indicator_to_bars[indicator] = (bars, current_bar_idx)
+                                indicator_to_source[indicator] = 'close'
+        
+        # Separate indicators into two groups:
+        # 1. Independent indicators (no sub-indicators) or indicators with sub-indicators that need calculation
+        # 2. Top-level indicators that depend on sub-indicators
+        
+        independent_indicators = []
+        dependent_indicators = []
+        
+        for indicator in all_indicators:
+            bars, current_bar_idx = indicator_to_bars[indicator]
+            
+            # Check if indicator has sub-indicators
+            has_sub_indicators = False
+            sub_indicators = []
+            
+            # BollingerBands has MovingAverage and StandardDeviation
+            if hasattr(indicator, 'MovingAverage') and hasattr(indicator, 'StandardDeviation'):
+                has_sub_indicators = True
+                sub_indicators.append(indicator.MovingAverage)
+                sub_indicators.append(indicator.StandardDeviation)
+            
+            # StandardDeviation has _movingAverage
+            if hasattr(indicator, '_movingAverage'):
+                has_sub_indicators = True
+                sub_indicators.append(indicator._movingAverage)
+            
+            if has_sub_indicators:
+                dependent_indicators.append((indicator, bars, current_bar_idx, sub_indicators))
+            else:
+                independent_indicators.append((indicator, bars, current_bar_idx))
+        
+        # Step 1: Calculate independent indicators first (for current bar)
+        # This ensures sub-indicators are ready before dependent indicators use them
+        for indicator, bars, current_bar_idx in independent_indicators:
+            # Recalculate for current bar since bar data (especially close) may have changed
+            indicator.calculate(current_bar_idx)
+        
+        # Step 2: Calculate dependent indicators (their sub-indicators should already be calculated)
+        # But we need to ensure sub-indicators are calculated first for the current bar
+        for indicator, bars, current_bar_idx, sub_indicators in dependent_indicators:
+            # Calculate sub-indicators first for the current bar
+            for sub_indicator in sub_indicators:
+                if hasattr(sub_indicator, 'calculate') and hasattr(sub_indicator, 'periods'):
+                    if current_bar_idx >= sub_indicator.periods - 1:
+                        # Recalculate sub-indicator for current bar
+                        sub_indicator.calculate(current_bar_idx)
+            
+            # Then calculate the top-level indicator for the current bar
+            indicator.calculate(current_bar_idx)
+    
+    def _build_indicator_cache(self) -> None:
+        """Build a cache of indicators organized by source type for fast lookup"""
+        if self._indicator_cache is None:
+            self._indicator_cache = {
+                'open': [],  # (indicator, bars, data_series)
+                'high': [],
+                'low': [],
+                'close': []
+            }
+            self._last_high_prices = {}
+            self._last_low_prices = {}
+            
+            for bars in self.bars_dictonary.values():
+                # Cache open indicators
+                for data_series in [bars.open_bids, bars.open_asks]:
+                    if hasattr(data_series, 'indicator_list') and data_series.indicator_list:
+                        for indicator in data_series.indicator_list:
+                            self._indicator_cache['open'].append((indicator, bars, data_series))
+                
+                # Cache high indicators
+                for data_series in [bars.high_bids, bars.high_asks]:
+                    if hasattr(data_series, 'indicator_list') and data_series.indicator_list:
+                        for indicator in data_series.indicator_list:
+                            self._indicator_cache['high'].append((indicator, bars, data_series))
+                
+                # Cache low indicators
+                for data_series in [bars.low_bids, bars.low_asks]:
+                    if hasattr(data_series, 'indicator_list') and data_series.indicator_list:
+                        for indicator in data_series.indicator_list:
+                            self._indicator_cache['low'].append((indicator, bars, data_series))
+                
+                # Cache close indicators
+                for data_series in [bars.close_bids, bars.close_asks]:
+                    if hasattr(data_series, 'indicator_list') and data_series.indicator_list:
+                        for indicator in data_series.indicator_list:
+                            self._indicator_cache['close'].append((indicator, bars, data_series))
+    
+    def _has_close_indicators(self) -> bool:
+        """Check if there are any close-based indicators that need updating every tick"""
+        return len(self._indicator_cache.get('close', [])) > 0 if self._indicator_cache else False
+    
+    def _calculate_indicators_optimized(self, bars_changed: bool) -> None:
+        """
+        Optimized indicator calculation using cached indicator lists.
+        Only calculates indicators when their source DataSeries has changed.
+        """
+        if self._indicator_cache is None:
+            self._build_indicator_cache()
+        
+        indicators_to_calculate = []
+        indicator_to_bars = {}
+        
+        # Collect indicators that need updating based on what changed
+        for bars in self.bars_dictonary.values():
+            current_bar_idx = bars.read_index
+            if current_bar_idx < 0:
+                continue
+            
+            # Open indicators: only on new bar
+            if bars.is_new_bar:
+                for indicator, cached_bars, data_series in self._indicator_cache.get('open', []):
+                    if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                        if indicator not in indicators_to_calculate:
+                            indicators_to_calculate.append(indicator)
+                            indicator_to_bars[indicator] = (bars, current_bar_idx)
+            
+            # High indicators: only when new high found
+            if bars.high_changed(self.bid):
+                for indicator, cached_bars, data_series in self._indicator_cache.get('high', []):
+                    if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                        if indicator not in indicators_to_calculate:
+                            indicators_to_calculate.append(indicator)
+                            indicator_to_bars[indicator] = (bars, current_bar_idx)
+            
+            # Low indicators: only when new low found
+            if bars.low_changed(self.bid):
+                for indicator, cached_bars, data_series in self._indicator_cache.get('low', []):
+                    if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                        if indicator not in indicators_to_calculate:
+                            indicators_to_calculate.append(indicator)
+                            indicator_to_bars[indicator] = (bars, current_bar_idx)
+            
+            # Close indicators: always update (on every tick)
+            for indicator, cached_bars, data_series in self._indicator_cache.get('close', []):
+                if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                    if indicator not in indicators_to_calculate:
+                        indicators_to_calculate.append(indicator)
+                        indicator_to_bars[indicator] = (bars, current_bar_idx)
+        
+        # Separate into dependent and independent indicators
+        independent_indicators = []
+        dependent_indicators = []
+        
+        for indicator in indicators_to_calculate:
+            bars, current_bar_idx = indicator_to_bars[indicator]
+            
+            # Check if indicator has sub-indicators
+            has_sub_indicators = False
+            sub_indicators = []
+            
+            if hasattr(indicator, 'MovingAverage') and hasattr(indicator, 'StandardDeviation'):
+                has_sub_indicators = True
+                sub_indicators.append(indicator.MovingAverage)
+                sub_indicators.append(indicator.StandardDeviation)
+            
+            if hasattr(indicator, '_movingAverage'):
+                has_sub_indicators = True
+                sub_indicators.append(indicator._movingAverage)
+            
+            if has_sub_indicators:
+                dependent_indicators.append((indicator, bars, current_bar_idx, sub_indicators))
+            else:
+                independent_indicators.append((indicator, bars, current_bar_idx))
+        
+        # Calculate independent indicators first
+        for indicator, bars, current_bar_idx in independent_indicators:
+            indicator.calculate(current_bar_idx)
+        
+        # Calculate dependent indicators (sub-indicators first, then top-level)
+        for indicator, bars, current_bar_idx, sub_indicators in dependent_indicators:
+            for sub_indicator in sub_indicators:
+                if hasattr(sub_indicator, 'calculate') and hasattr(sub_indicator, 'periods'):
+                    if current_bar_idx >= sub_indicator.periods - 1:
+                        sub_indicator.calculate(current_bar_idx)
+            indicator.calculate(current_bar_idx)
 
 
 # end of file

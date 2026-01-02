@@ -2,8 +2,10 @@ from __future__ import annotations
 import os
 import re
 import math
+import time
 from typing import TypeVar
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from typing import Optional
 import pytz
 from Api.KitaApiEnums import *
 from Api.TradeProvider import TradeProvider
@@ -36,6 +38,16 @@ class KitaApi:
     BacktestEnd: datetime    # UTC 00:00 (interpreted as UTC midnight, matches cTrader CLI behavior)
     _BacktestStartUtc: datetime = datetime.min  # Internal: UTC version of BacktestStart
     _BacktestEndUtc: datetime = datetime.max    # Internal: UTC version of BacktestEnd
+    
+    @property
+    def BacktestStartUtc(self) -> datetime:
+        """Public property: UTC version of BacktestStart"""
+        return self._BacktestStartUtc
+    
+    @property
+    def BacktestEndUtc(self) -> datetime:
+        """Public property: UTC version of BacktestEnd"""
+        return self._BacktestEndUtc
     RunningMode: RunMode = RunMode.SilentBacktesting
     DataPath: str = ""
     DataMode: DataMode = DataMode.Preload
@@ -53,6 +65,8 @@ class KitaApi:
     trade_provider: TradeProvider = None  # type:ignore  # Can be set from MainConsole
     Indicators: Indicators = None  # type:ignore  # Central API for creating indicators
     MarketData: MarketData = None  # type:ignore  # Central API for accessing bars (similar to cTrader's mBot.MarketData)
+    _debug_log_file = None  # Debug log file handle
+    _last_ontick_date: Optional[str] = None  # Track last date printed for OnTick message
     # endregion
 
     def __init__(self):
@@ -60,6 +74,27 @@ class KitaApi:
         self.Indicators = Indicators(api=self)
         # Initialize MarketData accessor (similar to cTrader's mBot.MarketData)
         self.MarketData = MarketData(api=self)
+        # Initialize debug log file
+        self._init_debug_log()
+    
+    def _init_debug_log(self):
+        """Initialize debug log file"""
+        log_dir = r"C:\Users\HMz\Documents\cAlgo\Logfiles"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        # Use robot class name for debug log filename (get from robot attribute if available)
+        if hasattr(self, 'robot') and hasattr(self.robot, '__class__'):
+            robot_name = self.robot.__class__.__name__
+        else:
+            robot_name = self.__class__.__name__
+        debug_log_path = os.path.join(log_dir, f"{robot_name}_Debug.log")
+        self._debug_log_file = open(debug_log_path, "w", encoding="utf-8")
+    
+    def _debug_log(self, message: str):
+        """Write debug message to debug log file"""
+        if self._debug_log_file:
+            self._debug_log_file.write(f"{message}\n")
+            self._debug_log_file.flush()
 
     # API for robots
     # region
@@ -626,9 +661,9 @@ class KitaApi:
         # Log the longest warm-up requirement if found
         if max_warmup_info:
             warmup_days = warmup_timedelta.total_seconds() / Constants.SEC_PER_DAY
-            print(f"Indicator warm-up calculation: Longest requirement is {max_warmup_info} = {max_warmup_seconds/Constants.SEC_PER_DAY:.2f} days, plus 2 days buffer = {warmup_days:.2f} days total")
+            self._debug_log(f"Indicator warm-up calculation: Longest requirement is {max_warmup_info} = {max_warmup_seconds/Constants.SEC_PER_DAY:.2f} days, plus 2 days buffer = {warmup_days:.2f} days total")
         elif max_warmup_seconds == 0:
-            print("Indicator warm-up calculation: No indicators or look_back found, using 2 days buffer only")
+            self._debug_log("Indicator warm-up calculation: No indicators or look_back found, using 2 days buffer only")
         
         return warmup_timedelta
 
@@ -684,22 +719,22 @@ class KitaApi:
         # Convert BacktestStart/BacktestEnd to UTC 00:00 (matches cTrader CLI behavior)
         if hasattr(self, 'BacktestStart') and self.BacktestStart != datetime.min:
             self._BacktestStartUtc = self._convert_date_to_utc_midnight(self.BacktestStart)
-            print(f"BacktestStart: {self.BacktestStart} -> UTC 00:00: {self._BacktestStartUtc}")
+            self._debug_log(f"BacktestStart: {self.BacktestStart} -> UTC 00:00: {self._BacktestStartUtc}")
         else:
             self._BacktestStartUtc = datetime.min
         
         if hasattr(self, 'BacktestEnd') and self.BacktestEnd != datetime.max:
-            # For end date, set to start of next day (00:00:00) to make it inclusive
-            # This allows processing all ticks on the end date (inclusive)
-            # The check "symbol.time > symbol.end_tz_dt" will stop at next day 00:00, including all of end date
-            next_day = self.BacktestEnd + timedelta(days=1)
-            self._BacktestEndUtc = next_day.replace(hour=0, minute=0, second=0, microsecond=0)
-            print(f"BacktestEnd: {self.BacktestEnd} (inclusive) -> UTC next day 00:00: {self._BacktestEndUtc}")
+            # For end date, set to start of end date (00:00:00) to make it exclusive (matching cTrader CLI behavior)
+            # The check "symbol.time > self._BacktestEndUtc" will stop at end date 00:00, excluding the end date
+            self._BacktestEndUtc = self._convert_date_to_utc_midnight(self.BacktestEnd)
+            self._debug_log(f"BacktestEnd: {self.BacktestEnd} (exclusive) -> UTC 00:00: {self._BacktestEndUtc}")
         else:
             self._BacktestEndUtc = datetime.max
 
         # call robot's OnInit
+        self._debug_log("[DEBUG KitaApi.do_init] Calling robot.on_init()...")
         self.robot.on_init()  # type: ignore
+        self._debug_log("[DEBUG KitaApi.do_init] robot.on_init() completed")
 
         # Calculate warm-up period needed for all indicators
         warmup_period = self._calculate_indicator_warmup_period()
@@ -713,7 +748,7 @@ class KitaApi:
             if self._BacktestStartUtc != datetime.min:
                 # Start loading data from UTC 00:00, minus warmup period
                 self.AllDataStartUtc = self._BacktestStartUtc - warmup_period
-                print(f"Calculated AllDataStartUtc: {self.AllDataStartUtc} (BacktestStart UTC: {self._BacktestStartUtc} - warmup: {warmup_period})")
+                self._debug_log(f"Calculated AllDataStartUtc: {self.AllDataStartUtc} (BacktestStart UTC: {self._BacktestStartUtc} - warmup: {warmup_period})")
             else:
                 # If BacktestStart is also not set, use a default (will be set later)
                 self.AllDataStartUtc = datetime.min
@@ -734,10 +769,15 @@ class KitaApi:
             self.AllDataEndUtc = original_all_data_end
 
         # load bars and data rate
+        self._debug_log(f"[DEBUG KitaApi.do_init] Loading data for {len(self.symbol_dictionary)} symbol(s)...")
         for symbol in self.symbol_dictionary.values():
+            self._debug_log(f"[DEBUG KitaApi.do_init] Checking historical data for {symbol.name}...")
             symbol.check_historical_data()  # make sure data do exist since AllDataStartUtc
+            self._debug_log(f"[DEBUG KitaApi.do_init] Making time aware for {symbol.name}...")
             symbol.make_time_aware()  # make sure all start/end datetimes are time zone aware
+            self._debug_log(f"[DEBUG KitaApi.do_init] Loading datarate and bars for {symbol.name}...")
             symbol.load_datarate_and_bars()
+            self._debug_log(f"[DEBUG KitaApi.do_init] Completed loading for {symbol.name}")
 
     def do_start(self):
         for symbol in self.symbol_dictionary.values():
@@ -747,28 +787,187 @@ class KitaApi:
         # Update quote, bars, indicators, account, bot
         # 1st tick must update all bars and Indicators which have been inized in on_init()
         for symbol in self.symbol_dictionary.values():
+            # Track bar counts and bar times BEFORE symbol_on_tick() is called (to detect new bars)
+            if not hasattr(symbol, '_previous_bar_counts'):
+                symbol._previous_bar_counts = {}
+            if not hasattr(symbol, '_previous_bar_times'):
+                symbol._previous_bar_times = {}
+            previous_counts = {}
+            previous_bar_times = {}
+            for bars in symbol.bars_dictonary.values():
+                bars_id = id(bars)
+                previous_counts[bars_id] = bars.count
+                # Track the last bar time for each timeframe (to detect new bars when ring buffer is full)
+                if bars.count > 1:
+                    try:
+                        prev_bar = bars.Last(1)  # Previous closed bar
+                        if prev_bar:
+                            previous_bar_times[bars_id] = prev_bar.OpenTime
+                    except:
+                        previous_bar_times[bars_id] = None
+                else:
+                    previous_bar_times[bars_id] = None
+            
             # Update quote, bars, indicators which are bound to this symbol
             # This builds bars and updates indicators during warm-up phase
             error = symbol.symbol_on_tick()
             
             # Compare symbol.time (UTC) directly with _BacktestEndUtc (UTC) to avoid timezone conversion issues
             # symbol.time is in UTC from tick data, so compare with UTC end time
+            if "" != error:
+                self._debug_log(f"[do_tick] symbol_on_tick returned error: {error}")
+            if symbol.time > self._BacktestEndUtc:
+                self._debug_log(f"[do_tick] Stopping: symbol.time ({symbol.time}) > _BacktestEndUtc ({self._BacktestEndUtc})")
+            if self._stop_requested:
+                self._debug_log(f"[do_tick] Stopping: _stop_requested is True")
+            
             if "" != error or symbol.time > self._BacktestEndUtc or self._stop_requested:
                 return True  # end reached
+
+            # Check if a new bar was created for any timeframe (compare with previous_counts tracked BEFORE symbol_on_tick)
+            new_bar_created = False
+            new_h4_bar_created = False  # Track if H4 bar (14400 seconds) was created
+            new_m1_bar_created = False  # Track if M1 bar (60 seconds) was created
+            new_h1_bar_created = False  # Track if H1 bar (3600 seconds) was created
+            if len(previous_counts) == 0:
+                self._debug_log(f"[do_tick] WARNING: previous_counts is empty! bars_dictonary has {len(symbol.bars_dictonary)} entries")
+            else:
+                for bars_id, prev_count in previous_counts.items():
+                    bars = None
+                    for symbol_bars in symbol.bars_dictonary.values():
+                        if id(symbol_bars) == bars_id:
+                            bars = symbol_bars
+                            break
+                    
+                    if bars:
+                        # Check if count increased OR bar time changed (for ring buffer when full)
+                        current_bar_time = None
+                        if bars.count > 1:
+                            try:
+                                prev_bar = bars.Last(1)  # Previous closed bar
+                                if prev_bar:
+                                    current_bar_time = prev_bar.OpenTime
+                            except:
+                                pass
+                        
+                        prev_bar_time = previous_bar_times.get(bars_id)
+                        
+                        if bars.count > prev_count:
+                            # Count increased - definitely a new bar
+                            new_bar_created = True
+                            self._debug_log(f"[do_tick] New bar created: timeframe_seconds={bars.timeframe_seconds}, count={bars.count}, prev_count={prev_count}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")
+                            # Track which timeframe created a new bar
+                            if bars.timeframe_seconds == 60:
+                                new_m1_bar_created = True
+                            elif bars.timeframe_seconds == 3600:
+                                new_h1_bar_created = True
+                            elif bars.timeframe_seconds == 14400:
+                                new_h4_bar_created = True
+                        elif prev_bar_time is not None and current_bar_time is not None and current_bar_time != prev_bar_time:
+                            # Ring buffer is full (count == size), but bar time changed - new bar overwrote oldest
+                            new_bar_created = True
+                            self._debug_log(f"[do_tick] New bar created (ring buffer full): timeframe_seconds={bars.timeframe_seconds}, count={bars.count}, prev_count={prev_count}, current_bar_time={current_bar_time}, prev_bar_time={prev_bar_time}, symbol.time={symbol.time}")
+                            # Track which timeframe created a new bar
+                            if bars.timeframe_seconds == 60:
+                                new_m1_bar_created = True
+                            elif bars.timeframe_seconds == 3600:
+                                new_h1_bar_created = True
+                            elif bars.timeframe_seconds == 14400:
+                                new_h4_bar_created = True
+                        elif bars.count < prev_count:
+                            self._debug_log(f"[do_tick] WARNING: bars.count ({bars.count}) < prev_count ({prev_count}) for timeframe_seconds={bars.timeframe_seconds}")
+                        # Don't break here - we need to check all bars to find H4 bars
+                    else:
+                        self._debug_log(f"[do_tick] WARNING: Could not find bars object with id={bars_id}")
 
             # During warm-up phase, only build bars and update indicators, skip OnTick
             if symbol.is_warm_up:
                 symbol.prev_time = symbol.time
                 symbol.prev_bid = symbol.bid
                 symbol.prev_ask = symbol.ask
+                # Update tracked counts and bar times even during warm-up
+                for bars in symbol.bars_dictonary.values():
+                    bars_id = id(bars)
+                    symbol._previous_bar_counts[bars_id] = bars.count
+                    if bars.count > 1:
+                        try:
+                            prev_bar = bars.Last(1)
+                            if prev_bar:
+                                symbol._previous_bar_times[bars_id] = prev_bar.OpenTime
+                            else:
+                                symbol._previous_bar_times[bars_id] = None
+                        except:
+                            symbol._previous_bar_times[bars_id] = None
+                    else:
+                        symbol._previous_bar_times[bars_id] = None
                 continue  # Skip OnTick and account updates during warm-up
 
-            # Update Account
-            if len(self.positions) >= 1:
-                symbol.trade_provider.update_account()
+            # Only call on_tick() when current time >= BacktestStart (not based on bar time)
+            # The user's on_tick() will handle logging after it's called
+            if symbol.time < self._BacktestStartUtc:
+                symbol.prev_time = symbol.time
+                symbol.prev_bid = symbol.bid
+                symbol.prev_ask = symbol.ask
+                # Update tracked counts and bar times
+                for bars in symbol.bars_dictonary.values():
+                    bars_id = id(bars)
+                    symbol._previous_bar_counts[bars_id] = bars.count
+                    if bars.count > 1:
+                        try:
+                            prev_bar = bars.Last(1)
+                            if prev_bar:
+                                symbol._previous_bar_times[bars_id] = prev_bar.OpenTime
+                            else:
+                                symbol._previous_bar_times[bars_id] = None
+                        except:
+                            symbol._previous_bar_times[bars_id] = None
+                    else:
+                        symbol._previous_bar_times[bars_id] = None
+                continue  # Skip OnTick if current time is before start date
+            
+            # Update tracked counts and bar times AFTER checking (so next tick can compare)
+            for bars in symbol.bars_dictonary.values():
+                bars_id = id(bars)
+                symbol._previous_bar_counts[bars_id] = bars.count
+                # Update the last bar time for each timeframe
+                if bars.count > 1:
+                    try:
+                        prev_bar = bars.Last(1)  # Previous closed bar
+                        if prev_bar:
+                            symbol._previous_bar_times[bars_id] = prev_bar.OpenTime
+                        else:
+                            symbol._previous_bar_times[bars_id] = None
+                    except:
+                        symbol._previous_bar_times[bars_id] = None
+                else:
+                    symbol._previous_bar_times[bars_id] = None
 
-            # call the robot - only called when not in warm-up phase
-            self.robot.on_tick(symbol)  # type: ignore
+            # Call OnTick if ANY new bar was created (M1, H1, or H4) and we're past BacktestStart
+            # The bot will handle logging bars for all timeframes in its on_tick() method
+            if (new_m1_bar_created or new_h1_bar_created or new_h4_bar_created) and symbol.time >= self._BacktestStartUtc:
+                self._debug_log(f"[do_tick] Calling on_tick: new_m1={new_m1_bar_created}, new_h1={new_h1_bar_created}, new_h4={new_h4_bar_created}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")
+                
+                # Update Account
+                if len(self.positions) >= 1:
+                    symbol.trade_provider.update_account()
+
+                # Print OnTick date message when new day arrives and measure per-day performance
+                import sys
+                current_date_str = symbol.time.strftime("%d.%m.%Y")
+                
+                if self._last_ontick_date is None or self._last_ontick_date != current_date_str:
+                    # OnTick date message goes to debug log, not stdout/stderr
+                    self._debug_log(f"OnTick {current_date_str}")
+                    self._last_ontick_date = current_date_str
+
+                # call the robot - only called when a new bar within date range was created
+                self.robot.on_tick(symbol)  # type: ignore
+            elif (new_m1_bar_created or new_h1_bar_created or new_h4_bar_created) and symbol.time < self._BacktestStartUtc:
+                self._debug_log(f"[do_tick] Skipping on_tick (warm-up): new_m1={new_m1_bar_created}, new_h1={new_h1_bar_created}, new_h4={new_h4_bar_created}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")
+            elif not new_bar_created:
+                # No new bar, but still update account if needed (for positions)
+                if len(self.positions) >= 1:
+                    symbol.trade_provider.update_account()
 
             # do max/min calcs
             # region
@@ -798,6 +997,11 @@ class KitaApi:
         return False
 
     def do_stop(self):
+        """Stop the robot and close debug log file"""
+        if self._debug_log_file:
+            self._debug_log("KitaApi.do_stop() called")
+            self._debug_log_file.close()
+            self._debug_log_file = None
         for symbol in self.symbol_dictionary.values():
             self.robot.on_stop(symbol)  # type: ignore
 
@@ -814,7 +1018,7 @@ class KitaApi:
         net_profit = sum(x.net_profit for x in self.history)
         trading_days = 0
         for symbol in self.symbol_dictionary.values():
-            if symbol.time == datetime.min or symbol.time.tzinfo is None:
+            if symbol.time is None or symbol.time == datetime.min or (hasattr(symbol.time, 'tzinfo') and symbol.time.tzinfo is None):
                 trading_days = 0
             else:
                 trading_days = (  # 365 - 2*52 = 261 - 9 holidays = 252
@@ -831,7 +1035,7 @@ class KitaApi:
         loss = sum(x.net_profit for x in self.history if x.net_profit < 0)
         profit = sum(x.net_profit for x in self.history if x.net_profit >= 0)
         profit_factor = 0 if losing_trades == 0 else abs(profit / loss)
-        max_current_equity_dd_percent = 100 * self.max_equity_drawdown_value / self.max_equity
+        max_current_equity_dd_percent = 100 * self.max_equity_drawdown_value / self.max_equity if self.max_equity > 0 else 0.0
         max_start_equity_dd_percent = 100 * self.max_equity_drawdown_value / self.initial_account_balance
         calmar = 0 if self.max_equity_drawdown_value == 0 else annual_profit / self.max_equity_drawdown_value
         winning_ratio_percent = 0 if total_trades == 0 else 100.0 * winning_trades / total_trades

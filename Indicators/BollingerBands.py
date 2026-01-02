@@ -25,13 +25,12 @@ class BollingerBands(IIndicator):
         self.standard_deviations: float = standard_deviations
         self.ma_type: MovingAverageType = ma_type
         self.shift: int = shift
-        # DataSeries requires both parent and size
-        # Get size from parent Bars (default to 1000 if not available)
+        # For indicator results, use ring buffer with size exactly matching the period
+        # This saves memory and ensures we only keep the necessary data
         parent_bars = self.source._parent if hasattr(self.source, '_parent') else self.source.parent
-        size = getattr(parent_bars, 'size', 1000) if hasattr(parent_bars, 'size') else 1000
-        self.main = DataSeries(parent_bars, size)
-        self.top = DataSeries(parent_bars, size)
-        self.bottom = DataSeries(parent_bars, size)
+        self.main = DataSeries(parent_bars, self.periods, is_indicator_result=True)
+        self.top = DataSeries(parent_bars, self.periods, is_indicator_result=True)
+        self.bottom = DataSeries(parent_bars, self.periods, is_indicator_result=True)
 
         self.MovingAverage = None
         self.StandardDeviation = None
@@ -66,36 +65,28 @@ class BollingerBands(IIndicator):
         if index1 >= count or index1 < 0:
             return
 
-        # Get the MA and StdDev values using the DataSeries accessor (handles circular buffer)
-        ma_value = self.MovingAverage.result[index]  # type: ignore
-        std_value = self.StandardDeviation.result[index]  # type: ignore
+        # Get the MA and StdDev values using the DataSeries last() method (ring buffer mode)
+        # Since sub-indicators were just calculated for this index, use last(0) to get the most recently calculated value
+        ma_value = self.MovingAverage.result.last(0)  # type: ignore
+        std_value = self.StandardDeviation.result.last(0)  # type: ignore
         
         import math
         if math.isnan(ma_value) or math.isnan(std_value):
             return  # Sub-indicators not calculated yet
         
-        num = std_value * self.standard_deviations
+        # C# code: double num = _standardDeviation.Result[index] * StandardDeviations;
+        # C# code: Main[index2] = _movingAverage.Result[index];
+        # C# code: Bottom[index2] = _movingAverage.Result[index] - num;
+        # C# code: Top[index2] = _movingAverage.Result[index] + num;
+        # C# uses pure double precision - NO rounding during calculation
+        num = float(std_value) * float(self.standard_deviations)  # Ensure double precision
         
-        # cTrader pattern: IndicatorDataSeries is a simple list, write directly by index
-        # Result[index] = value (or Result[index + Shift] = value)
-        # Ensure the arrays are large enough (like cTrader's IndicatorDataSeriesAdapter does)
-        # IMPORTANT: Resize BEFORE writing, not after bounds check
-        while index1 >= len(self.main.data):
-            # Extend arrays with NaN (matching cTrader's behavior)
-            old_size = len(self.main.data)
-            new_size = max(old_size * 2, index1 + 1)
-            self.main.data = np.resize(self.main.data, new_size)
-            self.top.data = np.resize(self.top.data, new_size)
-            self.bottom.data = np.resize(self.bottom.data, new_size)
-            # Fill new positions with NaN
-            self.main.data[old_size:] = np.nan
-            self.top.data[old_size:] = np.nan
-            self.bottom.data[old_size:] = np.nan
-        
-        # Write directly to index (matching cTrader's simple assignment)
-        self.main.data[index1] = ma_value
-        self.bottom.data[index1] = ma_value - num
-        self.top.data[index1] = ma_value + num
+        # For indicator ring buffers, use write_indicator_value() which handles circular indexing
+        # The result is always written to the current position, regardless of index
+        # NO rounding - store pure double precision values (matching C# exactly)
+        self.main.write_indicator_value(float(ma_value))
+        self.bottom.write_indicator_value(float(ma_value - num))
+        self.top.write_indicator_value(float(ma_value + num))
 
 
 # end of file

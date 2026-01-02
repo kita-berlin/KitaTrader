@@ -1,4 +1,5 @@
 import os
+import sys
 import gzip
 import struct
 import pytz
@@ -34,7 +35,10 @@ class QuoteCtraderCache(QuoteProvider):
 
         path = os.path.join(self.cache_path, run_utc.strftime("%Y%m%d") + ".zticks")
         if os.path.exists(path):
-            print(f"Loading cache file: {path}")
+            date_str = run_utc.strftime("%d.%m.%Y")
+            # Loading message goes to debug log, not stdout/stderr
+            if hasattr(self, 'api') and self.api:
+                self.api._debug_log(f"Loading {date_str}")
             # Read the compressed file into a byte array
             with gzip.open(path, "rb") as decompressor:
                 ba = decompressor.read()

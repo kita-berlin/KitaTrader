@@ -41,12 +41,11 @@ class ExponentialMovingAverage(IIndicator):
         # Calculate alpha (smoothing factor)
         self._alpha: float = 2.0 / (periods + 1)
         
-        # Get parent and size for result DataSeries
+        # Get parent for result DataSeries
         parent_bars = self.source._parent if hasattr(self.source, '_parent') else self.source.parent
-        size = getattr(parent_bars, 'size', 1000) if hasattr(parent_bars, 'size') else 1000
         
-        # Create result DataSeries
-        self.result = DataSeries(parent_bars, size)
+        # For indicator results, use ring buffer with size exactly matching the period
+        self.result = DataSeries(parent_bars, self.periods, is_indicator_result=True)
     
     def initialize(self) -> None:
         """Initialize the indicator (required by IIndicator interface)"""
@@ -69,29 +68,34 @@ class ExponentialMovingAverage(IIndicator):
         if shifted_index >= count or shifted_index < 0 or shifted_index >= len(self.result.data):
             return
         
-        # Get previous EMA value
-        if shifted_index > 0:
-            prev_ema = self.result.data[shifted_index - 1]
-        else:
-            prev_ema = None
+        # Get previous EMA value using last() method (works with ring buffers)
+        prev_ema = self.result.last(1) if self.result._write_index > 0 else float('nan')
         
-        # Get current source value
-        current_value = self.source.data[index]
-        if current_value is None:
+        # Get current source value using last() method
+        source_count = self.source._parent.count
+        if index < 0 or index >= source_count:
+            return
+        source_last_index = source_count - 1 - index
+        current_value = self.source.last(source_last_index)
+        
+        import math
+        if math.isnan(current_value):
             return
         
-        # Calculate EMA
-        import math
-        if prev_ema is None or math.isnan(prev_ema):
-            # First value: EMA = Price
-            self.result.data[shifted_index] = current_value
+        # C# code: if (double.IsNaN(num2)) { Result[num] = Source[index]; }
+        # C# code: else { Result[num] = Source[index] * _alpha + num2 * (1.0 - _alpha); }
+        # C# uses pure double precision - NO rounding during calculation
+        # Calculate EMA in pure double precision
+        if math.isnan(prev_ema):
+            # First value: EMA = Price (matching C#: Result[num] = Source[index])
+            ema_value = float(current_value)  # Ensure double precision
         else:
-            # EMA = Price * alpha + PrevEMA * (1 - alpha)
-            self.result.data[shifted_index] = current_value * self._alpha + prev_ema * (1.0 - self._alpha)
+            # EMA = Price * alpha + PrevEMA * (1 - alpha) (matching C# exactly)
+            ema_value = float(current_value) * float(self._alpha) + float(prev_ema) * (1.0 - float(self._alpha))
+        
+        # Write to ring buffer - NO rounding, pure double precision (matching C# exactly)
+        self.result.write_indicator_value(float(ema_value))
     
-    def __getitem__(self, index: int) -> float:
-        """Allow array-style access to results"""
-        return self.result[index]
 
 
 # end of file

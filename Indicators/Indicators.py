@@ -66,7 +66,11 @@ class Indicators:
     ) -> tuple[str, MovingAverage]:
         if MovingAverageType.Simple == ma_type:
             indicator = SimpleMovingAverage(source, periods)
-            source.indicator_list.append(indicator)
+            # Register indicator and update max period requirement
+            if hasattr(source, 'register_indicator'):
+                source.register_indicator(indicator)
+            else:
+                source.indicator_list.append(indicator)
             # Get timeframe from source's parent Bars
             timeframe_seconds = 0
             if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
@@ -75,7 +79,11 @@ class Indicators:
             return "", indicator
         elif MovingAverageType.Exponential == ma_type:
             indicator = ExponentialMovingAverage(source, periods)
-            source.indicator_list.append(indicator)
+            # Register indicator and update max period requirement
+            if hasattr(source, 'register_indicator'):
+                source.register_indicator(indicator)
+            else:
+                source.indicator_list.append(indicator)
             timeframe_seconds = 0
             if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
                 timeframe_seconds = source._parent.timeframe_seconds
@@ -90,7 +98,11 @@ class Indicators:
         periods: int = 14,
     ) -> tuple[str, ExponentialMovingAverage]:
         indicator = ExponentialMovingAverage(source, periods)
-        source.indicator_list.append(indicator)
+        # Register indicator and update max period requirement
+        if hasattr(source, 'register_indicator'):
+            source.register_indicator(indicator)
+        else:
+            source.indicator_list.append(indicator)
         timeframe_seconds = 0
         if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
             timeframe_seconds = source._parent.timeframe_seconds
@@ -103,7 +115,11 @@ class Indicators:
         periods: int = 14,
     ) -> tuple[str, RelativeStrengthIndex]:
         indicator = RelativeStrengthIndex(source, periods)
-        source.indicator_list.append(indicator)
+        # Register indicator and update max period requirement
+        if hasattr(source, 'register_indicator'):
+            source.register_indicator(indicator)
+        else:
+            source.indicator_list.append(indicator)
         timeframe_seconds = 0
         if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
             timeframe_seconds = source._parent.timeframe_seconds
@@ -119,7 +135,11 @@ class Indicators:
         sigma: float = 0.65,
     ) -> tuple[str, Vidya]:
         indicator = Vidya(source, periods, sigma)
-        source.indicator_list.append(indicator)
+        # Register indicator and update max period requirement
+        if hasattr(source, 'register_indicator'):
+            source.register_indicator(indicator)
+        else:
+            source.indicator_list.append(indicator)
         timeframe_seconds = 0
         if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
             timeframe_seconds = source._parent.timeframe_seconds
@@ -134,7 +154,11 @@ class Indicators:
         signal_periods: int = 9,
     ) -> tuple[str, MacdCrossOver]:
         indicator = MacdCrossOver(source, long_cycle, short_cycle, signal_periods)
-        source.indicator_list.append(indicator)
+        # Register indicator and update max period requirement
+        if hasattr(source, 'register_indicator'):
+            source.register_indicator(indicator)
+        else:
+            source.indicator_list.append(indicator)
         timeframe_seconds = 0
         if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
             timeframe_seconds = source._parent.timeframe_seconds
@@ -150,7 +174,11 @@ class Indicators:
         signal_periods: int = 9,
     ) -> tuple[str, MacdHistogram]:
         indicator = MacdHistogram(source, long_cycle, short_cycle, signal_periods)
-        source.indicator_list.append(indicator)
+        # Register indicator and update max period requirement
+        if hasattr(source, 'register_indicator'):
+            source.register_indicator(indicator)
+        else:
+            source.indicator_list.append(indicator)
         timeframe_seconds = 0
         if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
             timeframe_seconds = source._parent.timeframe_seconds
@@ -165,7 +193,11 @@ class Indicators:
         ma_type: MovingAverageType = MovingAverageType.Simple,
     ) -> tuple[str, StandardDeviation]:
         indicator = StandardDeviation(source, periods, ma_type)
-        source.indicator_list.append(indicator)
+        # Register indicator and update max period requirement
+        if hasattr(source, 'register_indicator'):
+            source.register_indicator(indicator)
+        else:
+            source.indicator_list.append(indicator)
         timeframe_seconds = 0
         if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
             timeframe_seconds = source._parent.timeframe_seconds
@@ -181,7 +213,11 @@ class Indicators:
         shift: int = 0,
     ) -> tuple[str, BollingerBands]:
         indicator = BollingerBands(source, periods, standard_deviations, ma_type, shift)
-        source.indicator_list.append(indicator)
+        # Register indicator and update max period requirement
+        if hasattr(source, 'register_indicator'):
+            source.register_indicator(indicator)
+        else:
+            source.indicator_list.append(indicator)
         timeframe_seconds = 0
         if hasattr(source, '_parent') and hasattr(source._parent, 'timeframe_seconds'):
             timeframe_seconds = source._parent.timeframe_seconds

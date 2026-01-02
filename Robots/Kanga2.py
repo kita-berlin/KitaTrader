@@ -187,12 +187,11 @@ class Quantrobot:
                 self._debug_log(f"Error creating Bollinger Bands: {error}")
                 return False
             
-            # Calculate indicator for all bars (need to calculate from periods-1 to count-1)
-            if self.m_bot_bars.count >= self.bollinger_period:
-                # Calculate for all bars that have enough data
-                for i in range(self.bollinger_period - 1, self.m_bot_bars.count):
-                    self.m_bollinger.calculate(i)
+            # DO NOT calculate indicators here - they will be calculated automatically
+            # during symbol_on_tick() when bars are updated (matching live trading behavior)
+            # Just track the initial bar count
                 self.m_last_bar_count = self.m_bot_bars.count
+            self._debug_log(f"Indicator created (will be calculated during ticks): bars={self.m_bot_bars.count}, periods={self.bollinger_period}")
             
             # Make label unique per bot instance
             direction_str = "Long" if self.bot_direction == TradeDirection.Long else \
@@ -311,7 +310,7 @@ class Quantrobot:
                 entry_time = entry_time.replace(tzinfo=UTC)
             
             # Only log trades that start within the backtest period
-            if entry_time < self.bot._BacktestStartUtc or entry_time >= self.bot._BacktestEndUtc:
+            if entry_time < self.bot.BacktestStartUtc or entry_time >= self.bot.BacktestEndUtc:
                 return  # Skip trades outside backtest period
             
             close_price = position.closing_price
@@ -369,49 +368,38 @@ class Quantrobot:
         # Update spread average
         self.update_spread_average()
         
-        # PERFORMANCE OPTIMIZATION: Only refresh bars when needed (not on every tick!)
-        # Check if bars count changed (new bar formed) - this is much faster than calling get_bars()
-        current_bar_count = self.m_bot_bars.count if self.m_bot_bars else 0
-        
-        # Only call GetBars() if we suspect a new bar might have formed (check every 100 ticks or when count might have changed)
-        if self.m_tick_count % 100 == 0 or current_bar_count != self.m_last_bar_count:
-            self.m_bot_bars = self.bot.MarketData.GetBars(self.bar_timeframe, self.qr_symbol_name)
-            if self.m_bot_bars is None:
-                # Only log error once at the start
+        # Use bars retrieved in qr_on_start() - do NOT call GetBars() here
+        # According to cTrader API: GetBars() should only be called during initialization
+        # The bars object is automatically updated as new bars form, so we just check the count
+        if self.m_bot_bars is None:
+            # This should never happen if initialization was successful
                 if self.m_tick_count == 1:
-                    self._debug_log(f"Error getting bars")
+                self._debug_log(f"Error: m_bot_bars is None (should have been set in qr_on_start)")
                 return
         
         # Check if enough bars before proceeding with trading logic
-        if self.m_bot_bars is None or self.m_bot_bars.count < self.bollinger_period:
+        if self.m_bot_bars.count < self.bollinger_period:
             # Log progress periodically to see if bars are building
             if self.m_tick_count == 1 or (self.m_tick_count % 100000 == 0):
-                bar_count = self.m_bot_bars.count if self.m_bot_bars else 0
+                bar_count = self.m_bot_bars.count
                 current_time = self.bot_symbol.time if self.bot_symbol else "N/A"
                 self._debug_log(f"Waiting for bars: count={bar_count}, need={self.bollinger_period}, time={current_time}, tick={self.m_tick_count}")
             return  # Skip trading logic if not enough bars
         
-        # Check for new bar formed - only recalculate indicator when new bar appears
+        # Check for new bar formed
+        # Indicators are now calculated automatically in bars_on_tick() when bars update
+        # So we don't need to manually calculate them here
         new_bar_formed = False
         if self.m_bot_bars.count > self.m_last_bar_count:
             new_bar_formed = True
-            # New bar formed - recalculate indicator for all new bars
-            if self.m_bollinger is not None:
-                # Calculate for all new bars (from last_bar_count to current count)
-                for i in range(max(self.m_last_bar_count, self.bollinger_period - 1), self.m_bot_bars.count):
-                    self.m_bollinger.calculate(i)
-                # Debug: Test if calculation worked (only once when indicator first becomes ready)
-                if self.m_bot_bars.count >= self.bollinger_period and self.m_last_bar_count < self.bollinger_period:
-                    test_idx = self.m_bot_bars.count - 2  # Second to last bar
-                    read_idx = self.m_bot_bars.read_index
-                    upper_test = self.m_bollinger.top[test_idx]
-                    self._debug_log(f"Bars ready! count={self.m_bot_bars.count}, read_index={read_idx}, test_idx={test_idx}, upper_test={upper_test}")
             self.m_last_bar_count = self.m_bot_bars.count
         
+        # Get bar index for accessing indicator values
+        bar_idx = self.m_bot_bars.read_index if hasattr(self.m_bot_bars, 'read_index') else (self.m_bot_bars.count - 1)
+        
         # Check for new M1 bar (only when main bar changes or periodically)
+        # Use m_m1_bars retrieved in qr_on_start() - do NOT call GetBars() here
         if new_bar_formed or self.m_tick_count % 100 == 0:
-            if self.m_m1_bars:
-                self.m_m1_bars = self.bot.MarketData.GetBars(Constants.SEC_PER_MINUTE, self.qr_symbol_name)
                 if self.m_m1_bars and self.m_m1_bars.count > self.m_last_m1_bar_count:
                     self.m_last_m1_bar_count = self.m_m1_bars.count
         
@@ -419,49 +407,84 @@ class Quantrobot:
         if self.m_bollinger is None:
             return
         
-        # Get Bollinger Band values (Last(1) = previous closed bar)
-        # In KitaTrader, last(1) means 1 bar ago (0 = current)
-        if self.m_bot_bars.count < 2:
+        # Get Bollinger Band values for the previous closed bar
+        # Use read_index - 1 to get the previous closed bar (read_index points to current bar)
+        if self.m_bot_bars.count < self.bollinger_period:
             return
         
-        # Use last(1) to get the previous closed bar's indicator values
-        # last(0) = current bar, last(1) = 1 bar ago (previous closed bar)
-        # Try using direct index access instead of last() to debug
-        bar_idx = self.m_bot_bars.count - 2  # Previous closed bar (count-1 is current, count-2 is previous)
-        if bar_idx < 0:
-            return
+        # Get the index of the previous closed bar
+        # read_index points to the current bar being processed, so read_index - 1 is the previous closed bar
+        read_idx = self.m_bot_bars.read_index
+        if read_idx < 1:
+            return  # Need at least 1 previous bar
         
-        # Try both methods to see which works
-        upper_last = self.m_bollinger.top.last(1)
-        lower_last = self.m_bollinger.bottom.last(1)
-        main_last = self.m_bollinger.main.last(1)
+        bar_idx = read_idx - 1  # Previous closed bar
         
-        upper_idx = self.m_bollinger.top[bar_idx] if bar_idx < len(self.m_bollinger.top.data) else float('nan')
-        lower_idx = self.m_bollinger.bottom[bar_idx] if bar_idx < len(self.m_bollinger.bottom.data) else float('nan')
-        main_idx = self.m_bollinger.main[bar_idx] if bar_idx < len(self.m_bollinger.main.data) else float('nan')
+        # Ensure bar_idx is within valid range and has enough periods for indicator
+        if bar_idx < self.bollinger_period - 1:
+            return  # Not enough bars for indicator calculation
         
-        # Use direct index access (should match cTrader behavior)
-        upper = upper_idx
-        lower = lower_idx
-        main = main_idx
+        # Indicators are now calculated automatically in bars_on_tick() when bars update
+        # So we can directly access the indicator values
+        # But first, ensure we have enough source data points
+        source_data_len = len(self.m_bot_bars.close_bids.data)
+        if bar_idx >= source_data_len:
+            return  # Not enough source data
+        
+        # Access indicator values using Last(1) to match C# behavior
+        # C# uses: mBollinger.Top.Last(1), mBollinger.Bottom.Last(1), mBollinger.Main.Last(1)
+        # Last(1) gets the value from 1 bar ago (the previous closed bar)
+        # The indicator should have been calculated for the previous bar in the previous tick
+        # But to be safe, let's also try to ensure the indicator is calculated for the previous bar
+        # by accessing it directly using the bar index
+        read_idx = self.m_bot_bars.read_index
+        prev_bar_idx = read_idx - 1  # Previous closed bar index
+        
+        # Try both methods: Last(1) and direct index access
+        upper = self.m_bollinger.top.last(1)
+        lower = self.m_bollinger.bottom.last(1)
+        main = self.m_bollinger.main.last(1)
+        
+        # If Last(1) returns NaN, try direct index access (the indicator writes to index + shift)
+        import math
+        if math.isnan(upper) and prev_bar_idx >= 0:
+            indicator_idx = prev_bar_idx + self.m_bollinger.shift
+            if indicator_idx >= 0 and indicator_idx < len(self.m_bollinger.top.data):
+                upper = self.m_bollinger.top.data[indicator_idx]
+                lower = self.m_bollinger.bottom.data[indicator_idx]
+                main = self.m_bollinger.main.data[indicator_idx]
         
         # Check for NaN (indicator not calculated or invalid)
         import math
         if math.isnan(upper) or math.isnan(lower) or math.isnan(main):
-            # Debug: Log when BB values are invalid (indicator not calculated yet)
+            # Indicators should be calculated automatically, but if still NaN, try to calculate it explicitly
+            # This might happen if the indicator wasn't calculated for the previous bar
+            # Try calculating the indicator for the previous bar index
+            if prev_bar_idx >= self.bollinger_period - 1:
+                try:
+                    # Calculate indicator for the previous bar
+                    self.m_bollinger.calculate(prev_bar_idx)
+                    # Try reading again
+                    indicator_idx = prev_bar_idx + self.m_bollinger.shift
+                    if indicator_idx >= 0 and indicator_idx < len(self.m_bollinger.top.data):
+                        upper = self.m_bollinger.top.data[indicator_idx]
+                        lower = self.m_bollinger.bottom.data[indicator_idx]
+                        main = self.m_bollinger.main.data[indicator_idx]
+                except Exception as e:
+                    if self.m_tick_count % 10000 == 0:
+                        pass  # Indicator calculation failed, will try again on next tick
+            
+            # If still NaN, log and return
+            if math.isnan(upper) or math.isnan(lower) or math.isnan(main):
             if self.m_tick_count % 10000 == 0:  # Debug every 10k ticks
-                read_idx = self.m_bot_bars.read_index if self.m_bot_bars else -1
-                self._debug_log(f"BB values NaN: bar_idx={bar_idx}, upper={upper}, lower={lower}, main={main}, bar_count={self.m_bot_bars.count}, read_index={read_idx}, upper_last={upper_last}, upper_idx={upper_idx}")
+                    source_val = self.m_bot_bars.close_bids.data[bar_idx] if bar_idx < len(self.m_bot_bars.close_bids.data) else float('nan')
+                    pass  # Indicator not ready yet
             return
         
         # Get current prices
         spread = self.bot_symbol.spread
         bid = self.bot_symbol.bid
         ask = self.bot_symbol.ask
-        
-        # Debug: Log BB values periodically to see if they're being calculated
-        if self.m_tick_count % 50000 == 0:
-            self._debug_log(f"BB values: upper={upper:.5f}, lower={lower:.5f}, main={main:.5f}, bid={bid:.5f}, bar_count={self.m_bot_bars.count}")
         
         # Pause Logic: Check if we touched Main Band to clear pause
         if self.m_is_paused_after_loss:
@@ -743,9 +766,38 @@ class Kanga2(KitaApi):
                 if "BarTimeframe" in params:
                     val = params["BarTimeframe"]
                     if str(val).strip() != "_":
-                        # Convert timeframe index to seconds
-                        # C# uses TimeFrameNdx enum, we use seconds
-                        bot.bar_timeframe = int(val) * Constants.SEC_PER_HOUR  # Simplified
+                        # Convert TimeFrameNdx enum to seconds
+                        # C# TimeFrameNdx enum: Minute=0, Minute5=1, Minute15=3, Hour=7, Hour4=10, Weekly=17, etc.
+                        # Map enum values to actual timeframes in seconds
+                        tf_enum = int(val)
+                        if tf_enum == 0:  # Minute
+                            bot.bar_timeframe = Constants.SEC_PER_MINUTE
+                        elif tf_enum == 1:  # Minute5
+                            bot.bar_timeframe = 5 * Constants.SEC_PER_MINUTE
+                        elif tf_enum == 3:  # Minute15
+                            bot.bar_timeframe = 15 * Constants.SEC_PER_MINUTE
+                        elif tf_enum == 5:  # Minute30
+                            bot.bar_timeframe = 30 * Constants.SEC_PER_MINUTE
+                        elif tf_enum == 7:  # Hour
+                            bot.bar_timeframe = Constants.SEC_PER_HOUR
+                        elif tf_enum == 8:  # Hour2
+                            bot.bar_timeframe = 2 * Constants.SEC_PER_HOUR
+                        elif tf_enum == 9:  # Hour3
+                            bot.bar_timeframe = 3 * Constants.SEC_PER_HOUR
+                        elif tf_enum == 10:  # Hour4
+                            bot.bar_timeframe = 4 * Constants.SEC_PER_HOUR
+                        elif tf_enum == 11:  # Hour6
+                            bot.bar_timeframe = 6 * Constants.SEC_PER_HOUR
+                        elif tf_enum == 12:  # Hour8
+                            bot.bar_timeframe = 8 * Constants.SEC_PER_HOUR
+                        elif tf_enum == 14:  # Daily
+                            bot.bar_timeframe = Constants.SEC_PER_DAY
+                        elif tf_enum == 17:  # Weekly (but config shows 17 for H4, so map to H4)
+                            # Note: Some configs use 17 for H4 instead of Weekly
+                            bot.bar_timeframe = 4 * Constants.SEC_PER_HOUR  # H4
+                        else:
+                            # Fallback: assume it's hours (old behavior for compatibility)
+                            bot.bar_timeframe = tf_enum * Constants.SEC_PER_HOUR
             
             # Parameters loaded - messages removed
                 
@@ -765,6 +817,8 @@ class Kanga2(KitaApi):
     def on_init(self) -> None:
         """Initialize bot - ported from OnStart()"""
         self.sanitize_parameters()
+        
+        # Initialize deferred BB messages list
         
         # Initialize logging if enabled
         if self.RunningMode != RunMode.RealTime and self.is_do_logging:
@@ -996,6 +1050,7 @@ class Kanga2(KitaApi):
     
     def on_stop(self, symbol: Symbol = None):
         """Called when bot stops - ported from OnStop()"""
+        
         # Process stop for all bots
         for system_bot in self.m_filtered_opti_bots:
             if system_bot is None:
