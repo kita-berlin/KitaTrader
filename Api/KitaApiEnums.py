@@ -137,13 +137,6 @@ class ChartIconType(Enum):
     DownTriangle = 7
 
 
-class DataMode(Enum):
-    # preload data for the whole period
-    Preload = 1
-    # load data during the backtest run
-    Online = 2
-
-
 class RunMode(Enum):
     #
     # Summary:

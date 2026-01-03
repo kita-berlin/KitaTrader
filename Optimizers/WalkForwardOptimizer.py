@@ -147,7 +147,7 @@ class WalkForwardOptimizer:
         robot.BacktestEndUtc = end_date
         robot.RunningMode = RunMode.SilentBacktesting
         robot.DataPath = "$(OneDrive)/KitaData/cfd"
-        robot.DataMode = DataMode.Preload
+        # Data is loaded day-by-day during backtest (Online mode only)
         robot.AccountInitialBalance = 10000.0
         robot.AccountLeverage = 500
         robot.AccountCurrency = "EUR"

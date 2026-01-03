@@ -50,7 +50,6 @@ class KitaApi:
         return self._BacktestEndUtc
     RunningMode: RunMode = RunMode.SilentBacktesting
     DataPath: str = ""
-    DataMode: DataMode = DataMode.Preload
     AccountInitialBalance: float = 10000.0
     AccountLeverage: int = 500
     AccountCurrency: str = "EUR"
@@ -716,18 +715,32 @@ class KitaApi:
         # set working data path
         self.robot.DataPath = self.resolve_env_variables(self.robot.DataPath)
 
-        # Convert BacktestStart/BacktestEnd to UTC 00:00 (matches cTrader CLI behavior)
+        # Convert BacktestStart/BacktestEnd to UTC
+        # If BacktestStart/BacktestEnd have time components (hours:minutes:seconds), preserve them
+        # Otherwise, convert to UTC 00:00 (matches cTrader CLI behavior)
         if hasattr(self, 'BacktestStart') and self.BacktestStart != datetime.min:
-            self._BacktestStartUtc = self._convert_date_to_utc_midnight(self.BacktestStart)
-            self._debug_log(f"BacktestStart: {self.BacktestStart} -> UTC 00:00: {self._BacktestStartUtc}")
+            # Check if time components are set (not midnight)
+            if self.BacktestStart.hour == 0 and self.BacktestStart.minute == 0 and self.BacktestStart.second == 0 and self.BacktestStart.microsecond == 0:
+                # Date only - convert to UTC midnight
+                self._BacktestStartUtc = self._convert_date_to_utc_midnight(self.BacktestStart)
+                self._debug_log(f"BacktestStart: {self.BacktestStart} -> UTC 00:00: {self._BacktestStartUtc}")
+            else:
+                # Has time components - use as-is (assumed to be UTC)
+                self._BacktestStartUtc = self.BacktestStart
+                self._debug_log(f"BacktestStart: {self.BacktestStart} -> UTC (preserved): {self._BacktestStartUtc}")
         else:
             self._BacktestStartUtc = datetime.min
         
         if hasattr(self, 'BacktestEnd') and self.BacktestEnd != datetime.max:
-            # For end date, set to start of end date (00:00:00) to make it exclusive (matching cTrader CLI behavior)
-            # The check "symbol.time > self._BacktestEndUtc" will stop at end date 00:00, excluding the end date
-            self._BacktestEndUtc = self._convert_date_to_utc_midnight(self.BacktestEnd)
-            self._debug_log(f"BacktestEnd: {self.BacktestEnd} (exclusive) -> UTC 00:00: {self._BacktestEndUtc}")
+            # Check if time components are set (not midnight)
+            if self.BacktestEnd.hour == 0 and self.BacktestEnd.minute == 0 and self.BacktestEnd.second == 0 and self.BacktestEnd.microsecond == 0:
+                # Date only - convert to UTC midnight (exclusive)
+                self._BacktestEndUtc = self._convert_date_to_utc_midnight(self.BacktestEnd)
+                self._debug_log(f"BacktestEnd: {self.BacktestEnd} (exclusive) -> UTC 00:00: {self._BacktestEndUtc}")
+            else:
+                # Has time components - use as-is (assumed to be UTC, exclusive)
+                self._BacktestEndUtc = self.BacktestEnd
+                self._debug_log(f"BacktestEnd: {self.BacktestEnd} (exclusive) -> UTC (preserved): {self._BacktestEndUtc}")
         else:
             self._BacktestEndUtc = datetime.max
 
@@ -942,11 +955,23 @@ class KitaApi:
                 else:
                     symbol._previous_bar_times[bars_id] = None
 
-            # Call OnTick if ANY new bar was created (M1, H1, or H4) and we're past BacktestStart
-            # The bot will handle logging bars for all timeframes in its on_tick() method
-            if (new_m1_bar_created or new_h1_bar_created or new_h4_bar_created) and symbol.time >= self._BacktestStartUtc:
-                self._debug_log(f"[do_tick] Calling on_tick: new_m1={new_m1_bar_created}, new_h1={new_h1_bar_created}, new_h4={new_h4_bar_created}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")
-                
+            # Call OnTick based on mode:
+            # - For tick data (data_rate == 0): Call on_tick for every tick after BacktestStart
+            # - For bar data: Call on_tick only when a new bar is created
+            should_call_ontick = False
+            if symbol.quote_provider.data_rate == 0:
+                # Tick mode: call on_tick for every tick within BacktestStart/BacktestEnd range
+                # Note: Filtering for unchanged prices happens "under the hood" in symbol_on_tick
+                # Here we only check the timestamp range - user's on_tick is only called for ticks in range
+                if symbol.time >= self._BacktestStartUtc and symbol.time < self._BacktestEndUtc:
+                    should_call_ontick = True
+                    self._debug_log(f"[do_tick] Calling on_tick (tick mode): symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}, BacktestEndUtc={self._BacktestEndUtc}")
+            elif (new_m1_bar_created or new_h1_bar_created or new_h4_bar_created) and symbol.time >= self._BacktestStartUtc:
+                # Bar mode: call on_tick only when a new bar is created
+                should_call_ontick = True
+                self._debug_log(f"[do_tick] Calling on_tick (bar mode): new_m1={new_m1_bar_created}, new_h1={new_h1_bar_created}, new_h4={new_h4_bar_created}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")
+            
+            if should_call_ontick:
                 # Update Account
                 if len(self.positions) >= 1:
                     symbol.trade_provider.update_account()
@@ -960,7 +985,7 @@ class KitaApi:
                     self._debug_log(f"OnTick {current_date_str}")
                     self._last_ontick_date = current_date_str
 
-                # call the robot - only called when a new bar within date range was created
+                # call the robot
                 self.robot.on_tick(symbol)  # type: ignore
             elif (new_m1_bar_created or new_h1_bar_created or new_h4_bar_created) and symbol.time < self._BacktestStartUtc:
                 self._debug_log(f"[do_tick] Skipping on_tick (warm-up): new_m1={new_m1_bar_created}, new_h1={new_h1_bar_created}, new_h4={new_h4_bar_created}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")

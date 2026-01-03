@@ -68,15 +68,11 @@ class ExponentialMovingAverage(IIndicator):
         if shifted_index >= count or shifted_index < 0 or shifted_index >= len(self.result.data):
             return
         
-        # Get previous EMA value using last() method (works with ring buffers)
-        prev_ema = self.result.last(1) if self.result._write_index > 0 else float('nan')
+        # Get previous EMA value using [] indexing exactly like C#: Result[index - 1]
+        prev_ema = self.result[index - 1] if index > 0 else float('nan')
         
-        # Get current source value using last() method
-        source_count = self.source._parent.count
-        if index < 0 or index >= source_count:
-            return
-        source_last_index = source_count - 1 - index
-        current_value = self.source.last(source_last_index)
+        # Get current source value using [] indexing exactly like C#: Source[index]
+        current_value = self.source[index]
         
         import math
         if math.isnan(current_value):

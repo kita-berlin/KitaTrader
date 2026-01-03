@@ -65,10 +65,9 @@ class BollingerBands(IIndicator):
         if index1 >= count or index1 < 0:
             return
 
-        # Get the MA and StdDev values using the DataSeries last() method (ring buffer mode)
-        # Since sub-indicators were just calculated for this index, use last(0) to get the most recently calculated value
-        ma_value = self.MovingAverage.result.last(0)  # type: ignore
-        std_value = self.StandardDeviation.result.last(0)  # type: ignore
+        # Get the MA and StdDev values using [] indexing exactly like C#: Result[index]
+        ma_value = self.MovingAverage.result[index]  # type: ignore
+        std_value = self.StandardDeviation.result[index]  # type: ignore
         
         import math
         if math.isnan(ma_value) or math.isnan(std_value):

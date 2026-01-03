@@ -53,8 +53,9 @@ class QuoteQuantConnect(QuoteProvider):
         
         # Check if path exists
         if not os.path.exists(self.symbol_path):
-            print(f"WARNING: Data path does not exist: {self.symbol_path}")
-            print(f"Expected path: {self.symbol_path}")
+            if hasattr(self, 'api') and self.api:
+                self.api._debug_log(f"WARNING: Data path does not exist: {self.symbol_path}")
+                self.api._debug_log(f"Expected path: {self.symbol_path}")
 
     def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, Bars]:
         """
@@ -66,16 +67,17 @@ class QuoteQuantConnect(QuoteProvider):
         Returns:
             tuple of (error_message, last_datetime, bars_data)
         """
-        from Api.KitaApiEnums import DataMode, Constants
+        from Api.KitaApiEnums import Constants
         # Create minute-level bars (60 seconds) instead of tick data
-        day_data: Bars = Bars(self.symbol.name, 60, 0, self.api.DataMode if hasattr(self, 'api') else DataMode.Preload)
+        day_data: Bars = Bars(self.symbol.name, 60, 0)
         self.last_utc = utc.replace(hour=0, minute=0, second=0, microsecond=0)
         
         # WEEKEND HANDLING: Check if this is a weekend day (Saturday=5, Sunday=6)
         weekday = utc.weekday()
         if weekday >= 5:  # Saturday or Sunday
             # Return empty data for weekends (no error - forex markets are closed)
-            print(f"[INFO] Skipping weekend: {utc.strftime('%Y-%m-%d %A')}")
+            if hasattr(self, 'api') and self.api:
+                self.api._debug_log(f"[INFO] Skipping weekend: {utc.strftime('%Y-%m-%d %A')}")
             return "", self.last_utc, day_data
         
         # Filename format: YYYYMMDD_quote.zip
@@ -93,7 +95,8 @@ class QuoteQuantConnect(QuoteProvider):
         if zip_path is None:
             # Check if it might be a holiday or missing data
             error_msg = f"No data file found for {utc.strftime('%Y-%m-%d %A')} in {self.symbol_path}"
-            print(f"[WARN] {error_msg}")
+            if hasattr(self, 'api') and self.api:
+                self.api._debug_log(f"[WARN] {error_msg}")
             # Return empty data instead of error to allow continuation
             return "", self.last_utc, day_data
         
@@ -185,7 +188,8 @@ class QuoteQuantConnect(QuoteProvider):
                             
                         except (ValueError, IndexError) as e:
                             # Skip malformed rows
-                            print(f"Warning: Skipping malformed row: {row[:3]}... Error: {e}")
+                            if hasattr(self, 'api') and self.api:
+                                self.api._debug_log(f"Warning: Skipping malformed row: {row[:3]}... Error: {e}")
                             continue
                     
                     # Don't forget the last minute
@@ -205,16 +209,19 @@ class QuoteQuantConnect(QuoteProvider):
                         )
             
             if day_data.count == 0:
-                print(f"[WARN] No valid data parsed from {zip_path}")
+                if hasattr(self, 'api') and self.api:
+                    self.api._debug_log(f"[WARN] No valid data parsed from {zip_path}")
                 # Return empty data instead of error
                 return "", self.last_utc, day_data
             
-            print(f"[OK] Loaded {day_data.count:,} minute bars from {utc.strftime('%Y-%m-%d %A')}")
+            if hasattr(self, 'api') and self.api:
+                self.api._debug_log(f"[OK] Loaded {day_data.count:,} minute bars from {utc.strftime('%Y-%m-%d %A')}")
             return "", self.last_utc, day_data
             
         except Exception as e:
             error_msg = f"Error reading {zip_path}: {str(e)}"
-            print(f"[ERROR] {error_msg}")
+            if hasattr(self, 'api') and self.api:
+                self.api._debug_log(f"[ERROR] {error_msg}")
             # Return empty data with error message
             return error_msg, self.last_utc, day_data
 

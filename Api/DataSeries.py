@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Iterator, Any
 import numpy as np
-import numpy as np
 from typing import Iterator
+from Api.ring_buffer import Ringbuffer
 
 # from Api.IIndicator import IIndicator
 
@@ -11,11 +11,11 @@ if TYPE_CHECKING:
 
 
 class DataSeries:
-    data: np.ndarray[Any, np.dtype[np.float64]]
+    data: Ringbuffer[float]
     _parent: Bars
     _size: int
     _is_indicator_result: bool  # True if this is an indicator result (ring buffer mode)
-    _write_index: int  # Current write position for indicator ring buffers
+    _add_count: int  # Total number of values added (linear count, for mapping absolute indices)
 
     def __init__(self, _parent: Bars, _size: int, is_indicator_result: bool = False):
         """
@@ -29,8 +29,8 @@ class DataSeries:
         self._parent = _parent
         self._size = _size
         self._is_indicator_result = is_indicator_result
-        self._write_index = 0  # Start at position 0 for ring buffers
-        self.data = np.full(self._size, np.nan)  # Pre-fill with NaN
+        self._add_count = 0  # Track total number of values added (linear count)
+        self.data = Ringbuffer[float](_size)  # Use true ringbuffer
         self.indicator_list = []  # List of indicators attached to this DataSeries
     
     def register_indicator(self, indicator) -> None:
@@ -47,36 +47,38 @@ class DataSeries:
         """
         Iterate over the valid elements in the buffer.
         """
-        return iter(self.data[: self._parent.count])
+        # For Ringbuffer, iterate from oldest to newest
+        count = min(self.data._count, self._parent.count if not self._is_indicator_result else self.data._count)
+        for i in range(count):
+            rel_pos = count - 1 - i  # Convert to relative position (0 = most recent)
+            if rel_pos < self.data._count:
+                value = self.data[rel_pos]
+                if value is not None:
+                    yield float(value) if not np.isnan(value) else float('nan')
 
     def append(self, value: float):
         """
-        Append a single value to the buffer (legacy method - use append_ring for ring buffers).
-        For ring buffers, use append_ring() instead.
+        Append a single value to the ring buffer.
+        Uses the ringbuffer's natural circular behavior (overwrites oldest when full).
+        For tick data, this allows unbounded growth by using the ringbuffer's circular nature.
         """
-        # Legacy behavior: resize if full (for backward compatibility)
-        if self._parent.count == self._size:
-            # Double the _size of the buffer
-            new_size = self._size * 2
-            new_data = np.full(new_size, np.nan)
-
-            part1 = self.data[self._parent.count :]  # From index to end of the buffer
-            part2 = self.data[: self._parent.count]  # From start to index
-            new_data[: self._size] = np.concatenate((part1, part2))
-
-            self.data = new_data
-            self._size = new_size
-
-        self.data[self._parent.count] = value
+        # Simply add to ringbuffer - it will overwrite oldest when full (circular behavior)
+        self.data.add(value)
+        self._add_count += 1
     
     def append_ring(self, value: float, position: int):
         """
         Append a value to a specific position in the ring buffer.
         Used for ring buffer mode where data overwrites oldest entries.
+        Increments _add_count to track linear count of values added.
         """
         if position < 0 or position >= self._size:
             return  # Invalid position
-        self.data[position] = value
+        # For ringbuffer, we use add() which automatically handles circular indexing
+        # If we need to set at a specific position, we need to use __setitem__
+        # But append_ring is legacy - for new code, use add() directly
+        self.data.add(value)
+        self._add_count += 1  # Increment linear count
 
     def last(self, index: int) -> float:
         """
@@ -85,57 +87,55 @@ class DataSeries:
         Supports both sequential and ring buffer modes.
         
         For indicator results (ring buffer mode):
-        - last(0) = most recently written value (at _write_index - 1)
-        - last(1) = previous value (at _write_index - 2)
-        - Uses circular indexing with size = period
+        - last(0) = most recently written value
+        - last(1) = previous value
+        - Uses ringbuffer relative indexing (0 = most recent)
         """
         if index < 0:
             return float("nan")
         
         if self._is_indicator_result:
-            # Indicator result ring buffer mode: size = period, uses _write_index
-            # _write_index points to the next write position
-            # last(0) = value at (_write_index - 1) % size
-            # last(1) = value at (_write_index - 2) % size
-            if self._write_index == 0:
-                # No values written yet
+            # Indicator result ring buffer mode: use ringbuffer relative indexing
+            # ringbuffer[0] = most recent, ringbuffer[1] = second most recent, etc.
+            if self.data._count == 0:
                 return float("nan")
             
-            size = self._size
-            # Calculate position: (_write_index - 1 - index) % size
-            pos = (self._write_index - 1 - index) % size
-            if pos < 0:
-                pos += size
-            
-            if pos < 0 or pos >= len(self.data):
+            if index >= self.data._count:
                 return float("nan")
-            return self.data[pos]
+            
+            value = self.data[index]  # Ringbuffer[0] is most recent
+            if value is None:
+                return float("nan")
+            return float(value) if not np.isnan(value) else float('nan')
         else:
-            # Source DataSeries mode: uses parent Bars' count and read_index
+            # Source DataSeries mode: uses parent Bars' count
             if index >= self._parent.count:
                 return float("nan")
             
-            # Ring buffer mode: read_index points to the newest bar
-            size = self._size
-            if self._parent.count >= size:
-                # Ring buffer is full - use circular indexing
-                # last(0) = current bar = read_index
-                # last(1) = previous bar = (read_index - 1) % size
-                pos = (self._parent.read_index - index) % size
-            else:
+            # Use ringbuffer relative indexing
+            # Map absolute index to relative position
+            if self._parent.count <= self._size:
                 # Sequential mode (buffer not full yet)
-                # last(0) = current bar = count - 1
-                # last(1) = previous bar = count - 2
-                pos = self._parent.count - 1 - index
+                # last(0) = most recent = ringbuffer[0]
+                # last(1) = previous = ringbuffer[1]
+                if index >= self.data._count:
+                    return float("nan")
+                value = self.data[index]
+            else:
+                # Ring buffer is full - use circular indexing
+                # Map to relative position
+                if index >= self.data._count:
+                    return float("nan")
+                value = self.data[index]
             
-            if pos < 0 or pos >= len(self.data):
+            if value is None:
                 return float("nan")
-            return self.data[pos]
+            return float(value) if not np.isnan(value) else float('nan')
     
     def write_indicator_value(self, value: float) -> None:
         """
         Write a value to the indicator result ring buffer.
-        For indicator results, this writes to the current _write_index position and advances it.
+        Simply appends a new value to the data series ringbuffer.
         
         IMPORTANT: cTrader rounds the final indicator result with symbol.digits before storing.
         This matches the behavior where indicator values are rounded to symbol precision.
@@ -148,10 +148,9 @@ class DataSeries:
         digits = self._get_symbol_digits()
         rounded_value = round(value, digits)
         
-        # Write rounded value to current position
-        self.data[self._write_index] = rounded_value
-        # Advance write index (circular)
-        self._write_index = (self._write_index + 1) % self._size
+        # Simply append to the ringbuffer
+        self.data.add(rounded_value)
+        self._add_count += 1
     
     def _get_symbol_digits(self) -> int:
         """Get symbol digits from the parent bars"""
@@ -167,25 +166,107 @@ class DataSeries:
         """
         Compute the average of the current data in the buffer.
         """
-        if self._parent.count == 0:
+        if self.data._count == 0:
             return float("nan")
-        return np.nanmean(self.data[: self._parent.count])  # type: ignore
+        values = [float(self.data[i]) for i in range(self.data._count) if self.data[i] is not None and not np.isnan(self.data[i])]
+        if not values:
+            return float("nan")
+        return float(np.mean(values))
 
     def get_max(self) -> float:
         """
         Compute the maximum of the current data in the buffer.
         """
-        if self._parent.count == 0:
+        if self.data._count == 0:
             return float("nan")
-        return np.nanmax(self.data[: self._parent.count])  # type: ignore
+        values = [float(self.data[i]) for i in range(self.data._count) if self.data[i] is not None and not np.isnan(self.data[i])]
+        if not values:
+            return float("nan")
+        return float(np.max(values))
 
     def get_min(self) -> float:
         """
         Compute the minimum of the current data in the buffer.
         """
-        if self._parent.count == 0:
+        if self.data._count == 0:
             return float("nan")
-        return np.nanmin(self.data[: self._parent.count])  # type: ignore
+        values = [float(self.data[i]) for i in range(self.data._count) if self.data[i] is not None and not np.isnan(self.data[i])]
+        if not values:
+            return float("nan")
+        return float(np.min(values))
+
+    def __getitem__(self, index: int) -> float:
+        """
+        Access value at absolute index using [] operator (matching C# Source[index]).
+        Maps absolute index to ring buffer position using _add_count.
+        
+        This allows indicators to use source[index] exactly like C# uses Source[index],
+        with the ring buffer implementation transparently handling the mapping.
+        
+        Args:
+            index: Absolute index (0, 1, 2, ...) - linear count from first value added
+            
+        Returns:
+            Value at the specified absolute index, or NaN if index is out of range
+        """
+        if index < 0:
+            return float("nan")
+        
+        if self._is_indicator_result:
+            # Indicator result ring buffer mode: size = period
+            # Map absolute index to ring buffer relative position
+            # Ringbuffer uses relative indexing: [0] = most recent, [1] = second most recent, etc.
+            # Absolute index i maps to relative position (_add_count - 1 - i)
+            if index >= self._add_count:
+                return float("nan")  # Index beyond what we've added
+            
+            # Check if value still exists (hasn't been overwritten)
+            if self._add_count > self._size:
+                # Buffer full - check if value was overwritten
+                if index < self._add_count - self._size:
+                    return float("nan")  # Value was overwritten
+            
+            # Map absolute index to relative position
+            # Absolute index 0 = oldest = relative position (_add_count - 1)
+            # Absolute index (_add_count - 1) = newest = relative position 0
+            rel_pos = self._add_count - 1 - index
+            
+            if rel_pos < 0 or rel_pos >= self.data._count:
+                return float("nan")
+            
+            value = self.data[rel_pos]
+            if value is None:
+                return float("nan")
+            return float(value) if not np.isnan(value) else float('nan')
+        else:
+            # Source DataSeries mode: uses parent Bars' count
+            if index >= self._parent.count:
+                return float("nan")
+            
+            # Map absolute index to ring buffer relative position
+            if self._parent.count <= self._size:
+                # Buffer not full yet - sequential access
+                # Absolute index i maps to relative position (count - 1 - i)
+                rel_pos = self._parent.count - 1 - index
+                if rel_pos < 0 or rel_pos >= self.data._count:
+                    return float("nan")
+                value = self.data[rel_pos]
+            else:
+                # Buffer full - circular access
+                # Values at indices < (count - size) have been overwritten
+                if index < self._parent.count - self._size:
+                    return float("nan")  # Value was overwritten
+                # Map absolute index to relative position
+                # Absolute index (count - size) = oldest = relative position (size - 1)
+                # Absolute index (count - 1) = newest = relative position 0
+                rel_pos = self._parent.count - 1 - index
+                if rel_pos < 0 or rel_pos >= self.data._count:
+                    return float("nan")
+                value = self.data[rel_pos]
+            
+            if value is None:
+                return float("nan")
+            return float(value) if not np.isnan(value) else float('nan')
 
 
 # end of file

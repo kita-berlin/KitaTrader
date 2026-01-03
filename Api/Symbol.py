@@ -172,32 +172,32 @@ class Symbol:
             if Constants.SEC_PER_MINUTE != timeframe:
                 minute_look_back = look_back * timeframe // Constants.SEC_PER_MINUTE
                 self.bars_dictonary[Constants.SEC_PER_MINUTE] = Bars(
-                    self.name, Constants.SEC_PER_MINUTE, minute_look_back, self.api.DataMode, symbol=self
+                    self.name, Constants.SEC_PER_MINUTE, minute_look_back, symbol=self
                 )
 
         elif timeframe < Constants.SEC_PER_DAY:
             if Constants.SEC_PER_HOUR != timeframe:
                 hour_look_back = look_back * timeframe // Constants.SEC_PER_HOUR
                 self.bars_dictonary[Constants.SEC_PER_HOUR] = Bars(
-                    self.name, Constants.SEC_PER_HOUR, hour_look_back, self.api.DataMode, symbol=self
+                    self.name, Constants.SEC_PER_HOUR, hour_look_back, symbol=self
                 )
 
         elif Constants.SEC_PER_DAY != timeframe:
             daily_look_back = look_back * timeframe // Constants.SEC_PER_DAY
             self.bars_dictonary[Constants.SEC_PER_DAY] = Bars(
-                self.name, Constants.SEC_PER_HOUR, daily_look_back, self.api.DataMode, symbol=self
+                self.name, Constants.SEC_PER_HOUR, daily_look_back, symbol=self
             )
 
         if timeframe in self.bars_dictonary:
             if look_back > self.bars_dictonary[timeframe].look_back:
                 self.bars_dictonary[timeframe].look_back = look_back
         else:
-            self.bars_dictonary[timeframe] = Bars(self.name, timeframe, look_back, self.api.DataMode, symbol=self)
+            self.bars_dictonary[timeframe] = Bars(self.name, timeframe, look_back, symbol=self)
 
     def get_bars(self, timeframe: int) -> tuple[str, Bars]:
         if timeframe in self.bars_dictonary:
             return "", self.bars_dictonary[timeframe]
-        return "Bars have not been requested in on_init()", Bars(self.name, timeframe, 0, self.api.DataMode, symbol=self)
+        return "Bars have not been requested in on_init()", Bars(self.name, timeframe, 0, symbol=self)
 
     def check_historical_data(self):
         # if all data are requested (datetime.min == self.api.AllDataStartUtc), find the first quote
@@ -258,8 +258,8 @@ class Symbol:
 
         # Checking symbol - messages removed
         run_utc = self.api.AllDataStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
-        one_day_provider_data: Bars = Bars(self.name, 0, 0, self.api.DataMode, symbol=self)
-        yesterday_minutes = Bars(self.name, Constants.SEC_PER_MINUTE, 0, self.api.DataMode, symbol=self)
+        one_day_provider_data: Bars = Bars(self.name, 0, 0, symbol=self)
+        yesterday_minutes = Bars(self.name, Constants.SEC_PER_MINUTE, 0, symbol=self)
 
         while True:
             # daily loop
@@ -281,11 +281,20 @@ class Symbol:
                 if "No data" != error:
                     for i in range(one_day_provider_data.count):
                         # use absolute array ...data[i], not rolling windows stuff
-                        time = one_day_provider_data.open_times.data[i]  # type:ignore
-                        bid = round(one_day_provider_data.open_bids.data[i], ndigits=self.digits)
-                        ask = round(one_day_provider_data.open_asks.data[i], ndigits=self.digits)
-                        volume_bid = one_day_provider_data.volume_bids.data[i]
-                        volume_ask = one_day_provider_data.volume_asks.data[i]
+                        if 0 == one_day_provider_data.timeframe_seconds:
+                            time = one_day_provider_data.open_times_list[i]
+                            # Use lists for ticks
+                            bid = round(one_day_provider_data.open_bids_list[i], ndigits=self.digits)
+                            ask = round(one_day_provider_data.open_asks_list[i], ndigits=self.digits)
+                            volume_bid = one_day_provider_data.volume_bids_list[i]
+                            volume_ask = one_day_provider_data.volume_asks_list[i]
+                        else:
+                            # Use Ringbuffer for bars
+                            time = one_day_provider_data.open_times.data[i]  # type:ignore
+                            bid = round(one_day_provider_data.open_bids.data[i], ndigits=self.digits)
+                            ask = round(one_day_provider_data.open_asks.data[i], ndigits=self.digits)
+                            volume_bid = one_day_provider_data.volume_bids.data[i]
+                            volume_ask = one_day_provider_data.volume_asks.data[i]
 
                         # write daily tick data into the csv/zip file
                         daily_tick_csv_writer.writerow(
@@ -385,7 +394,7 @@ class Symbol:
                         )
                         idx_start_today = bisect_left(minute_bars.open_times.data, market_open_utc_today)
 
-                        local_minute_bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0, self.api.DataMode, symbol=self)
+                        local_minute_bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0, symbol=self)
                         local_minute_bars.open_times.data = np.concatenate(
                             (
                                 yesterday_minutes.open_times.data[idx_start_yesterday:],
@@ -534,17 +543,18 @@ class Symbol:
         
         # Extract the data into a DataFrame
         if 0 == bars.timeframe_seconds:
+            # Tick data: use lists
             data = {
-                "open_bids": bars.open_bids.data[:count],
-                "high_bids": bars.open_bids.data[:count],
-                "low_bids": bars.open_bids.data[:count],
-                "close_bids": bars.open_bids.data[:count],
-                "volume_bids": bars.volume_bids.data[:count],
-                "open_asks": bars.open_asks.data[:count],
-                "high_asks": bars.open_asks.data[:count],
-                "low_asks": bars.open_asks.data[:count],
-                "close_asks": bars.open_asks.data[:count],
-                "volume_asks": bars.volume_asks.data[:count],
+                "open_bids": bars.open_bids_list[:count],
+                "high_bids": bars.open_bids_list[:count],
+                "low_bids": bars.open_bids_list[:count],
+                "close_bids": bars.open_bids_list[:count],
+                "volume_bids": bars.volume_bids_list[:count],
+                "open_asks": bars.open_asks_list[:count],
+                "high_asks": bars.open_asks_list[:count],
+                "low_asks": bars.open_asks_list[:count],
+                "close_asks": bars.open_asks_list[:count],
+                "volume_asks": bars.volume_asks_list[:count],
             }
         else:
             data = {
@@ -561,19 +571,19 @@ class Symbol:
             }
 
         # Convert numpy array of datetime objects to pandas DatetimeIndex
-        # bars.open_times.data is a numpy array with dtype=object containing datetime objects
+        # bars.open_times.data is a Ringbuffer containing datetime objects
         # We need to convert it properly for pandas
         if count > 0:
-            # Get only the valid data (first count elements)
-            times_array = bars.open_times.data[:count]
-            # Convert to list if needed, then to pandas DatetimeIndex
-            # pandas.to_datetime can handle numpy arrays of datetime objects, but we need to ensure proper format
-            try:
-                index = pd.to_datetime(times_array)  # type: ignore
-            except (TypeError, ValueError):
-                # Fallback: convert to list of datetime objects first
-                times_list = [dt for dt in times_array if dt is not None]
-                index = pd.to_datetime(times_list)  # type: ignore
+            if 0 == bars.timeframe_seconds:
+                 # Tick data: use list from open_times_list
+                 times_list = bars.open_times_list[:count]
+            else:
+                 # Bar data: extract from Ringbuffer
+                 # Use list comprehension to extract the first 'count' items from Ringbuffer
+                 times_list = [bars.open_times.data[i] for i in range(count)]
+            
+            # Convert to pandas DatetimeIndex
+            index = pd.to_datetime(times_list)  # type: ignore
         else:
             # Empty bars - create empty DatetimeIndex
             index = pd.DatetimeIndex([])  # type: ignore
@@ -618,7 +628,7 @@ class Symbol:
         )  # Drop rows with NaN values after resampling
 
         # Create a new Bars instance for the lower timeframe
-        new_bars = Bars(bars.symbol_name, new_timeframe_seconds, bars.look_back, self.api.DataMode, symbol=self)
+        new_bars = Bars(bars.symbol_name, new_timeframe_seconds, bars.look_back, symbol=self)
 
         # Populate the new Bars instance
         new_bars.open_times.data = np.array(resampled.index.to_pydatetime(), dtype=object)  # type: ignore
@@ -822,13 +832,13 @@ class Symbol:
         
         # Create a minimal rate_data object for compatibility (no storage, just for API)
         # For tick streaming, we don't need to store ticks - just track read_index
-        self.rate_data = Bars(self.name, 0, 0, self.api.DataMode, symbol=self)
+        self.rate_data = Bars(self.name, 0, 0, symbol=self)
         self.rate_data.read_index = -1  # Will be incremented before each tick
         self.rate_data.count = 999999999  # Large number so read_index never exceeds it (not used for streaming)
         
         self.api._debug_log(f"[_init_tick_stream] Initialized tick stream from {self._tick_current_day} to {self._tick_end_day}")
     
-    def _get_next_tick(self) -> tuple[datetime, float, float] | None:
+    def _get_next_tick(self) -> tuple[datetime, float, float, int] | None:
         """
         Get the next tick from the stream.
         Returns (time, bid, ask) or None if no more ticks.
@@ -846,7 +856,12 @@ class Symbol:
             error, _, day_bars = self.quote_provider.get_day_at_utc(self._tick_current_day)
             if error == "":
                 self._tick_day_bars = day_bars
-                self._tick_day_count = day_bars.count
+                # For tick data, count is length of list (NOT ringbuffer - ticks never go into ringbuffers)
+                if hasattr(day_bars, 'open_times_list'):
+                    self._tick_day_count = len(day_bars.open_times_list)
+                else:
+                    # Fallback: should not happen, but handle gracefully
+                    self._tick_day_count = 0
                 self._tick_day_index = 0
                 if self._tick_day_count > 0:
                     self.api._debug_log(f"[_get_next_tick] Loaded {self._tick_day_count} ticks for {self._tick_current_day.strftime('%Y-%m-%d')}")
@@ -862,17 +877,21 @@ class Symbol:
         if self._tick_day_bars is None or self._tick_day_index >= self._tick_day_count:
             return None
         
-        # Validate indices before accessing
-        if (self._tick_day_index >= len(self._tick_day_bars.open_times.data) or
-            self._tick_day_index >= len(self._tick_day_bars.open_bids.data) or
-            self._tick_day_index >= len(self._tick_day_bars.open_asks.data)):
+        # Validate indices before accessing (ticks use regular lists, not ringbuffers)
+        if (self._tick_day_bars is None or 
+            self._tick_day_index >= len(self._tick_day_bars.open_times_list) or
+            self._tick_day_index >= len(self._tick_day_bars.open_bids_list) or
+            self._tick_day_index >= len(self._tick_day_bars.open_asks_list)):
             # Index out of range - move to next day
             self._tick_day_index = self._tick_day_count  # Force load next day
             return self._get_next_tick()  # Recursively get next tick
         
-        time = self._tick_day_bars.open_times.data[self._tick_day_index]
-        bid = self._tick_day_bars.open_bids.data[self._tick_day_index]
-        ask = self._tick_day_bars.open_asks.data[self._tick_day_index]
+        # TICKS NEVER GO INTO RINGBUFFERS - use regular lists
+        time = self._tick_day_bars.open_times_list[self._tick_day_index]
+        bid = self._tick_day_bars.open_bids_list[self._tick_day_index]
+        ask = self._tick_day_bars.open_asks_list[self._tick_day_index]
+        # Retrieve volume delta stored in volume_bids_list
+        vol_delta = int(self._tick_day_bars.volume_bids_list[self._tick_day_index])
         
         # Validate tick data
         import math
@@ -886,7 +905,7 @@ class Symbol:
         self._tick_day_index += 1
         self._tick_total_processed += 1
         
-        return (time, bid, ask)
+        return (time, bid, ask, vol_delta)
 
     def _load_bars(self, timeframe: int, start: datetime) -> datetime:
         # Bars should NOT be preloaded - they will be built incrementally from ticks
@@ -1011,15 +1030,53 @@ class Symbol:
         # Get next tick from stream (one at a time, not stored)
         if 0 == self.quote_provider.data_rate:
             # Tick data: get from stream
-            tick_data = self._get_next_tick()
-            if tick_data is None:
-                self.api._debug_log(f"[symbol_on_tick] End reached: processed {self._tick_total_processed} ticks, current_day={self._tick_current_day}, end_day={self._tick_end_day}")
-                return "End reached"
-            self.time, self.bid, self.ask = tick_data
-            self.rate_data.read_index += 1  # Track for compatibility
-            # Log every 10000 ticks to track progress
-            if self._tick_total_processed % 10000 == 0:
-                self.api._debug_log(f"[symbol_on_tick] Processed {self._tick_total_processed} ticks, current time={self.time}, BacktestEndUtc={self.api.robot._BacktestEndUtc}")
+            # Match cTrader behavior: only process ticks when bid OR ask changes
+            # cTrader filters ticks where both bid AND ask are unchanged (matches ReadCtDayV2 usage)
+            while True:
+                tick_data = self._get_next_tick()
+                if tick_data is None:
+                    self.api._debug_log(f"[symbol_on_tick] End reached: processed {self._tick_total_processed} ticks")
+                    return "End reached"
+                
+                time, bid, ask, vol_delta = tick_data
+                
+                # UPDATE BARS FOR EVERY TICK (ensures Volume matches C#)
+                bars_changed = False
+                for bars in self.bars_dictonary.values():
+                    previous_count = bars.count
+                    previous_read_index = bars.read_index
+                    bars.bars_on_tick(time, bid, ask, vol_delta)
+                    if bars.count != previous_count or bars.read_index != previous_read_index or bars.is_new_bar:
+                        bars_changed = True
+
+                # FILTERING: Check if user's OnTick should be called
+                digits = self.digits
+                round_factor = 10 ** digits
+                bid_rounded = round(bid * round_factor) / round_factor
+                ask_rounded = round(ask * round_factor) / round_factor
+                prev_bid_rounded = round(self.prev_bid * round_factor) / round_factor if self.prev_bid != 0.0 else 0.0
+                prev_ask_rounded = round(self.prev_ask * round_factor) / round_factor if self.prev_ask != 0.0 else 0.0
+                
+                # Rule: Call OnTick if price changed OR a bar closed
+                price_changed = (self.prev_bid == 0.0 and self.prev_ask == 0.0) or \
+                                bid_rounded != prev_bid_rounded or ask_rounded != prev_ask_rounded
+                
+                if not price_changed and not bars_changed:
+                    # Skip this tick entirely (matches cTrader's filtering behavior contextually)
+                    continue
+                
+                # Tick accepted
+                self.time = time
+                self.bid = bid
+                self.ask = ask
+                self.prev_bid = bid
+                self.prev_ask = ask
+                self.rate_data.read_index += 1
+                
+                # Log progress
+                if self._tick_total_processed % 10000 == 0:
+                    self.api._debug_log(f"[symbol_on_tick] Progress: {self._tick_total_processed} ticks, time={self.time}")
+                break
         else:
             # Bar data: use DataSeries (not implemented for streaming yet)
             self.rate_data.read_index += 1
@@ -1028,6 +1085,7 @@ class Symbol:
             self.time = self.rate_data.open_times.last(0)
             self.bid = self.rate_data.open_bids.last(0)
             self.ask = self.rate_data.open_asks.last(0)
+            bars_changed = True # Always count as change for bars data
 
         # Debug first few ticks
         if self.rate_data.read_index < 3:
@@ -1042,31 +1100,7 @@ class Symbol:
         # symbol.time is in UTC from tick data, so compare with UTC start time
         self.is_warm_up = self.time < self.api.robot._BacktestStartUtc
 
-        # Step 1: Build all bars first (evolve bars from ticks)
-        # This happens for ALL ticks, even during warm-up (bars need to be built for indicators)
-        bars_changed = False
-        for bars in self.bars_dictonary.values():
-            if RunMode.RealTime != self.api.robot.RunningMode:
-                previous_count = bars.count
-                previous_read_index = bars.read_index
-                bars.bars_on_tick(self.time, self.bid, self.ask)  # Pass bid/ask to build bars from ticks
-                # Check if bars actually changed (count increased, read_index changed, or new bar formed)
-                if bars.count != previous_count or bars.read_index != previous_read_index or bars.is_new_bar:
-                    bars_changed = True
-                    # Debug bar creation
-                    if bars.count != previous_count:
-                        self.api._debug_log(f"[symbol_on_tick] Bar created: count={bars.count}, timeframe={bars.timeframe_seconds}s, time={self.time}")
-
-            # on real time trading we have to build the bars ourselves
-            # create on bars based on ticks ()
-            # bars.bars_on_tick_create_bars(self.time, self.bid, self.ask)
-
         # Step 2: Calculate indicators in dependency order
-        # Only calculate indicators when their source DataSeries has changed:
-        # - open: only on new bar
-        # - high/low: only when new high/low is found
-        # - close: on every tick
-        # Only calculate if something changed or if close indicators need updating
         if bars_changed or self._has_close_indicators():
             self._calculate_indicators_optimized(bars_changed)
 

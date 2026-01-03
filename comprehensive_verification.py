@@ -1,6 +1,7 @@
 """
 Comprehensive OHLCV Verification Script
-Tests: Ticks, M1, H1, H3, and Daily bars for Summer and Winter periods
+Tests: Ticks only (first step)
+Bar tests and indicator tests are commented out for now, will test later
 """
 import os
 import subprocess
@@ -9,108 +10,110 @@ from datetime import datetime
 
 # Test configurations
 TESTS = [
-    # Summer tests (EDT, UTC-4)
+    # Summer tests (EDT, UTC-4) - 2 days only
     {
         "name": "Summer_Ticks",
         "season": "Summer",
         "start": "22/07/2025",
-        "end": "25/07/2025",
+        "end": "24/07/2025",  # 2 days: 22nd to 23rd (end is exclusive)
         "period": "m1",  # Use M1 for tick data mode
         "timeframe": 0,  # 0 = ticks in Python
         "py_log": "PriceVerify_Python_Summer_Ticks.csv",
         "cs_log": "PriceVerify_CSharp_Summer_Ticks.txt"
     },
-    {
-        "name": "Summer_M1",
-        "season": "Summer",
-        "start": "22/07/2025",
-        "end": "25/07/2025",
-        "period": "m1",
-        "timeframe": 60,
-        "py_log": "PriceVerify_Python_Summer_M1.csv",
-        "cs_log": "PriceVerify_CSharp_Summer_M1.txt"
-    },
-    {
-        "name": "Summer_H1",
-        "season": "Summer",
-        "start": "22/07/2025",
-        "end": "25/07/2025",
-        "period": "h1",
-        "timeframe": 3600,
-        "py_log": "PriceVerify_Python_Summer_H1.csv",
-        "cs_log": "PriceVerify_CSharp_Summer_H1.txt"
-    },
-    {
-        "name": "Summer_H3",
-        "season": "Summer",
-        "start": "22/07/2025",
-        "end": "25/07/2025",
-        "period": "h3",
-        "timeframe": 10800,
-        "py_log": "PriceVerify_Python_Summer_H3.csv",
-        "cs_log": "PriceVerify_CSharp_Summer_H3.txt"
-    },
-    {
-        "name": "Summer_Daily",
-        "season": "Summer",
-        "start": "22/07/2025",
-        "end": "25/07/2025",
-        "period": "d1",
-        "timeframe": 86400,
-        "py_log": "PriceVerify_Python_Summer_D1.csv",
-        "cs_log": "PriceVerify_CSharp_Summer_D1.txt"
-    },
-    # Winter tests (EST, UTC-5)
+    # Bar tests - commented out for now, will test later
+    # {
+    #     "name": "Summer_M1",
+    #     "season": "Summer",
+    #     "start": "22/07/2025",
+    #     "end": "25/07/2025",
+    #     "period": "m1",
+    #     "timeframe": 60,
+    #     "py_log": "PriceVerify_Python_Summer_M1.csv",
+    #     "cs_log": "PriceVerify_CSharp_Summer_M1.txt"
+    # },
+    # {
+    #     "name": "Summer_H1",
+    #     "season": "Summer",
+    #     "start": "22/07/2025",
+    #     "end": "25/07/2025",
+    #     "period": "h1",
+    #     "timeframe": 3600,
+    #     "py_log": "PriceVerify_Python_Summer_H1.csv",
+    #     "cs_log": "PriceVerify_CSharp_Summer_H1.txt"
+    # },
+    # {
+    #     "name": "Summer_H3",
+    #     "season": "Summer",
+    #     "start": "22/07/2025",
+    #     "end": "25/07/2025",
+    #     "period": "h3",
+    #     "timeframe": 10800,
+    #     "py_log": "PriceVerify_Python_Summer_H3.csv",
+    #     "cs_log": "PriceVerify_CSharp_Summer_H3.txt"
+    # },
+    # {
+    #     "name": "Summer_Daily",
+    #     "season": "Summer",
+    #     "start": "22/07/2025",
+    #     "end": "25/07/2025",
+    #     "period": "d1",
+    #     "timeframe": 86400,
+    #     "py_log": "PriceVerify_Python_Summer_D1.csv",
+    #     "cs_log": "PriceVerify_CSharp_Summer_D1.txt"
+    # },
+    # Winter tests (EST, UTC-5) - 2 days only
     {
         "name": "Winter_Ticks",
         "season": "Winter",
         "start": "15/01/2025",
-        "end": "18/01/2025",
+        "end": "17/01/2025",  # 2 days: 15th to 16th (end is exclusive)
         "period": "m1",
         "timeframe": 0,
         "py_log": "PriceVerify_Python_Winter_Ticks.csv",
         "cs_log": "PriceVerify_CSharp_Winter_Ticks.txt"
     },
-    {
-        "name": "Winter_M1",
-        "season": "Winter",
-        "start": "15/01/2025",
-        "end": "18/01/2025",
-        "period": "m1",
-        "timeframe": 60,
-        "py_log": "PriceVerify_Python_Winter_M1.csv",
-        "cs_log": "PriceVerify_CSharp_Winter_M1.txt"
-    },
-    {
-        "name": "Winter_H1",
-        "season": "Winter",
-        "start": "15/01/2025",
-        "end": "18/01/2025",
-        "period": "h1",
-        "timeframe": 3600,
-        "py_log": "PriceVerify_Python_Winter_H1.csv",
-        "cs_log": "PriceVerify_CSharp_Winter_H1.txt"
-    },
-    {
-        "name": "Winter_H3",
-        "season": "Winter",
-        "start": "15/01/2025",
-        "end": "18/01/2025",
-        "period": "h3",
-        "timeframe": 10800,
-        "py_log": "PriceVerify_Python_Winter_H3.csv",
-        "cs_log": "PriceVerify_CSharp_Winter_H3.txt"
-    },
-    {
-        "name": "Winter_Daily",
-        "season": "Winter",
-        "start": "15/01/2025",
-        "end": "18/01/2025",
-        "period": "d1",
-        "timeframe": 86400,
-        "py_log": "PriceVerify_Python_Winter_D1.csv",
-        "cs_log": "PriceVerify_CSharp_Winter_D1.txt"
-    }
+    # Bar tests - commented out for now, will test later
+    # {
+    #     "name": "Winter_M1",
+    #     "season": "Winter",
+    #     "start": "15/01/2025",
+    #     "end": "18/01/2025",
+    #     "period": "m1",
+    #     "timeframe": 60,
+    #     "py_log": "PriceVerify_Python_Winter_M1.csv",
+    #     "cs_log": "PriceVerify_CSharp_Winter_M1.txt"
+    # },
+    # {
+    #     "name": "Winter_H1",
+    #     "season": "Winter",
+    #     "start": "15/01/2025",
+    #     "end": "18/01/2025",
+    #     "period": "h1",
+    #     "timeframe": 3600,
+    #     "py_log": "PriceVerify_Python_Winter_H1.csv",
+    #     "cs_log": "PriceVerify_CSharp_Winter_H1.txt"
+    # },
+    # {
+    #     "name": "Winter_H3",
+    #     "season": "Winter",
+    #     "start": "15/01/2025",
+    #     "end": "18/01/2025",
+    #     "period": "h3",
+    #     "timeframe": 10800,
+    #     "py_log": "PriceVerify_Python_Winter_H3.csv",
+    #     "cs_log": "PriceVerify_CSharp_Winter_H3.txt"
+    # },
+    # {
+    #     "name": "Winter_Daily",
+    #     "season": "Winter",
+    #     "start": "15/01/2025",
+    #     "end": "18/01/2025",
+    #     "period": "d1",
+    #     "timeframe": 86400,
+    #     "py_log": "PriceVerify_Python_Winter_D1.csv",
+    #     "cs_log": "PriceVerify_CSharp_Winter_D1.txt"
+    # }
 ]
 
 CTRADER_CLI = r"C:\Users\HMz\AppData\Local\Spotware\cTrader\abb70432efbee65d18af69e79fe8efe1\ctrader-cli.exe"

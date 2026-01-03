@@ -27,7 +27,7 @@ class MainConsole:
         # Platform mode how the robot will be used by the platform
         self.robot.RunningMode = RunMode.SilentBacktesting
         # Historical data path - using cTrader cache path (uses t1 subdirectory)
-        self.robot.DataPath = r"C:\Users\HMz\AppData\Roaming\Spotware\Cache\pepperstone\BacktestingCache\V1\demo_19011fd1"
+        self.robot.DataPath = r"C:\Users\HMz\AppData\Roaming\Spotware\Cache\Spotware\BacktestingCache\V1\demo_19011fd1"
         
         # Quote Provider Configuration
         # Cache path structure: {base_path}\{symbol}\t1\{YYYYMMDD}.zticks
@@ -39,8 +39,7 @@ class MainConsole:
         # Trade Provider Configuration
         self.robot.trade_provider = TradePaper()
 
-        # Preload data for the whole period or load data during the backtest run
-        self.robot.DataMode = DataMode.Preload
+        # Data is loaded day-by-day during backtest (Online mode only)
 
         # Paper trading initial account settings
         self.robot.AccountInitialBalance = 10000

@@ -45,7 +45,7 @@ class MainUltron:
         # The data has been organized into: DataPath/QuoteQuantConnect/minute/GBPUSD/*.zip
         # For Dukascopy alternative: use "$(OneDrive)/KitaData/cfd"
         self.robot.DataPath = r"G:\Meine Ablage\ShareFile\RoadToSuccess - General\Historical Data - UTC\NinjaTrader\6B\QuantConnect Seconds"
-        self.robot.DataMode = DataMode.Preload
+        # Data is loaded day-by-day during backtest (Online mode only)
         
         # Account settings
         self.robot.AccountInitialBalance = 10000.0

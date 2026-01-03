@@ -1,6 +1,6 @@
 """
-OHLC Test Bot - Compare OHLC values between C# and Python implementations
-Logs all bar OHLC values for comparison
+OHLC Test Bot - Compare tick values between C# and Python implementations
+Step 1: Ticks only - Bar tests and indicator tests are commented out for now, will test later
 """
 import os
 from datetime import datetime, timedelta
@@ -37,7 +37,18 @@ class OHLCTestBot(KitaApi):
         self.bb_high = None
         self.bb_low = None
         self.bb_close = None
-        # Simple Moving Average indicators on all OHLC values (for H4 only, as before)
+        # Simple Moving Average indicators on all OHLC values for M1, H1, and H4
+        # M1 SMAs
+        self.sma_m1_open = None
+        self.sma_m1_high = None
+        self.sma_m1_low = None
+        self.sma_m1_close = None
+        # H1 SMAs
+        self.sma_h1_open = None
+        self.sma_h1_high = None
+        self.sma_h1_low = None
+        self.sma_h1_close = None
+        # H4 SMAs (keep old names for backward compatibility)
         self.sma_open = None
         self.sma_high = None
         self.sma_low = None
@@ -62,50 +73,68 @@ class OHLCTestBot(KitaApi):
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
             
-        # Create separate log files for each timeframe
+        # Create tick log file
+        log_path_ticks = os.path.join(log_dir, "OHLC_Test_Python_Ticks.csv")
+        self.log_file_ticks = open(log_path_ticks, "w", encoding="utf-8")
+        self.log_file_ticks.write("Time,Bid,Ask,Spread\n")
+        self.log_file_ticks.flush()
+        
+        # Keep old log_file for backward compatibility
+        self.log_file = self.log_file_ticks
+        
+        # Bar tests - commented out for now, will test later
         log_path_m1 = os.path.join(log_dir, "OHLC_Test_Python_M1.csv")
         log_path_h1 = os.path.join(log_dir, "OHLC_Test_Python_H1.csv")
         log_path_h4 = os.path.join(log_dir, "OHLC_Test_Python_H4.csv")
         
         self.log_file_m1 = open(log_path_m1, "w", encoding="utf-8")
-        self.log_file_m1.write("Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread\n")
+        m1_header = "Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread,SMAOpen,SMAHigh,SMALow,SMAClose,Volume\n"
+        h1_header = "Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread,SMAOpen,SMAHigh,SMALow,SMAClose,Volume\n"
+        h4_header = "Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread,SMAOpen,SMAHigh,SMALow,SMAClose,Volume\n"
+        self.log_file_m1.write(m1_header)
         self.log_file_m1.flush()
         
         self.log_file_h1 = open(log_path_h1, "w", encoding="utf-8")
-        self.log_file_h1.write("Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread\n")
+        self.log_file_h1.write(h1_header)
         self.log_file_h1.flush()
         
         self.log_file_h4 = open(log_path_h4, "w", encoding="utf-8")
-        self.log_file_h4.write("Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread\n")
+        self.log_file_h4.write(h4_header)
         self.log_file_h4.flush()
-        
-        # Keep old log_file for backward compatibility (H4)
-        self.log_file = self.log_file_h4
         
         # Setup debug logging
         debug_log_path = os.path.join(log_dir, "OHLC_Test_Python_Debug.log")
         self.debug_log_file = open(debug_log_path, "w", encoding="utf-8")
         self._debug_log("OHLCTestBot: on_init() called")
         
+        # Indicator tests - commented out for now, will test later
         # Setup BB logging
-        bb_log_path = os.path.join(log_dir, "BB_Test_Python.log")
-        self.bb_log_file = open(bb_log_path, "w", encoding="utf-8")
-        self.bb_log_file.write("Time,Source,Main,Top,Bottom\n")
-        self.bb_log_file.flush()
-        
+        # bb_log_path = os.path.join(log_dir, "BB_Test_Python.log")
+        # self.bb_log_file = open(bb_log_path, "w", encoding="utf-8")
+        # self.bb_log_file.write("Time,Source,Main,Top,Bottom\n")
+        # self.bb_log_file.flush()
+        # 
         # Setup SMA logging (with bar OHLC and bid/ask for verification)
-        sma_log_path = os.path.join(log_dir, "SMA_Test_Python.log")
-        self.sma_log_file = open(sma_log_path, "w", encoding="utf-8")
-        self.sma_log_file.write("Time,Source,Value,BarOpen,BarHigh,BarLow,BarClose,BarOpenBid,BarOpenAsk\n")
-        self.sma_log_file.flush()
+        # sma_log_path = os.path.join(log_dir, "SMA_Test_Python.log")
+        # self.sma_log_file = open(sma_log_path, "w", encoding="utf-8")
+        # self.sma_log_file.write("Time,Source,Value,BarOpen,BarHigh,BarLow,BarClose,BarOpenBid,BarOpenAsk\n")
+        # self.sma_log_file.flush()
         
-        # Request symbol and bars for all timeframes (M1, H1, H4)
+        # Request symbol for tick testing only
         err, self.active_symbol = self.request_symbol(
             self.symbol_name, 
             self.quote_provider, 
             self.trade_provider
         )
         if err == "":
+            # For tick testing, we don't request bars - ticks are processed one at a time
+            self._debug_log(f"OHLCTestBot: Initialized for tick testing for {self.symbol_name}")
+        else:
+            self._debug_log(f"OHLCTestBot: Error requesting symbol: {err}")
+        
+        # Bar tests - commented out for now, will test later
+        if err == "":
+            self._debug_log(f"OHLCTestBot: Initialized for bar testing for {self.symbol_name}")
             # Request M1 bars (60 seconds)
             self.active_symbol.request_bars(60, 5000)  # 5000 bars for M1
             # Request H1 bars (3600 seconds = 1 hour)
@@ -113,11 +142,13 @@ class OHLCTestBot(KitaApi):
             # Request H4 bars (14400 seconds = 4 hours)
             self.active_symbol.request_bars(14400, 50)  # 50 bars for H4
             self._debug_log(f"OHLCTestBot: Requested M1, H1, and H4 bars for {self.symbol_name}")
-        else:
-            self._debug_log(f"OHLCTestBot: Error requesting symbol: {err}")
 
     def on_start(self, symbol: Symbol) -> None:
-        """Called when backtest starts for a specific symbol - Get bars here (only during initialization)"""
+        """Called when backtest starts for a specific symbol - Tick testing only"""
+        # For tick testing, we don't need bars
+        self._debug_log(f"OHLCTestBot: Started tick testing for {self.symbol_name}")
+        
+        # Bar tests - commented out for now, will test later
         # Get M1, H1, and H4 Bars using MarketData API (only called during initialization)
         self.m_bars_m1 = self.MarketData.GetBars(60, self.symbol_name)  # M1 = 60 seconds
         self.m_bars_h1 = self.MarketData.GetBars(3600, self.symbol_name)  # H1 = 3600 seconds
@@ -128,12 +159,20 @@ class OHLCTestBot(KitaApi):
         else:
             self._debug_log(f"OHLCTestBot: Got M1 bars, initial count: {self.m_bars_m1.count}")
             self.last_logged_count_m1 = 0
+            # Create M1 SMA indicators when enough bars are available
+            if self.m_bars_m1.count >= self.sma_periods:
+                self._create_sma_indicators(self.m_bars_m1, "M1",
+                                           "sma_m1_open", "sma_m1_high", "sma_m1_low", "sma_m1_close")
         
         if self.m_bars_h1 is None:
             self._debug_log(f"OHLCTestBot: Error getting H1 bars for {self.symbol_name}")
         else:
             self._debug_log(f"OHLCTestBot: Got H1 bars, initial count: {self.m_bars_h1.count}")
             self.last_logged_count_h1 = 0
+            # Create H1 SMA indicators when enough bars are available
+            if self.m_bars_h1.count >= self.sma_periods:
+                self._create_sma_indicators(self.m_bars_h1, "H1",
+                                           "sma_h1_open", "sma_h1_high", "sma_h1_low", "sma_h1_close")
         
         if self.m_bars_h4 is None:
             self._debug_log(f"OHLCTestBot: Error getting H4 bars for {self.symbol_name}")
@@ -141,12 +180,73 @@ class OHLCTestBot(KitaApi):
             self._debug_log(f"OHLCTestBot: Got H4 bars, initial count: {self.m_bars_h4.count}")
             self.last_logged_count_h4 = 0
             self._bb_indicators_created = False  # Track if BB indicators have been created
+            # Create H4 SMA indicators when enough bars are available
+            if self.m_bars_h4.count >= self.sma_periods:
+                self._create_sma_indicators(self.m_bars_h4, "H4",
+                                           "sma_open", "sma_high", "sma_low", "sma_close")
         
         # Keep old m_bars for backward compatibility (H4)
         self.m_bars = self.m_bars_h4
         self.last_logged_count = self.last_logged_count_h4
+    
+    def _create_sma_indicators(self, bars, timeframe_name: str, 
+                               attr_open: str, attr_high: str, attr_low: str, attr_close: str):
+        """Create SMA indicators for a given timeframe when enough bars are available"""
+        if bars is None or bars.count < self.sma_periods:
+            return
+        
+        self._debug_log(f"Creating Simple Moving Average on all OHLC values for {timeframe_name} (periods={self.sma_periods})")
+        
+        # SMA on Open (using correct property name matching H4 method)
+        error, sma_open = self.Indicators.moving_average(
+            source=bars.OpenPrices,
+            periods=self.sma_periods,
+            ma_type=MovingAverageType.Simple
+        )
+        if error == "":
+            setattr(self, attr_open, sma_open)
+        else:
+            self._debug_log(f"Error creating SMA on Open for {timeframe_name}: {error}")
+        
+        # SMA on High
+        error, sma_high = self.Indicators.moving_average(
+            source=bars.HighPrices,
+            periods=self.sma_periods,
+            ma_type=MovingAverageType.Simple
+        )
+        if error == "":
+            setattr(self, attr_high, sma_high)
+        else:
+            self._debug_log(f"Error creating SMA on High for {timeframe_name}: {error}")
+        
+        # SMA on Low
+        error, sma_low = self.Indicators.moving_average(
+            source=bars.LowPrices,
+            periods=self.sma_periods,
+            ma_type=MovingAverageType.Simple
+        )
+        if error == "":
+            setattr(self, attr_low, sma_low)
+        else:
+            self._debug_log(f"Error creating SMA on Low for {timeframe_name}: {error}")
+        
+        # SMA on Close
+        error, sma_close = self.Indicators.moving_average(
+            source=bars.ClosePrices,
+            periods=self.sma_periods,
+            ma_type=MovingAverageType.Simple
+        )
+        if error == "":
+            setattr(self, attr_close, sma_close)
+        else:
+            self._debug_log(f"Error creating SMA on Close for {timeframe_name}: {error}")
+        
+        if getattr(self, attr_open, None) and getattr(self, attr_high, None) and \
+           getattr(self, attr_low, None) and getattr(self, attr_close, None):
+            self._debug_log(f"Simple Moving Average created successfully on all OHLC values for {timeframe_name}")
 
-    def _log_bars_for_timeframe(self, bars, timeframe_name: str, log_file, last_logged_count_attr: str, last_logged_time_attr: str, symbol: Symbol):
+    def _log_bars_for_timeframe(self, bars, timeframe_name: str, log_file, last_logged_count_attr: str, last_logged_time_attr: str, symbol: Symbol,
+                                 sma_open=None, sma_high=None, sma_low=None, sma_close=None):
         """Helper method to log bars for a specific timeframe"""
         if bars is None or bars.count == 0:
             return
@@ -219,32 +319,119 @@ class OHLCTestBot(KitaApi):
             symbolAsk = symbol.ask
             symbolSpread = symbol.spread
             
-            # Log OHLC values with bid/ask at bar open time
+            # Get SMA values if indicators are available
+            smaOpenVal = ""
+            smaHighVal = ""
+            smaLowVal = ""
+            smaCloseVal = ""
+            
+            if sma_open and sma_high and sma_low and sma_close:
+                import math
+                # Calculate SMA values for the previous bar (barIndex)
+                # Matching H4 method: calculate indicator for barIndex, then use last(0) to get result
+                # barIndex = bars.count - 2 (for Last(1) bar)
+                if barIndex >= 0 and barIndex >= self.sma_periods - 1:
+                    try:
+                        # Calculate indicators for this bar index (matching H4 method pattern)
+                        # Ensure we calculate for the correct index (barIndex = bars.count - 2 for Last(1) bar)
+                        sma_open.calculate(barIndex)
+                        sma_high.calculate(barIndex)
+                        sma_low.calculate(barIndex)
+                        sma_close.calculate(barIndex)
+                        
+                        # Get results using [] indexing exactly like C#: Result[barIndex]
+                        smaOpenVal = sma_open.result[barIndex]
+                        smaHighVal = sma_high.result[barIndex]
+                        smaLowVal = sma_low.result[barIndex]
+                        smaCloseVal = sma_close.result[barIndex]
+                        
+                        # Debug: Log if values are NaN
+                        if math.isnan(smaOpenVal) or math.isnan(smaHighVal) or math.isnan(smaLowVal) or math.isnan(smaCloseVal):
+                            self._debug_log(f"[on_tick] {timeframe_name} SMA values are NaN for barIndex={barIndex}: Open={smaOpenVal}, High={smaHighVal}, Low={smaLowVal}, Close={smaCloseVal}")
+                        
+                        # Check for NaN values and convert to empty string
+                        if math.isnan(smaOpenVal):
+                            smaOpenVal = ""
+                        if math.isnan(smaHighVal):
+                            smaHighVal = ""
+                        if math.isnan(smaLowVal):
+                            smaLowVal = ""
+                        if math.isnan(smaCloseVal):
+                            smaCloseVal = ""
+                    except Exception as e:
+                        self._debug_log(f"Error calculating SMA for {timeframe_name} barIndex {barIndex}: {e}")
+                        import traceback
+                        self._debug_log(f"Traceback: {traceback.format_exc()}")
+            
+            # Format SMA values
+            if smaOpenVal != "":
+                smaOpenVal = f"{smaOpenVal:{fmt}}"
+            if smaHighVal != "":
+                smaHighVal = f"{smaHighVal:{fmt}}"
+            if smaLowVal != "":
+                smaLowVal = f"{smaLowVal:{fmt}}"
+            if smaCloseVal != "":
+                smaCloseVal = f"{smaCloseVal:{fmt}}"
+            
+            # Log OHLC values with bid/ask and SMA at bar open time
             time_str = barTime.strftime("%Y-%m-%d %H:%M:%S")
-            log_line = f"{time_str},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}},{symbolBid:{fmt}},{symbolAsk:{fmt}},{symbolSpread:{fmt}}\n"
+            barVolume = prevBar.TickVolume
+            log_line = f"{time_str},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}},{symbolBid:{fmt}},{symbolAsk:{fmt}},{symbolSpread:{fmt}},{smaOpenVal},{smaHighVal},{smaLowVal},{smaCloseVal},{barVolume}\n"
             log_file.write(log_line)
             log_file.flush()
+
             
             # Update last_logged_count and last_logged_bar_time after successful logging
             setattr(self, last_logged_count_attr, bars.count)
             setattr(self, last_logged_time_attr, barTime)
     
     def on_tick(self, symbol: Symbol):
-        """Main tick processing - logs M1, H1, and H4 bar OHLC values"""
-        # Log bars for all timeframes
+        """Main tick processing - logs tick values only (Step 1)"""
+        # Only log ticks - bar tests and indicator tests are commented out for now
+        if symbol.time is None:
+            return
+        
+        # OVER THE HOOD: Logging happens in the bot's on_tick
+        # Note: Filtering for unchanged prices and BacktestStart/BacktestEnd range checking
+        # happens "under the hood" in symbol_on_tick and KitaApi.do_tick
+        # By the time we reach here, the tick is already filtered and within the date range
+        
+        # Log tick: Time,Bid,Ask,Spread
+        time_str = symbol.time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds
+        digits = symbol.digits
+        fmt = f".{digits}f"
+        log_line = f"{time_str},{symbol.bid:{fmt}},{symbol.ask:{fmt}},{symbol.spread:{fmt}}\n"
+        self.log_file_ticks.write(log_line)
+        self.log_file_ticks.flush()
+        
+        # Bar tests - commented out for now, will test later
+        # Create SMA indicators if not created yet and enough bars are available
+        if self.m_bars_m1 and not self.sma_m1_open and self.m_bars_m1.count >= self.sma_periods:
+            self._create_sma_indicators(self.m_bars_m1, "M1",
+                                       "sma_m1_open", "sma_m1_high", "sma_m1_low", "sma_m1_close")
+        if self.m_bars_h1 and not self.sma_h1_open and self.m_bars_h1.count >= self.sma_periods:
+            self._create_sma_indicators(self.m_bars_h1, "H1",
+                                       "sma_h1_open", "sma_h1_high", "sma_h1_low", "sma_h1_close")
+        if self.m_bars_h4 and not self.sma_open and self.m_bars_h4.count >= self.sma_periods:
+            self._create_sma_indicators(self.m_bars_h4, "H4",
+                                       "sma_open", "sma_high", "sma_low", "sma_close")
+        
+        # Log bars for all timeframes with SMA values
         self._log_bars_for_timeframe(
             self.m_bars_m1, "M1", self.log_file_m1,
-            "last_logged_count_m1", "_last_logged_bar_time_m1", symbol
+            "last_logged_count_m1", "_last_logged_bar_time_m1", symbol,
+            self.sma_m1_open, self.sma_m1_high, self.sma_m1_low, self.sma_m1_close
         )
         self._log_bars_for_timeframe(
             self.m_bars_h1, "H1", self.log_file_h1,
-            "last_logged_count_h1", "_last_logged_bar_time_h1", symbol
+            "last_logged_count_h1", "_last_logged_bar_time_h1", symbol,
+            self.sma_h1_open, self.sma_h1_high, self.sma_h1_low, self.sma_h1_close
         )
-        
+        # 
         # For H4, also handle indicators (existing logic)
         if not hasattr(self, 'm_bars_h4') or self.m_bars_h4 is None or self.m_bars_h4.count == 0:
             return
-        
+
         # Log H4 bars (with indicator logging)
         self._log_h4_bars_with_indicators(symbol)
     
@@ -425,9 +612,28 @@ class OHLCTestBot(KitaApi):
             symbolAsk = symbol.ask
             symbolSpread = symbol.spread
             
-            # Log OHLC values with bid/ask at bar open time (matching C# format)
+            # Log OHLC values with bid/ask and SMA at bar open time (matching common format)
             time_str = barTime.strftime("%Y-%m-%d %H:%M:%S")
-            log_line = f"{time_str},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}},{symbolBid:{fmt}},{symbolAsk:{fmt}},{symbolSpread:{fmt}}\n"
+            barVolume = prevBar.TickVolume
+            
+            # Get SMA values for H4 (using existing sma_open indicators)
+            smaOpenVal = ""
+            smaHighVal = ""
+            smaLowVal = ""
+            smaCloseVal = ""
+            if self.sma_open and self.sma_high and self.sma_low and self.sma_close:
+                if barIndex >= self.sma_periods - 1:
+                    import math
+                    val = self.sma_open.result[barIndex]
+                    if not math.isnan(val): smaOpenVal = f"{val:{fmt}}"
+                    val = self.sma_high.result[barIndex]
+                    if not math.isnan(val): smaHighVal = f"{val:{fmt}}"
+                    val = self.sma_low.result[barIndex]
+                    if not math.isnan(val): smaLowVal = f"{val:{fmt}}"
+                    val = self.sma_close.result[barIndex]
+                    if not math.isnan(val): smaCloseVal = f"{val:{fmt}}"
+
+            log_line = f"{time_str},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}},{symbolBid:{fmt}},{symbolAsk:{fmt}},{symbolSpread:{fmt}},{smaOpenVal},{smaHighVal},{smaLowVal},{smaCloseVal},{barVolume}\n"
             self.log_file_h4.write(log_line)
             self.log_file_h4.flush()
             
@@ -449,24 +655,24 @@ class OHLCTestBot(KitaApi):
                     barOpenBid = self.m_bars.open_bids.last(1) if barIndex >= 0 else 0.0
                     barOpenAsk = self.m_bars.open_asks.last(1) if barIndex >= 0 else 0.0
                     
-                    # SMA on Open - use last(0) to get most recently calculated value (ring buffer)
-                    smaOpen = self.sma_open.result.last(0)
+                    # SMA on Open - use [] indexing exactly like C#: Result[barIndex]
+                    smaOpen = self.sma_open.result[barIndex]
                     if not math.isnan(smaOpen):
                         # Log: Time,Source,Value,BarOpen,BarHigh,BarLow,BarClose,BarOpenBid,BarOpenAsk
                         self.sma_log_file.write(f"{time_str},Open,{smaOpen:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
                     
                     # SMA on High
-                    smaHigh = self.sma_high.result.last(0)
+                    smaHigh = self.sma_high.result[barIndex]
                     if not math.isnan(smaHigh):
                         self.sma_log_file.write(f"{time_str},High,{smaHigh:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
                     
                     # SMA on Low
-                    smaLow = self.sma_low.result.last(0)
+                    smaLow = self.sma_low.result[barIndex]
                     if not math.isnan(smaLow):
                         self.sma_log_file.write(f"{time_str},Low,{smaLow:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
                     
                     # SMA on Close
-                    smaClose = self.sma_close.result.last(0)
+                    smaClose = self.sma_close.result[barIndex]
                     if not math.isnan(smaClose):
                         self.sma_log_file.write(f"{time_str},Close,{smaClose:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
                     
@@ -486,10 +692,10 @@ class OHLCTestBot(KitaApi):
                     self.bb_low.calculate(barIndex)
                     self.bb_close.calculate(barIndex)
                     
-                    # BB on Open - use last(0) to get most recently calculated value (ring buffer)
-                    bbOpenMain = self.bb_open.main.last(0)
-                    bbOpenTop = self.bb_open.top.last(0)
-                    bbOpenBottom = self.bb_open.bottom.last(0)
+                    # BB on Open - use [] indexing exactly like C#: Result[barIndex]
+                    bbOpenMain = self.bb_open.main[barIndex]
+                    bbOpenTop = self.bb_open.top[barIndex]
+                    bbOpenBottom = self.bb_open.bottom[barIndex]
                     self._debug_log(f"BB Open for {time_str}: Main={bbOpenMain}, Top={bbOpenTop}, Bottom={bbOpenBottom}, isNaN={math.isnan(bbOpenMain)}")
                     if not math.isnan(bbOpenMain):
                         self.bb_log_file.write(f"{time_str},Open,{bbOpenMain:{fmt}},{bbOpenTop:{fmt}},{bbOpenBottom:{fmt}}\n")
@@ -497,23 +703,23 @@ class OHLCTestBot(KitaApi):
                         self._debug_log(f"BB Open Main is NaN, skipping log")
                     
                     # BB on High
-                    bbHighMain = self.bb_high.main.last(0)
-                    bbHighTop = self.bb_high.top.last(0)
-                    bbHighBottom = self.bb_high.bottom.last(0)
+                    bbHighMain = self.bb_high.main[barIndex]
+                    bbHighTop = self.bb_high.top[barIndex]
+                    bbHighBottom = self.bb_high.bottom[barIndex]
                     if not math.isnan(bbHighMain):
                         self.bb_log_file.write(f"{time_str},High,{bbHighMain:{fmt}},{bbHighTop:{fmt}},{bbHighBottom:{fmt}}\n")
                     
                     # BB on Low
-                    bbLowMain = self.bb_low.main.last(0)
-                    bbLowTop = self.bb_low.top.last(0)
-                    bbLowBottom = self.bb_low.bottom.last(0)
+                    bbLowMain = self.bb_low.main[barIndex]
+                    bbLowTop = self.bb_low.top[barIndex]
+                    bbLowBottom = self.bb_low.bottom[barIndex]
                     if not math.isnan(bbLowMain):
                         self.bb_log_file.write(f"{time_str},Low,{bbLowMain:{fmt}},{bbLowTop:{fmt}},{bbLowBottom:{fmt}}\n")
                     
                     # BB on Close
-                    bbCloseMain = self.bb_close.main.last(0)
-                    bbCloseTop = self.bb_close.top.last(0)
-                    bbCloseBottom = self.bb_close.bottom.last(0)
+                    bbCloseMain = self.bb_close.main[barIndex]
+                    bbCloseTop = self.bb_close.top[barIndex]
+                    bbCloseBottom = self.bb_close.bottom[barIndex]
                     if not math.isnan(bbCloseMain):
                         self.bb_log_file.write(f"{time_str},Close,{bbCloseMain:{fmt}},{bbCloseTop:{fmt}},{bbCloseBottom:{fmt}}\n")
                     
@@ -534,8 +740,11 @@ class OHLCTestBot(KitaApi):
 
     def on_stop(self, symbol: Symbol = None):
         """Cleanup when backtest ends"""
+        if self.log_file_ticks:
+            self.log_file_ticks.close()
         if self.log_file:
             self.log_file.close()
+        # Indicator tests - commented out for now
         if self.bb_log_file:
             self.bb_log_file.close()
         if self.sma_log_file:

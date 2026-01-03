@@ -33,19 +33,22 @@ class Bars:
     is_new_bar: bool = False  # if true, the current tick is the first tick of a new bar
     read_index: int = 0  # relative index of the current bar to be read
     count: int = 0  # number of bars appended so far; if count == size, the buffer is completely filled
-    data_mode: DataMode
     _symbol: 'Symbol' = None  # Reference to parent Symbol object (for accessing digits, etc.)
 
     @property
     def size(self) -> int:  # Gets the number of bars.#
-        return len(self.open_times.data)  # type: ignore
+        if self.timeframe_seconds == 0:
+            # For tick data, use list length (not ringbuffer)
+            return len(self.open_times_list) if hasattr(self, 'open_times_list') else 0
+        else:
+            # For bar data, use ringbuffer size
+            return self.open_times._size if self.open_times else 0
 
     # endregion
 
-    def __init__(self, symbol_name: str, timeframe_seconds: int, look_back: int, data_mode: DataMode, symbol: 'Symbol' = None):
+    def __init__(self, symbol_name: str, timeframe_seconds: int, look_back: int, symbol: 'Symbol' = None):
         self.symbol_name = symbol_name
         self.timeframe_seconds = timeframe_seconds
-        self.data_mode = data_mode
         self._symbol = symbol  # Store reference to Symbol for accessing digits, etc.
         self.read_index = -1  # gets a +1 at symbol_on_tick before accessing the data
         self.count = 0  # Initialize count to 0 - bars will be built incrementally from ticks
@@ -64,37 +67,58 @@ class Bars:
             self.look_back = max(self._max_period_requirement, two_days_bars)
             # Ring buffer size = max(period) + 2 days buffer (same as look_back)
             size = self.look_back
-        else:
-            # For tick data, look_back doesn't apply, no ring buffer needed
-            self.look_back = 0
-            size = 1000  # Not used for tick data
-
-        # Use Ringbuffer[Bar] to store complete bars (each bar with OHLCV is one element)
-        # For tick data (timeframe_seconds=0), don't use ring buffer (grows as needed)
-        if timeframe_seconds == 0:
-            # Tick data: use sequential storage (no ring buffer)
-            self._bar_buffer: list[Bar] = []  # Sequential list for ticks
-            self._use_ring_buffer = False
-        else:
             # Bar data: use Ringbuffer[Bar] - each bar (OHLCV) is one element
             self._bar_buffer: Ringbuffer[Bar] = Ringbuffer[Bar](size)
-            self._use_ring_buffer = True
+        else:
+            # For tick data, look_back doesn't apply, no storage needed
+            # Tick data is not stored - ticks are processed one at a time from stream
+            # TICKS NEVER GO INTO RINGBUFFERS - only bars and indicators use ringbuffers
+            # For temporary day objects (from get_day_at_utc), use regular Python lists, NOT ringbuffers
+            self.look_back = 0
+            self._bar_buffer = None  # No bar buffer for tick data
 
         # Create DataSeries views for API compatibility (indicators expect DataSeries)
-        # These will extract values from the Ringbuffer[Bar]
-        self.open_times = TimeSeries(self, size)
-        self.open_bids = DataSeries(self, size)
-        self.open_asks = DataSeries(self, size)
-        self.volume_bids = DataSeries(self, size)
-        self.volume_asks = DataSeries(self, size)
-        if 0 != timeframe_seconds:
+        # For bar data: extract values from Ringbuffer[Bar] - uses ringbuffers
+        # For tick data: use regular Python lists (NOT ringbuffers) for temporary day-by-day loading
+        # Note: The main rate_data Bars object (used during backtest) does not store ticks,
+        # but temporary day objects (from get_day_at_utc) need to store ticks temporarily in lists
+        if timeframe_seconds > 0:
+            # Bar data: full OHLCV DataSeries (uses ringbuffers)
+            self.open_times = TimeSeries(self, size)
+            self.open_bids = DataSeries(self, size)
+            self.open_asks = DataSeries(self, size)
+            self.volume_bids = DataSeries(self, size)
+            self.volume_asks = DataSeries(self, size)
             self.high_bids = DataSeries(self, size)
             self.low_bids = DataSeries(self, size)
             self.close_bids = DataSeries(self, size)
-
             self.high_asks = DataSeries(self, size)
             self.low_asks = DataSeries(self, size)
             self.close_asks = DataSeries(self, size)
+        else:
+            # Tick data: use regular Python lists (NOT ringbuffers) for temporary storage
+            # High/low/close don't exist for tick data
+            # TICKS NEVER GO INTO RINGBUFFERS - use simple lists for temporary day loading
+            from typing import List
+            self.open_times_list: List[datetime] = []  # Regular list, not ringbuffer
+            self.open_bids_list: List[float] = []  # Regular list, not ringbuffer (float prices)
+            self.open_asks_list: List[float] = []  # Regular list, not ringbuffer (float prices)
+            self.volume_bids_list: List[float] = []  # Regular list, not ringbuffer
+            self.volume_asks_list: List[float] = []  # Regular list, not ringbuffer
+            # Create dummy DataSeries/TimeSeries for API compatibility (but they won't be used)
+            # These are only for type compatibility, actual data is in lists above
+            self.open_times = TimeSeries(self, 0)  # Dummy, not used
+            self.open_bids = DataSeries(self, 0)  # Dummy, not used
+            self.open_asks = DataSeries(self, 0)  # Dummy, not used
+            self.volume_bids = DataSeries(self, 0)  # Dummy, not used
+            self.volume_asks = DataSeries(self, 0)  # Dummy, not used
+            # High/low/close not used for tick data
+            self.high_bids = None  # type: ignore
+            self.low_bids = None  # type: ignore
+            self.close_bids = None  # type: ignore
+            self.high_asks = None  # type: ignore
+            self.low_asks = None  # type: ignore
+            self.close_asks = None  # type: ignore
     
     def update_max_period_requirement(self, period: int) -> None:
         """
@@ -145,53 +169,53 @@ class Bars:
             tick_volume=int(vol)
         )
         
+        # Tick data (timeframe_seconds == 0): Only store temporarily for day-by-day loading
+        # TICKS NEVER GO INTO RINGBUFFERS - use regular Python lists
+        # The main rate_data Bars object (used during backtest) does not store ticks
+        # But temporary day objects (from quote providers) need to store ticks for reading
         if self.timeframe_seconds == 0:
-            # Tick data: sequential append (grows as needed, no ring buffer)
-            self._bar_buffer.append(bar)  # type: ignore - list.append for ticks
-            self.count = len(self._bar_buffer)  # Sync count with list length
-            # DO NOT set read_index here - it should remain at -1 until symbol_on_tick() starts reading
-            # read_index will be incremented in symbol_on_tick() from -1 to 0, 1, 2, ... up to count-1
-            
-            # Also update DataSeries for API compatibility
-            self.open_times.append(time)
-            self.open_bids.append(open_bid)
-            self.open_asks.append(open_ask)
-            self.volume_bids.append(volume_bid)
-            self.volume_asks.append(volume_ask)
+            # Store ticks temporarily in regular lists (NOT ringbuffers)
+            # This is different from rate_data which doesn't call append() for tick data
+            self.open_times_list.append(time)
+            self.open_bids_list.append(open_bid)
+            self.open_asks_list.append(open_ask)
+            self.volume_bids_list.append(volume_bid)
+            self.volume_asks_list.append(volume_ask)
+            self.count = len(self.open_times_list)
+            return
+        
+        # Bar data: use Ringbuffer[Bar] - each bar (OHLCV) is one element
+        self._bar_buffer.add(bar)  # Ringbuffer.add() - overwrites oldest when full
+        self.count = self._bar_buffer._count
+        
+        # Calculate write position for DataSeries (where the newest bar is stored)
+        size = self.size
+        if self.count < size:
+            # Buffer not full yet - newest bar is at count - 1
+            write_pos = self.count - 1
         else:
-            # Bar data: use Ringbuffer[Bar] - each bar (OHLCV) is one element
-            self._bar_buffer.add(bar)  # Ringbuffer.add() - overwrites oldest when full
-            self.count = self._bar_buffer._count
-            
-            # Calculate write position for DataSeries (where the newest bar is stored)
-            size = self.size
-            if self.count < size:
-                # Buffer not full yet - newest bar is at count - 1
-                write_pos = self.count - 1
-            else:
-                # Buffer full - calculate write position from Ringbuffer
-                # Ringbuffer._position points to the NEXT write position
-                # So the newest bar is at (_position - 1) % size
-                write_pos = (self._bar_buffer._position - 1) % size
-            
-            # read_index must match write_pos so that last() can correctly access the newest bar
-            self.read_index = write_pos if self.count > 0 else -1
-            
-            # Also update DataSeries views for API compatibility
-            # Extract values from the Ringbuffer[Bar] and update DataSeries
-            if self.count > 0:
-                self.open_times.append_ring(time, write_pos)
-                self.open_bids.append_ring(open_bid, write_pos)
-                self.open_asks.append_ring(open_ask, write_pos)
-                self.volume_bids.append_ring(volume_bid, write_pos)
-                self.volume_asks.append_ring(volume_ask, write_pos)
-        if 0 != self.timeframe_seconds:
-                    self.high_bids.append_ring(high_bid, write_pos)
-                    self.low_bids.append_ring(low_bid, write_pos)
-                    self.close_bids.append_ring(close_bid, write_pos)
-                    self.high_asks.append_ring(high_ask, write_pos)
-                    self.low_asks.append_ring(low_ask, write_pos)
-                    self.close_asks.append_ring(close_ask, write_pos)
+            # Buffer full - calculate write position from Ringbuffer
+            # Ringbuffer._position points to the NEXT write position
+            # So the newest bar is at (_position - 1) % size
+            write_pos = (self._bar_buffer._position - 1) % size
+        
+        # read_index must match write_pos so that last() can correctly access the newest bar
+        self.read_index = write_pos if self.count > 0 else -1
+        
+        # Also update DataSeries views for API compatibility
+        # Extract values from the Ringbuffer[Bar] and update DataSeries
+        if self.count > 0:
+            self.open_times.append_ring(time, write_pos)
+            self.open_bids.append_ring(open_bid, write_pos)
+            self.open_asks.append_ring(open_ask, write_pos)
+            self.volume_bids.append_ring(volume_bid, write_pos)
+            self.volume_asks.append_ring(volume_ask, write_pos)
+            self.high_bids.append_ring(high_bid, write_pos)
+            self.low_bids.append_ring(low_bid, write_pos)
+            self.close_bids.append_ring(close_bid, write_pos)
+            self.high_asks.append_ring(high_ask, write_pos)
+            self.low_asks.append_ring(low_ask, write_pos)
+            self.close_asks.append_ring(close_ask, write_pos)
 
     def add(
         self,
@@ -214,7 +238,7 @@ class Bars:
         if self.count < self.open_times._size:  # type: ignore
             self.count += 1
 
-    def bars_on_tick(self, time: datetime, bid: float = None, ask: float = None) -> None:
+    def bars_on_tick(self, time: datetime, bid: float = None, ask: float = None, tick_volume: int = 1) -> None:
         """
         Build bars incrementally from ticks.
         Workflow: Internal Tick -> call bars_on_tick to evolve bars -> indicators -> user's OnTick
@@ -243,23 +267,17 @@ class Bars:
         # Check if we need to start a new bar
         if self.count == 0:
             # First bar - start new bar
-            self._start_new_bar(bar_start_time, bid, ask)
+            self._start_new_bar(bar_start_time, bid, ask, tick_volume)
             self.is_new_bar = True
             self.read_index = self.count - 1  # Point to the new bar
         else:
             # Check if current bar is still active
-            # For ring buffer, read_index points to the current (forming) bar
-            # Get the current bar's start time from the ring buffer
-            if self._use_ring_buffer:
-                # Ring buffer mode: get current bar from Ringbuffer[Bar]
-                if self.count > 0:
-                    current_bar = self._bar_buffer.last()  # Get newest bar (Ringbuffer[0])
-                    current_bar_time = current_bar.OpenTime if current_bar else None
-                else:
-                    current_bar_time = None
+            # Get the current bar's start time from DataSeries
+            if self.count > 0:
+                # Use DataSeries to get current bar time (read_index points to current bar)
+                current_bar_time = self.open_times.last(0) if self.read_index >= 0 else None
             else:
-                # Sequential mode: use DataSeries
-                current_bar_time = self.open_times.data[self.read_index] if self.read_index >= 0 and self.read_index < self.count else None
+                current_bar_time = None
             
             if current_bar_time is None or bar_start_time > current_bar_time:
                 # New bar started - the previous bar is now closed
@@ -273,16 +291,14 @@ class Bars:
                             symbol = caller.f_locals.get('self')
                             if symbol and hasattr(symbol, 'api') and hasattr(symbol.api, '_debug_log'):
                                 symbol.api._debug_log(f"[bars_on_tick] H4 new bar: time={time}, bar_start_time={bar_start_time}, current_bar_time={current_bar_time}, count={self.count}")
-                self._start_new_bar(bar_start_time, bid, ask)
+                self._start_new_bar(bar_start_time, bid, ask, tick_volume)
                 self.is_new_bar = True
                 # read_index is updated in _start_new_bar via append()
-                if self._use_ring_buffer:
-                    self.read_index = 0  # Ringbuffer[0] is newest
-                else:
-                    self.read_index = self.count - 1  # Point to the new forming bar
+                # For bar data, read_index points to newest bar (Ringbuffer[0] = newest)
+                # This is set in append() for bar data
             else:
                 # Update current bar (evolve it) - read_index points to the current forming bar
-                self._update_current_bar(bid, ask)
+                self._update_current_bar(bid, ask, tick_volume)
         
         return
     
@@ -330,7 +346,7 @@ class Bars:
             minute = (time.minute // minutes) * minutes
             return time.replace(minute=minute, second=0, microsecond=0)
     
-    def _start_new_bar(self, bar_start_time: datetime, bid: float, ask: float) -> None:
+    def _start_new_bar(self, bar_start_time: datetime, bid: float, ask: float, tick_volume: int = 1) -> None:
         """Start a new bar with the given time and prices"""
         # append() will update read_index automatically
         self.append(
@@ -339,78 +355,62 @@ class Bars:
             bid,  # high_bid (initial)
             bid,  # low_bid (initial)
             bid,  # close_bid (initial)
-            1.0,  # volume_bid (initial)
+            float(tick_volume),  # volume_bid (initial)
             ask,  # open_ask
             ask,  # high_ask (initial)
             ask,  # low_ask (initial)
             ask,  # close_ask (initial)
-            1.0,  # volume_ask (initial)
+            float(tick_volume),  # volume_ask (initial)
         )
     
-    def _update_current_bar(self, bid: float, ask: float) -> None:
+    def _update_current_bar(self, bid: float, ask: float, tick_volume: int = 1) -> None:
         """Update the current bar with new tick prices"""
-        # For ring buffer, update the current bar in Ringbuffer[Bar] and DataSeries
-        if self._use_ring_buffer:
-            # Ring buffer mode: update the current bar (Ringbuffer[0])
-            if self.count > 0:
-                current_bar = self._bar_buffer.last()  # Get newest bar (Ringbuffer[0])
-                if current_bar:
-                    # Update bar values
-                    if bid > current_bar.High:
-                        current_bar.High = bid
-                    if bid < current_bar.Low:
-                        current_bar.Low = bid
-                    current_bar.Close = bid
-                    current_bar.TickVolume += 1
-                    
-                    # Also update DataSeries for API compatibility
-                    # For ring buffer, read_index=0 points to newest bar
-                    # Calculate write position: newest bar is at (position - 1) % size when full, or count-1 when not full
-                    if self.count < self.size:
-                        write_pos = self.count - 1
-                    else:
-                        write_pos = (self._bar_buffer._position - 1) % self.size
-                    
-                    if bid > self.high_bids.data[write_pos]:
-                        self.high_bids.data[write_pos] = bid
-                    if ask > self.high_asks.data[write_pos]:
-                        self.high_asks.data[write_pos] = ask
-                    if bid < self.low_bids.data[write_pos]:
-                        self.low_bids.data[write_pos] = bid
-                    if ask < self.low_asks.data[write_pos]:
-                        self.low_asks.data[write_pos] = ask
-                    self.close_bids.data[write_pos] = bid
-                    self.close_asks.data[write_pos] = ask
-                    self.volume_bids.data[write_pos] += 1.0
-                    self.volume_asks.data[write_pos] += 1.0
-        else:
-            # Sequential mode: update using read_index
-            if self.read_index < 0 or self.read_index >= self.count:
-                return
-            
-            # Update high
-            if bid > self.high_bids.data[self.read_index]:
-                self.high_bids.data[self.read_index] = bid
-            if ask > self.high_asks.data[self.read_index]:
-                self.high_asks.data[self.read_index] = ask
-            
-            # Update low
-            if bid < self.low_bids.data[self.read_index]:
-                self.low_bids.data[self.read_index] = bid
-            if ask < self.low_asks.data[self.read_index]:
-                self.low_asks.data[self.read_index] = ask
-            
-            # Update close (always)
-            self.close_bids.data[self.read_index] = bid
-            self.close_asks.data[self.read_index] = ask
-            
-            # Update volume
-            self.volume_bids.data[self.read_index] += 1.0
-            self.volume_asks.data[self.read_index] += 1.0
+        # Only works for bar data (timeframe_seconds > 0)
+        # Tick data is not stored, so this is never called for tick data
+        if self.read_index < 0 or self.read_index >= self.count:
+            return
+        
+        if self._bar_buffer is None:
+            return  # No bar buffer (tick data or not initialized)
+        
+        # Update the current bar in Ringbuffer[Bar]
+        if self.count > 0:
+            current_bar = self._bar_buffer.last()  # Get newest bar (Ringbuffer[0])
+            if current_bar:
+                # Update bar values in Ringbuffer
+                if bid > current_bar.High:
+                    current_bar.High = bid
+                if bid < current_bar.Low:
+                    current_bar.Low = bid
+                current_bar.Close = bid
+                current_bar.TickVolume += tick_volume
+                
+                # Calculate write position for DataSeries
+                if self.count < self.size:
+                    write_pos = self.count - 1
+                else:
+                    write_pos = (self._bar_buffer._position - 1) % self.size
+                
+                # Update DataSeries for bar data
+                if bid > self.high_bids.data[write_pos]:
+                    self.high_bids.data[write_pos] = bid
+                if ask > self.high_asks.data[write_pos]:
+                    self.high_asks.data[write_pos] = ask
+                if bid < self.low_bids.data[write_pos]:
+                    self.low_bids.data[write_pos] = bid
+                if ask < self.low_asks.data[write_pos]:
+                    self.low_asks.data[write_pos] = ask
+                self.close_bids.data[write_pos] = bid
+                self.close_asks.data[write_pos] = ask
+                self.volume_bids.data[write_pos] += 1.0
+                self.volume_asks.data[write_pos] += 1.0
     
     def high_changed(self, current_price: float) -> bool:
         """Check if current price creates a new high (higher than bar's current high)"""
         if self.read_index < 0 or self.read_index >= self.count:
+            return False
+        # Tick data doesn't have high/low - only bar data does
+        if self.timeframe_seconds == 0 or not hasattr(self, 'high_bids'):
             return False
         current_high = self.high_bids.data[self.read_index]
         # If current price is higher than the bar's high, we found a new high
@@ -419,6 +419,9 @@ class Bars:
     def low_changed(self, current_price: float) -> bool:
         """Check if current price creates a new low (lower than bar's current low)"""
         if self.read_index < 0 or self.read_index >= self.count:
+            return False
+        # Tick data doesn't have high/low - only bar data does
+        if self.timeframe_seconds == 0 or not hasattr(self, 'low_bids'):
             return False
         current_low = self.low_bids.data[self.read_index]
         # If current price is lower than the bar's low, we found a new low
@@ -476,8 +479,8 @@ class Bars:
             # Return empty bar if index is out of range
             return Bar()
         
-        # For ring buffer mode, read directly from Ringbuffer[Bar] for accuracy
-        if self._use_ring_buffer and self.count > 0:
+        # For bar data, try to read from Ringbuffer[Bar] if available
+        if self._bar_buffer is not None and self.count > 0:
             # Ringbuffer[0] = newest bar, Ringbuffer[1] = second newest, etc.
             bar = self._bar_buffer[index] if index < self.count else None
             if bar:
@@ -490,8 +493,31 @@ class Bars:
                     tick_volume=bar.TickVolume
                 )
         
-        # Fallback: Use DataSeries/TimeSeries last() methods
+        # For tick data, use lists (NOT ringbuffers)
+        if self.timeframe_seconds == 0:
+            # Tick data stored in lists
+            if hasattr(self, 'open_times_list') and len(self.open_times_list) > index:
+                list_idx = len(self.open_times_list) - 1 - index  # Convert to list index (0 = oldest)
+                if list_idx >= 0 and list_idx < len(self.open_times_list):
+                    open_time = self.open_times_list[list_idx]
+                    open_price = self.open_bids_list[list_idx]
+                    tick_volume = int(self.volume_bids_list[list_idx] + self.volume_asks_list[list_idx])
+                    # For ticks, open = high = low = close (single price point)
+                    return Bar(
+                        open_time=open_time,
+                        open=open_price,
+                        high=open_price,
+                        low=open_price,
+                        close=open_price,
+                        tick_volume=tick_volume
+                    )
+            return Bar()  # No tick data available
+        
+        # For bar data, use DataSeries/TimeSeries last() methods (ringbuffers)
         # last(0) = current bar, last(1) = previous bar, etc.
+        if self.open_times is None:
+            return Bar()  # No data
+        
         open_time = self.open_times.last(index) if index < self.count else datetime.min
         open_price = self.open_bids.last(index) if index < self.count else 0.0
         high_price = self.high_bids.last(index) if index < self.count else 0.0

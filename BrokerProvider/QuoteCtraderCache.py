@@ -30,7 +30,7 @@ class QuoteCtraderCache(QuoteProvider):
         self.cache_path = os.path.join(ctrader_path, self.symbol.name, "t1")
 
     def get_day_at_utc(self, utc: datetime) -> tuple[str, datetime, Bars]:
-        day_data: Bars = Bars(self.symbol.name, 0, 0, DataMode.Preload)  # 0 = tick timeframe
+        day_data: Bars = Bars(self.symbol.name, 0, 0)  # 0 = tick timeframe
         self.last_utc = run_utc = utc.replace(hour=0, minute=0, second=0, microsecond=0)
 
         path = os.path.join(self.cache_path, run_utc.strftime("%Y%m%d") + ".zticks")
@@ -44,55 +44,91 @@ class QuoteCtraderCache(QuoteProvider):
                 ba = decompressor.read()
 
             # Process the byte array to extract data
+            # Match C# ReadCtDayV2 logic exactly
             source_ndx = 0
-            count = 0
-            self._prev_bid = self._prev_ask = 0
+            target_ndx = 0  # Track index in day_data (like targetNdx in C#)
+            # Use loaderTickSize = 10e-6 (0.00001) like C#
+            loader_tick_size = 10e-6  # Same as C# const double loaderTickSize = 10e-6;
+            
+            # Store bid/ask as integers (like C# Tick2Bid/Tick2Ask arrays)
+            tick_bids = []
+            tick_asks = []
+            tick_times = []
+            
             while source_ndx < len(ba):
-                # Read epoc milliseconds timestamp (8 bytes long)
-                # Ensure the timestamp is localized to UTC
-                # Append the UTC time to day_data.open_times.data
-                append_datetime = datetime.fromtimestamp(
-                    struct.unpack_from("<q", ba, source_ndx)[0] / 1000.0, tz=pytz.UTC
-                )
-
+                # Read epoc milliseconds timestamp (8 bytes long) - same as C#
+                timestamp_ms = struct.unpack_from("<q", ba, source_ndx)[0]
                 source_ndx += 8
-
-                # Read bid (8 bytes long)
-                bid = struct.unpack_from("<q", ba, source_ndx)[0] * self.symbol.point_size
+                
+                append_datetime = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=pytz.UTC)
+                
+                # Read bid as int (8 bytes, cast to int like C#: var bid = (int)BitConverter.ToInt64(...))
+                bid_int = int(struct.unpack_from("<q", ba, source_ndx)[0])
                 source_ndx += 8
-
-                # Read ask (8 bytes long)
-                ask = struct.unpack_from("<q", ba, source_ndx)[0] * self.symbol.point_size
+                
+                # Read ask as int (8 bytes, cast to int like C#: var ask = (int)BitConverter.ToInt64(...))
+                ask_int = int(struct.unpack_from("<q", ba, source_ndx)[0])
                 source_ndx += 8
+                
+                # Calculate TickVolume delta using cTrader's logic: 
+                # if both Bid and Ask are updated (non-zero in zticks), volume delta is 2, else 1.
+                # In cTrader source: return (!backtestingQuote.IsAskHit || !backtestingQuote.IsBidHit) ? 1 : 2;
+                vol_delta = 2 if (bid_int > 0 and ask_int > 0) else 1
+                
+                # Match C# zero handling logic exactly (from ReadCtDayV2):
+                # sa.Tick2Bid[targetNdx] = 0 == bid ? (0 == targetNdx ? ask : sa.Tick2Bid[targetNdx - 1]) : bid;
+                # sa.Tick2Ask[targetNdx] = 0 == ask ? (0 == targetNdx ? bid : sa.Tick2Ask[targetNdx - 1]) : ask;
+                # Note: C# evaluates bid first, then ask, so ask can use the updated bid value
+                actual_bid_int = bid_int
+                actual_ask_int = ask_int
+                
+                if actual_bid_int == 0:
+                    if target_ndx == 0:
+                        actual_bid_int = actual_ask_int  # First tick: use ask if bid is 0
+                    else:
+                        actual_bid_int = tick_bids[target_ndx - 1]  # Use previous bid from array
+                
+                if actual_ask_int == 0:
+                    if target_ndx == 0:
+                        actual_ask_int = actual_bid_int  # First tick: use bid if ask is 0
+                    else:
+                        actual_ask_int = tick_asks[target_ndx - 1]  # Use previous ask from array
+                
+                # Store resolved integers
+                tick_bids.append(actual_bid_int)
+                tick_asks.append(actual_ask_int)
+                # Store volume delta in bids list temporarily, we will use it in append loop below
+                tick_times.append((append_datetime, vol_delta))
+                
+                # Duplicate Filtering - REMOVED to match C# TickVolume
+                # C# MarketData.GetBars() counts every tick line for volume even if prices are identical
+                # Filtering for OnTick is handled in symbol_on_tick instead
+                # if target_ndx > 0 and bid_int == tick_bids[-1] and ask_int == tick_asks[-1]:
+                #     continue
 
-                # If bid or ask is zero, get the previous value from previous day
-                if 0 == self._prev_bid and 0 == bid:
-                    self._prev_bid = self._get_prevs_(utc, BidAsk.Bid, ask)
-
-                if 0 == self._prev_ask and 0 == ask:
-                    self._prev_ask = self._get_prevs_(utc, BidAsk.Ask, bid)
-
-                # Assign bid and ask values
-                # Ensure rounding to symbol digits to avoid floating point artifacts
-                append_bid = round(bid if bid != 0 else self._prev_bid, self.symbol.digits)
-                append_ask = round(ask if ask != 0 else self._prev_ask, self.symbol.digits)
-
+                # Store as integers (like C# Tick2Bid/Tick2Ask arrays)
+                # tick_bids.append(bid_int)
+                # tick_asks.append(ask_int)
+                # tick_times.append(append_datetime)
+                target_ndx += 1
+            
+            # Now convert integers to doubles using loaderTickSize (like C# dPrice function)
+            # dPrice(int iPrice, double tickSize) = tickSize * iPrice
+            # Store both integers (for filtering) and floats (for API)
+            for i in range(len(tick_times)):
+                dt, v_delta = tick_times[i]
+                append_bid = tick_bids[i] * loader_tick_size
+                append_ask = tick_asks[i] * loader_tick_size
+                
                 day_data.append(
-                    append_datetime,
+                    dt,
                     append_bid,
-                    0,
-                    0,
-                    0,
-                    0 if 0 == bid else 1,
+                    0, 0, 0,
+                    float(v_delta),  # Store TickVolume delta in volume_bid field
                     append_ask,
-                    0,
-                    0,
-                    0,
-                    0 if 0 == ask else 1,
+                    0, 0, 0,
+                    float(v_delta),  # Store TickVolume delta in volume_ask field
                 )
-
-                self._prev_bid = append_bid
-                self._prev_ask = append_ask
         else:
             return "No data", self.last_utc, day_data
 

@@ -35,8 +35,7 @@ class TestH1BarsBB:
         # Trade Provider Configuration
         self.robot.trade_provider = TradePaper()
 
-        # Preload data
-        self.robot.DataMode = DataMode.Preload
+        # Data is loaded day-by-day during backtest (Online mode only)
 
         # Paper trading initial account settings
         self.robot.AccountInitialBalance = 10000

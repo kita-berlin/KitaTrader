@@ -101,7 +101,7 @@ class UltronEnv(gym.Env):
         self.robot.BacktestEndUtc = self.end_date
         self.robot.RunningMode = RunMode.SilentBacktesting
         self.robot.DataPath = "$(OneDrive)/KitaData/cfd"
-        self.robot.DataMode = DataMode.Preload
+        # Data is loaded day-by-day during backtest (Online mode only)
         self.robot.AccountInitialBalance = 10000.0
         self.robot.AccountLeverage = 500
         self.robot.AccountCurrency = "EUR"

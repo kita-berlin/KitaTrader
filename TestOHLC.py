@@ -19,8 +19,10 @@ class TestOHLC:
 
         # Platform mode how the robot will be used by the platform
         self.robot.RunningMode = RunMode.SilentBacktesting
-        # Historical data path - using cTrader cache path (uses t1 subdirectory)
-        self.robot.DataPath = r"C:\Users\HMz\AppData\Roaming\Spotware\Cache\pepperstone\BacktestingCache\V1\demo_19011fd1"
+        # Historical data path - using cTrader cache path (MUST use Spotware folder, same as C# bot)
+        # C# bot downloads to: C:\Users\HMz\AppData\Roaming\Spotware\Cache\Spotware\BacktestingCache\V1\demo_19011fd1\
+        # Python MUST use the same path to ensure both bots use identical data
+        self.robot.DataPath = r"C:\Users\HMz\AppData\Roaming\Spotware\Cache\Spotware\BacktestingCache\V1\demo_19011fd1"
         
         # Quote Provider Configuration
         # Cache path structure: {base_path}\{symbol}\t1\{YYYYMMDD}.zticks
@@ -32,8 +34,7 @@ class TestOHLC:
         # Trade Provider Configuration
         self.robot.trade_provider = TradePaper()
 
-        # Preload data for the whole period or load data during the backtest run
-        self.robot.DataMode = DataMode.Preload
+        # Data is loaded day-by-day during backtest (Online mode only)
 
         # Paper trading initial account settings
         self.robot.AccountInitialBalance = 10000
@@ -43,11 +44,15 @@ class TestOHLC:
         
         # 2. Define the backtest time window
         # region
-        # Test 3 days: 1.12.25 to 3.12.25 (inclusive)
-        # BacktestStart/BacktestEnd are interpreted as UTC 00:00 (midnight UTC)
-        # Set end to 06.12.2025 (04.12.2025 + 2 days) to allow Python to process more ticks
-        self.robot.BacktestStart = datetime.strptime("01.12.2025", "%d.%m.%Y")
-        self.robot.BacktestEnd = datetime.strptime("06.12.2025", "%d.%m.%Y")  # End date (exclusive, +2 days from C#)
+        # Match C# bot's exact date/time range to get same number of ticks
+        # C# bot uses: --start=01/12/2025 --end=02/12/2025 (exclusive end)
+        # This is a 1-day test for quick comparison
+        from datetime import timedelta
+        # Start at beginning of Dec 1 (UTC timezone-aware)
+        self.robot.BacktestStart = datetime.strptime("01.12.2025 00:00", "%d.%m.%Y %H:%M").replace(tzinfo=pytz.UTC)
+        # End at beginning of Dec 4 (exclusive, UTC timezone-aware) 
+        self.robot.BacktestEnd = datetime.strptime("04.12.2025 00:00", "%d.%m.%Y %H:%M").replace(tzinfo=pytz.UTC)
+
         # endregion
 
         # 3. Initialize the platform and the robot

@@ -47,21 +47,22 @@ class StandardDeviation(IIndicator):
         
         # Calculate standard deviation for this specific index only (matching cTrader)
         num1: float = 0.0
-        source_count = self.source._parent.count
-        # Get the MA value using last(0) since it was just calculated for this index (ring buffer mode)
-        num2: float = self._movingAverage.result.last(0)
+        # Get the MA value using [] indexing exactly like C#: _movingAverage.Result[index]
+        num2: float = self._movingAverage.result[index]
         
         # Loop through periods (matching cTrader: for (int i = 0; i < Periods; i++))
         # C# code: for (int i = 0; i < Periods; i++) { num += Math.Pow(Source[index - i] - num2, 2.0); }
         # C# code: Result[index] = Math.Sqrt(num / (double)Periods);
         # C# uses pure double precision - NO rounding during calculation
+        # IMPORTANT: Use [] indexing exactly like C# - DataSeries.__getitem__() handles ring buffer mapping
         for i in range(self.periods):
             src_idx = index - i
-            if src_idx < 0 or src_idx >= source_count:
+            if src_idx < 0:
                 break
-            # Convert absolute index to last() index: [src_idx] = last(count - 1 - src_idx)
-            source_last_index = source_count - 1 - src_idx
-            source_val = float(self.source.last(source_last_index))  # Ensure double precision
+            # Use [] indexing exactly like C#: Source[src_idx]
+            source_val = float(self.source[src_idx])  # Ensure double precision
+            if math.isnan(source_val):
+                break
             diff = source_val - num2
             num1 += diff * diff  # Use multiplication instead of **2 for exact match with Math.Pow
 

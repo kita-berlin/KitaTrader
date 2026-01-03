@@ -25,20 +25,17 @@ class Vidya(MovingAverage):
         if index < self.periods:
             return
 
-        # Get previous result using last(1) (ring buffer mode)
-        # last(1) gives the value written before the most recent one
-        source_count = self.source._parent.count
-        prev_result = self.result.last(1) if self.result._write_index > 0 else float('nan')
+        # Get previous result using [] indexing exactly like C#: Result[index - 1]
+        prev_result = self.result[index - 1] if index > 0 else float('nan')
         
         # If previous result is NaN (start of calculation), use previous price
         import math
         if math.isnan(prev_result) or prev_result == 0:
-            if index > 0 and index - 1 < source_count:
-                source_last_index = source_count - 1 - (index - 1)
-                prev_result = self.source.last(source_last_index)
-            elif index < source_count:
-                source_last_index = source_count - 1 - index
-                prev_result = self.source.last(source_last_index)
+            if index > 0:
+                # Use [] indexing exactly like C#: Source[index - 1]
+                prev_result = self.source[index - 1]
+            else:
+                prev_result = self.source[index] if index >= 0 else float('nan')
 
         # Calculate CMO
         cmo_val = self.cmo(index)
@@ -46,12 +43,8 @@ class Vidya(MovingAverage):
         # Alpha = Sigma * CMO
         alpha = self.sigma * cmo_val
         
-        # Get current price using last()
-        if index < source_count:
-            source_last_index = source_count - 1 - index
-            current_price = self.source.last(source_last_index)
-        else:
-            current_price = float('nan')
+        # Get current price using [] indexing exactly like C#: Source[index]
+        current_price = self.source[index]
         
         # C# uses pure double precision - NO rounding during calculation
         # Result = (1 - alpha) * PrevResult + alpha * Price
@@ -74,18 +67,9 @@ class Vidya(MovingAverage):
             if prev_idx < 0:
                 continue
 
-            # Convert absolute indices to last() indices: [idx] = last(count - 1 - idx)
-            source_count = self.source._parent.count
-            if curr_idx < source_count:
-                curr_last_index = source_count - 1 - curr_idx
-                curr_price = float(self.source.last(curr_last_index))  # Ensure double precision
-            else:
-                curr_price = float('nan')
-            if prev_idx < source_count:
-                prev_last_index = source_count - 1 - prev_idx
-                prev_price = float(self.source.last(prev_last_index))  # Ensure double precision
-            else:
-                prev_price = float('nan')
+            # Use [] indexing exactly like C#: Source[curr_idx] and Source[prev_idx]
+            curr_price = float(self.source[curr_idx])  # Ensure double precision
+            prev_price = float(self.source[prev_idx])  # Ensure double precision
             
             import math
             if math.isnan(curr_price) or math.isnan(prev_price):
