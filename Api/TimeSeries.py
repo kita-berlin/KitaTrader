@@ -22,6 +22,22 @@ class TimeSeries:
         self._size = _size
         self._add_count = 0  # Track total number of values added (linear count)
         self.data = Ringbuffer[datetime](_size)  # Use true ringbuffer
+    def resize(self, new_size: int) -> None:
+        """
+        Resize the underlying Ringbuffer while preserving existing data.
+        """
+        if new_size <= self._size:
+            return
+            
+        old_buffer = self.data
+        self._size = new_size
+        self.data = Ringbuffer[datetime](new_size)
+        
+        # Copy data from old buffer (from oldest to newest)
+        for i in range(old_buffer._count - 1, -1, -1):
+            self.data.add(old_buffer[i])
+        
+        # _add_count remains the same (total added since start)
 
 
     def __iter__(self) -> Iterator[datetime]:

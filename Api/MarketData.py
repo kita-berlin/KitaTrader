@@ -54,7 +54,7 @@ class MarketData:
         error, bars = symbol.get_bars(timeframe)
         
         if error != "":
-            # Log error but don't raise exception (similar to cTrader behavior)
+            
             return None
         
         # Track this bar request for warm-up calculation

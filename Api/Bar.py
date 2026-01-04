@@ -15,7 +15,7 @@ class Bar:
         close: float = 0,
         tick_volume: int = 0,
     ):
-        # cTrader API properties (capitalized, matching C#)
+        
         self.OpenTime = open_time
         self.Open = open
         self.High = high

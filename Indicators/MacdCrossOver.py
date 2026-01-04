@@ -1,6 +1,5 @@
 """
 Moving Average Convergence Divergence (MACD) CrossOver Indicator
-Ported from cTrader.Automate.Indicators
 """
 from Api.IIndicator import IIndicator
 from Api.DataSeries import DataSeries

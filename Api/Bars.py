@@ -1,10 +1,12 @@
 from __future__ import annotations
 from datetime import datetime
+from typing import List, Callable, Optional, Any
 from Api.TimeSeries import TimeSeries
 from Api.DataSeries import DataSeries
 from Api.KitaApiEnums import *
 from Api.Bar import Bar
 from Api.ring_buffer import Ringbuffer
+from Api.BarOpenedEventArgs import BarOpenedEventArgs
 
 
 class Bars:
@@ -33,7 +35,8 @@ class Bars:
     is_new_bar: bool = False  # if true, the current tick is the first tick of a new bar
     read_index: int = 0  # relative index of the current bar to be read
     count: int = 0  # number of bars appended so far; if count == size, the buffer is completely filled
-    _symbol: 'Symbol' = None  # Reference to parent Symbol object (for accessing digits, etc.)
+    _symbol: Optional[Any] = None  # Reference to parent Symbol object (for accessing digits, etc.)
+    _bar_opened_handlers: List[Callable[[BarOpenedEventArgs], None]] = []  # Event handlers for BarOpened event
 
     @property
     def size(self) -> int:  # Gets the number of bars.#
@@ -46,28 +49,29 @@ class Bars:
 
     # endregion
 
-    def __init__(self, symbol_name: str, timeframe_seconds: int, look_back: int, symbol: 'Symbol' = None):
+    def __init__(self, symbol_name: str, timeframe_seconds: int, look_back: int, symbol: Any = None):
         self.symbol_name = symbol_name
         self.timeframe_seconds = timeframe_seconds
         self._symbol = symbol  # Store reference to Symbol for accessing digits, etc.
         self.read_index = -1  # gets a +1 at symbol_on_tick before accessing the data
         self.count = 0  # Initialize count to 0 - bars will be built incrementally from ticks
+        self._bar_opened_handlers = []  # Initialize event handlers list
+        self._bar_opened_event = None  # Cached BarOpenedEvent instance
         
         # Calculate maximum period requirement for ring buffer size
         # Start with look_back (if provided), will be updated when indicators are attached
-        # Ring buffer size = max(period) + 2 days buffer (same as warmup period calculation)
-        self._max_period_requirement = max(look_back, 0)  # Start with provided look_back or 0
+        # New Architecture: Ring buffer size = max(period) + 1 bar
+        self._max_period_requirement = max(look_back, 0)
+        self.look_back = self._max_period_requirement + 1
         
-        # Calculate look_back and ring buffer size: max(period) + 2 days buffer (in bars)
         if timeframe_seconds > 0:
-            from Api.Constants import Constants
-            # 2 days buffer in bars = (2 * SEC_PER_DAY) / timeframe_seconds
-            two_days_bars = int((2 * Constants.SEC_PER_DAY) / timeframe_seconds)
-            # look_back = max(period) + 2 days buffer
-            self.look_back = max(self._max_period_requirement, two_days_bars)
-            # Ring buffer size = max(period) + 2 days buffer (same as look_back)
+            # size = max(period) + 1 bar
             size = self.look_back
-            # Bar data: use Ringbuffer[Bar] - each bar (OHLCV) is one element
+            # If look_back is still 0 (only happens if requested in on_init before indicators),
+            # we will resize later or start with a default if needed. 
+            # But usually indicators are created in on_init/on_start.
+            if size == 0:
+                size = 1000 # Default fallback if nothing specified yet
             self._bar_buffer: Ringbuffer[Bar] = Ringbuffer[Bar](size)
         else:
             # For tick data, look_back doesn't apply, no storage needed
@@ -123,25 +127,39 @@ class Bars:
     def update_max_period_requirement(self, period: int) -> None:
         """
         Update the maximum period requirement and recalculate look_back and ring buffer size.
-        Ring buffer size = max(period) + 2 days buffer (same as warmup period calculation).
+        New Architecture: Ring buffer size = max(period) + 1 bar.
+        Resizes the buffers if they are already initialized.
         """
         if period > self._max_period_requirement:
             self._max_period_requirement = period
-            # Recalculate look_back and ring buffer size: max(period) + 2 days buffer
-            if self.timeframe_seconds > 0:
-                from Api.Constants import Constants
-                # 2 days buffer in bars = (2 * SEC_PER_DAY) / timeframe_seconds
-                two_days_bars = int((2 * Constants.SEC_PER_DAY) / self.timeframe_seconds)
-                # look_back = max(period) + 2 days buffer
-                self.look_back = max(self._max_period_requirement, two_days_bars)
-                # Ring buffer size should also be updated, but resizing is complex
-                # For now, we'll just update the requirement - resizing would require:
-                # 1. Creating new Ringbuffer with new size
-                # 2. Copying existing data
-                # 3. Updating all DataSeries/TimeSeries sizes
-                # TODO: Implement buffer resizing if needed (complex due to ring buffer)
-                # Note: In practice, this should be called during initialization before bars are built
-
+            new_look_back = self._max_period_requirement + 1
+            
+            if self.timeframe_seconds > 0 and new_look_back > self.look_back:
+                old_look_back = self.look_back
+                self.look_back = new_look_back
+                
+                # Resize existing buffer if it exists
+                if hasattr(self, '_bar_buffer') and self._bar_buffer:
+                    old_buffer = self._bar_buffer
+                    self._bar_buffer = Ringbuffer[Bar](self.look_back)
+                    # Copy data from old buffer (from oldest to newest)
+                    for i in range(old_buffer._count - 1, -1, -1):
+                        self._bar_buffer.add(old_buffer[i])
+                    
+                    # Resize all DataSeries/TimeSeries (references are preserved!)
+                    self.open_times.resize(self.look_back)
+                    self.open_bids.resize(self.look_back)
+                    self.open_asks.resize(self.look_back)
+                    self.volume_bids.resize(self.look_back)
+                    self.volume_asks.resize(self.look_back)
+                    self.high_bids.resize(self.look_back)
+                    self.low_bids.resize(self.look_back)
+                    self.close_bids.resize(self.look_back)
+                    self.high_asks.resize(self.look_back)
+                    self.low_asks.resize(self.look_back)
+                    self.close_asks.resize(self.look_back)
+                    
+                    self.count = self._bar_buffer._count
     def append(
         self,
         time: datetime,
@@ -270,6 +288,7 @@ class Bars:
             self._start_new_bar(bar_start_time, bid, ask, tick_volume)
             self.is_new_bar = True
             self.read_index = self.count - 1  # Point to the new bar
+            # Note: Don't fire BarOpened event for the first bar (no previous bar to close)
         else:
             # Check if current bar is still active
             # Get the current bar's start time from DataSeries
@@ -296,6 +315,36 @@ class Bars:
                 # read_index is updated in _start_new_bar via append()
                 # For bar data, read_index points to newest bar (Ringbuffer[0] = newest)
                 # This is set in append() for bar data
+                
+                # Fire BarOpened event (matching cTrader API behavior)
+                # Event is fired when a new bar opens (previous bar is now closed)
+                # BUT only after BacktestStartUtc - warmup period is for internal processing only
+                # OnTick, OnBar, and BarOpened events should only fire after BacktestStart
+                # Also check if the new bar's open time (when previous bar closes) is < BacktestEndUtc
+                # This prevents logging bars that close at or after the backtest end time
+                should_fire = False
+                if self._symbol and hasattr(self._symbol, 'is_warm_up'):
+                    # Use is_warm_up flag (set in symbol_on_tick based on time < BacktestStartUtc)
+                    should_fire = not self._symbol.is_warm_up
+                elif self._symbol and hasattr(self._symbol, 'api') and hasattr(self._symbol.api, 'robot'):
+                    # Fallback: check time directly against BacktestStartUtc
+                    if hasattr(self._symbol.api.robot, '_BacktestStartUtc'):
+                        should_fire = time >= self._symbol.api.robot._BacktestStartUtc
+                
+                # Additional check: don't fire if the new bar's open time (when previous bar closes) is >= BacktestEndUtc
+                # This ensures bars that close at or after the backtest end time are not logged
+                if should_fire and self._symbol and hasattr(self._symbol, 'api') and hasattr(self._symbol.api, 'robot'):
+                    if hasattr(self._symbol.api.robot, '_BacktestEndUtc'):
+                        # bar_start_time is when the new bar opens, which is when the previous bar closes
+                        # If bar_start_time >= BacktestEndUtc, the previous bar closed at or after the end time
+                        if bar_start_time >= self._symbol.api.robot._BacktestEndUtc:
+                            should_fire = False
+                            # Debug logging
+                            if hasattr(self._symbol.api, '_debug_log'):
+                                self._symbol.api._debug_log(f"[Bars.bars_on_tick] BarOpened event suppressed: new bar open time ({bar_start_time}) >= BacktestEndUtc ({self._symbol.api.robot._BacktestEndUtc})")
+                
+                if should_fire:
+                    self._fire_bar_opened_event()
             else:
                 # Update current bar (evolve it) - read_index points to the current forming bar
                 self._update_current_bar(bid, ask, tick_volume)
@@ -385,25 +434,20 @@ class Bars:
                 current_bar.Close = bid
                 current_bar.TickVolume += tick_volume
                 
-                # Calculate write position for DataSeries
-                if self.count < self.size:
-                    write_pos = self.count - 1
-                else:
-                    write_pos = (self._bar_buffer._position - 1) % self.size
-                
                 # Update DataSeries for bar data
-                if bid > self.high_bids.data[write_pos]:
-                    self.high_bids.data[write_pos] = bid
-                if ask > self.high_asks.data[write_pos]:
-                    self.high_asks.data[write_pos] = ask
-                if bid < self.low_bids.data[write_pos]:
-                    self.low_bids.data[write_pos] = bid
-                if ask < self.low_asks.data[write_pos]:
-                    self.low_asks.data[write_pos] = ask
-                self.close_bids.data[write_pos] = bid
-                self.close_asks.data[write_pos] = ask
-                self.volume_bids.data[write_pos] += 1.0
-                self.volume_asks.data[write_pos] += 1.0
+                # Ringbuffer uses relative indexing: 0 = newest (current) bar
+                if bid > self.high_bids.data[0]:
+                    self.high_bids.data[0] = bid
+                if ask > self.high_asks.data[0]:
+                    self.high_asks.data[0] = ask
+                if bid < self.low_bids.data[0]:
+                    self.low_bids.data[0] = bid
+                if ask < self.low_asks.data[0]:
+                    self.low_asks.data[0] = ask
+                self.close_bids.data[0] = bid
+                self.close_asks.data[0] = ask
+                self.volume_bids.data[0] += 1.0
+                self.volume_asks.data[0] += 1.0
     
     def high_changed(self, current_price: float) -> bool:
         """Check if current price creates a new high (higher than bar's current high)"""
@@ -427,7 +471,7 @@ class Bars:
         # If current price is lower than the bar's low, we found a new low
         return current_price < current_low
     
-    # cTrader API compatibility properties and methods
+    
     # region
     
     @property
@@ -459,6 +503,56 @@ class Bars:
     def TickVolumes(self) -> DataSeries:
         """Gets the Tick volumes data (cTrader API: Bars.TickVolumes)"""
         return self.volume_bids
+    
+    def _fire_bar_opened_event(self):
+        """Fire BarOpened event to all subscribed handlers"""
+        if self._bar_opened_handlers and len(self._bar_opened_handlers) > 0:
+            args = BarOpenedEventArgs(self)
+            for handler in self._bar_opened_handlers:
+                try:
+                    handler(args)
+                except Exception as e:
+                    # Log error but don't stop execution
+                    import sys
+                    if hasattr(sys, '_getframe'):
+                        caller = sys._getframe(2)
+                        if caller and hasattr(caller, 'f_locals') and 'self' in caller.f_locals:
+                            symbol = caller.f_locals.get('self')
+                            if symbol and hasattr(symbol, 'api') and hasattr(symbol.api, '_debug_log'):
+                                symbol.api._debug_log(f"[Bars._fire_bar_opened_event] Error in handler: {e}")
+    
+    class BarOpenedEvent:
+        """Event object that supports += and -= operators"""
+        def __init__(self, bars: Bars):
+            self._bars = bars
+        
+        def __iadd__(self, handler: Callable[[BarOpenedEventArgs], None]):
+            """Subscribe to the event: Bars.BarOpened += handler"""
+            if handler not in self._bars._bar_opened_handlers:
+                self._bars._bar_opened_handlers.append(handler)
+            return self
+        
+        def __isub__(self, handler: Callable[[BarOpenedEventArgs], None]):
+            """Unsubscribe from the event: Bars.BarOpened -= handler"""
+            if handler in self._bars._bar_opened_handlers:
+                self._bars._bar_opened_handlers.remove(handler)
+            return self
+    
+    class BarOpenedDescriptor:
+        """Descriptor that handles += and -= operations for BarOpened event"""
+        def __get__(self, obj, objtype=None):
+            if obj is None:
+                return self
+            if obj._bar_opened_event is None:
+                obj._bar_opened_event = Bars.BarOpenedEvent(obj)
+            return obj._bar_opened_event
+        
+        def __set__(self, obj, value):
+            # Allow setting to support += operator
+            # The __iadd__ returns self, so we just ignore the set
+            pass
+    
+    BarOpened = BarOpenedDescriptor()
     
     def Last(self, index: int) -> Bar:
         """

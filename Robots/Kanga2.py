@@ -142,7 +142,7 @@ class Quantrobot:
             self.bot.m_bots_initialized_count += 1
             
             # Calculate volume
-            # In C#: mRobot.CalcProfitMode2Lots(BotSymbol, ProfitMode, Value, 0, 0, out _, out double lotSize)
+            
             # For now, use simple lot calculation
             if self.profit_mode == ProfitMode.Lots:
                 lot_size = self.value
@@ -156,14 +156,14 @@ class Quantrobot:
             )
             
             # Get bars for the specified timeframe using central MarketData API
-            # C#: mBotBars = mBot.MarketData.GetBars(CsRobot.TimeFrameArray[(int)BarTimeframe], BotSymbol.Name);
+            
             self.m_bot_bars = self.bot.MarketData.GetBars(self.bar_timeframe, self.qr_symbol_name)
             if self.m_bot_bars is None:
                 self._debug_log(f"Error getting bars for timeframe {self.bar_timeframe}")
                 return False
             
             # Get M1 bars for filtering
-            # C#: mM1Bars = mBot.MarketData.GetBars(TimeFrame.Minute, BotSymbol.Name);
+            
             self.m_m1_bars = self.bot.MarketData.GetBars(Constants.SEC_PER_MINUTE, self.qr_symbol_name)
             if self.m_m1_bars is None:
                 self._debug_log(f"Warning: Could not get M1 bars")
@@ -174,7 +174,7 @@ class Quantrobot:
                 self.m_last_m1_bar_count = self.m_m1_bars.count
             
             # Create Bollinger Bands indicator using central Indicators API
-            # C#: mBollinger = mBot.Indicators.BollingerBands(mBotBars.ClosePrices, BollingerPeriod, BollingerStdDev, MAType)
+            
             # Python: Use self.bot.Indicators.bollinger_bands() - automatically tracks for warm-up calculation
             error, self.m_bollinger = self.bot.Indicators.bollinger_bands(
                 source=self.m_bot_bars.close_bids,
@@ -301,7 +301,7 @@ class Quantrobot:
         self.process_trade_for_recovery(position.net_profit)
         
         # Log to CSV if enabled
-        # Only log trades within the backtest period (matching cTrader behavior)
+        
         if self.bot.is_do_logging and self.bot.logger:
             # Filter by backtest period
             entry_time = position.entry_time
@@ -369,7 +369,7 @@ class Quantrobot:
         self.update_spread_average()
         
         # Use bars retrieved in qr_on_start() - do NOT call GetBars() here
-        # According to cTrader API: GetBars() should only be called during initialization
+        
         # The bars object is automatically updated as new bars form, so we just check the count
         if self.m_bot_bars is None:
             # This should never happen if initialization was successful
@@ -431,8 +431,8 @@ class Quantrobot:
         if bar_idx >= source_data_len:
             return  # Not enough source data
         
-        # Access indicator values using Last(1) to match C# behavior
-        # C# uses: mBollinger.Top.Last(1), mBollinger.Bottom.Last(1), mBollinger.Main.Last(1)
+        
+        
         # Last(1) gets the value from 1 bar ago (the previous closed bar)
         # The indicator should have been calculated for the previous bar in the previous tick
         # But to be safe, let's also try to ensure the indicator is calculated for the previous bar
@@ -675,17 +675,17 @@ class Kanga2(KitaApi):
     version: str = "Kanga2 V1.0"
     
     # Parameters
-    is_do_logging: bool = True  # Enable logging to match C# output
+    is_do_logging: bool = True  
     is_launch_debugger: bool = False
     symbol_csv_all_visual: str = "AUDNZD"  # Only AUDNZD has tick data in cache
-    direction: TradeDirection = TradeDirection.Long  # C# shows only Long trades
+    direction: TradeDirection = TradeDirection.Long  
     config_path: str = ""
     
     profit_mode: ProfitMode = ProfitMode.Lots
     value: float = 1.0
-    bar_timeframe: int = 4 * Constants.SEC_PER_HOUR  # H4 (Hour4 in C# = 4 hours)
+    bar_timeframe: int = 4 * Constants.SEC_PER_HOUR  
     
-    # Kanga2 Strategy Parameters - matching C# CSV parameters
+    
     bollinger_period: int = 23  # From CSV: Bollinger Period: 23
     bollinger_std_dev: float = 1.4  # From CSV: Bollinger StdDev: 1,4 (1.4)
     ma_type: MovingAverageType = MovingAverageType.Simple  # From CSV: MA Type: Simple
@@ -767,7 +767,7 @@ class Kanga2(KitaApi):
                     val = params["BarTimeframe"]
                     if str(val).strip() != "_":
                         # Convert TimeFrameNdx enum to seconds
-                        # C# TimeFrameNdx enum: Minute=0, Minute5=1, Minute15=3, Hour=7, Hour4=10, Weekly=17, etc.
+                        
                         # Map enum values to actual timeframes in seconds
                         tf_enum = int(val)
                         if tf_enum == 0:  # Minute
@@ -836,7 +836,7 @@ class Kanga2(KitaApi):
                     ",BollingerLower" \
                     ",BollingerMain"
             
-            # Add "_Python" suffix to distinguish from C# logs
+            
             base_filename = f"{self.version.split(' ')[0]} {self.config_path.replace('Config', '')}"
             log_filename = base_filename.replace(".csv", "_Python.csv") if base_filename.endswith(".csv") else f"{base_filename}_Python"
             self.open_logfile(log_filename, PyLogger.SELF_MADE, header)
@@ -857,7 +857,7 @@ class Kanga2(KitaApi):
             if i > 0:
                 self.symbol_csv_all_visual += ','
             if sym.lower() == "vis":
-                # In C#, this would be replaced with current Symbol.Name
+                
                 # For now, we'll use the first symbol from symbol_dictionary
                 if len(self.symbol_dictionary) > 0:
                     first_symbol = list(self.symbol_dictionary.values())[0].name
@@ -971,7 +971,7 @@ class Kanga2(KitaApi):
         # Use quote_provider and trade_provider from MainConsole (set globally) or create defaults
         if self.quote_provider is None:
             # Fallback: create default provider if not set in MainConsole
-            # Use cTrader cache as requested
+            
             quote_provider = QuoteCtraderCacheTick(data_rate=0, parameter=r"G:\Meine Ablage\ShareFile\BacktestingCache\pepperstone\demo")
             # Warning: No quote_provider set - messages removed
         else:
@@ -1010,7 +1010,7 @@ class Kanga2(KitaApi):
             if system_bot.qr_symbol_name in self.symbol_dictionary:
                 symbol = self.symbol_dictionary[system_bot.qr_symbol_name]
                 # Request bars for the timeframe with lookback
-                # Note: request_bars is internal, not part of cTrader API
+                
                 symbol.request_bars(system_bot.bar_timeframe, system_bot.bollinger_period + 10)
                 # Request M1 bars for filtering
                 symbol.request_bars(Constants.SEC_PER_MINUTE, 100)

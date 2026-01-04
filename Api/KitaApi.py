@@ -34,8 +34,8 @@ class KitaApi:
     # If not set from there, the given default values will be used
     AllDataStartUtc: datetime
     AllDataEndUtc: datetime = datetime.max
-    BacktestStart: datetime  # UTC 00:00 (interpreted as UTC midnight, matches cTrader CLI behavior)
-    BacktestEnd: datetime    # UTC 00:00 (interpreted as UTC midnight, matches cTrader CLI behavior)
+    BacktestStart: datetime  
+    BacktestEnd: datetime    
     _BacktestStartUtc: datetime = datetime.min  # Internal: UTC version of BacktestStart
     _BacktestEndUtc: datetime = datetime.max    # Internal: UTC version of BacktestEnd
     
@@ -63,18 +63,19 @@ class KitaApi:
     quote_provider: QuoteProvider = None  # type:ignore  # Can be set from MainConsole
     trade_provider: TradeProvider = None  # type:ignore  # Can be set from MainConsole
     Indicators: Indicators = None  # type:ignore  # Central API for creating indicators
-    MarketData: MarketData = None  # type:ignore  # Central API for accessing bars (similar to cTrader's mBot.MarketData)
+    MarketData: MarketData = None  
     _debug_log_file = None  # Debug log file handle
     _last_ontick_date: Optional[str] = None  # Track last date printed for OnTick message
     # endregion
 
     def __init__(self):
-        # Initialize Indicators accessor (similar to cTrader's mBot.Indicators)
+        
         self.Indicators = Indicators(api=self)
-        # Initialize MarketData accessor (similar to cTrader's mBot.MarketData)
+        
         self.MarketData = MarketData(api=self)
         # Initialize debug log file
         self._init_debug_log()
+        self._prepared = False # Flag to ensure we only prepare once after indicators are set
     
     def _init_debug_log(self):
         """Initialize debug log file"""
@@ -566,110 +567,45 @@ class KitaApi:
     def _calculate_indicator_warmup_period(self) -> timedelta:
         """
         Calculate the warm-up period needed for all indicators across all symbols.
-        Returns the LONGEST warm-up period needed (across all indicators) plus 2 days buffer.
-        
-        Uses three methods in priority order:
-        1. Check Indicators API tracked indicators (best - created via self.Indicators.*)
-        2. Check actual indicators if they exist (created directly)
-        3. Use look_back from request_bars calls (available in on_init) as fallback
+        New Architecture: max(periods + 1) * timeframe_seconds.
         """
         from Api.Constants import Constants
         
         max_warmup_seconds = 0
-        max_warmup_info = None  # Track which indicator requires the longest warm-up
+        max_warmup_info = None
         
-        # METHOD 1: Use Indicators API tracked indicators (most reliable - created via self.Indicators.*)
+        # METHOD 1: Use Indicators API tracked indicators
         if self.Indicators is not None and len(self.Indicators._created_indicators) > 0:
             for info in self.Indicators._created_indicators:
-                warmup_seconds = info.periods * info.timeframe_seconds
+                # Use periods + 1 bar as buffer
+                warmup_seconds = (info.periods + 1) * info.timeframe_seconds
                 if warmup_seconds > max_warmup_seconds:
                     max_warmup_seconds = warmup_seconds
-                    max_warmup_info = f"{info.indicator_name}(periods={info.periods}) on {info.timeframe_seconds}s bars (via Indicators API)"
+                    max_warmup_info = f"{info.indicator_name}(periods={info.periods}) on {info.timeframe_seconds}s bars"
         
-        # Iterate through all symbols
+        # METHOD 2: Check Bars look_back as fallback
         for symbol in self.symbol_dictionary.values():
-            # Iterate through all bars for this symbol
-            for timeframe, bars in symbol.bars_dictonary.items():
-                # METHOD 2: Check actual indicators (if created directly, not via Indicators API)
-                # Get all DataSeries that might have indicators
-                data_series_list = [
-                    bars.open_bids, bars.high_bids, bars.low_bids, bars.close_bids,
-                    bars.open_asks, bars.high_asks, bars.low_asks, bars.close_asks,
-                ]
-                
-                # Check each DataSeries for indicators
-                for data_series in data_series_list:
-                    # Check if indicator_list exists (it's created when first indicator is added)
-                    if hasattr(data_series, 'indicator_list') and len(data_series.indicator_list) > 0:
-                        for indicator in data_series.indicator_list:
-                            indicator_name = indicator.__class__.__name__
-                            
-                            # Get the period from the indicator
-                            if hasattr(indicator, 'periods'):
-                                periods = indicator.periods
-                                # Calculate warm-up time: periods * timeframe_seconds
-                                warmup_seconds = periods * bars.timeframe_seconds
-                                if warmup_seconds > max_warmup_seconds:
-                                    max_warmup_seconds = warmup_seconds
-                                    max_warmup_info = f"{indicator_name}(periods={periods}) on {bars.timeframe_seconds}s bars"
-                            
-                            # Some indicators might have nested indicators (e.g., BollingerBands has MovingAverage)
-                            # Check for nested indicators - use the LONGEST period from nested indicators
-                            if hasattr(indicator, 'MovingAverage') and hasattr(indicator.MovingAverage, 'periods'):
-                                periods = indicator.MovingAverage.periods
-                                warmup_seconds = periods * bars.timeframe_seconds
-                                if warmup_seconds > max_warmup_seconds:
-                                    max_warmup_seconds = warmup_seconds
-                                    max_warmup_info = f"{indicator_name}.MovingAverage(periods={periods}) on {bars.timeframe_seconds}s bars"
-                            
-                            if hasattr(indicator, 'StandardDeviation') and hasattr(indicator.StandardDeviation, 'periods'):
-                                periods = indicator.StandardDeviation.periods
-                                warmup_seconds = periods * bars.timeframe_seconds
-                                if warmup_seconds > max_warmup_seconds:
-                                    max_warmup_seconds = warmup_seconds
-                                    max_warmup_info = f"{indicator_name}.StandardDeviation(periods={periods}) on {bars.timeframe_seconds}s bars"
-                            
-                            # Check for MACD indicators (they have long_cycle which is the longest period)
-                            if hasattr(indicator, 'long_cycle'):
-                                periods = indicator.long_cycle
-                                warmup_seconds = periods * bars.timeframe_seconds
-                                if warmup_seconds > max_warmup_seconds:
-                                    max_warmup_seconds = warmup_seconds
-                                    max_warmup_info = f"{indicator_name}(long_cycle={periods}) on {bars.timeframe_seconds}s bars"
-                            
-                            # Check for RSI (it uses EMA with period 2*periods-1, which is longer than base period)
-                            if hasattr(indicator, '_ema_gain') and hasattr(indicator._ema_gain, 'periods'):
-                                periods = indicator._ema_gain.periods
-                                warmup_seconds = periods * bars.timeframe_seconds
-                                if warmup_seconds > max_warmup_seconds:
-                                    max_warmup_seconds = warmup_seconds
-                                    max_warmup_info = f"{indicator_name}._ema_gain(periods={periods}) on {bars.timeframe_seconds}s bars"
-                
-                # METHOD 3: Use look_back from request_bars as fallback (available in on_init)
-                # This catches cases where indicators are created in on_start but request_bars was called in on_init
+            for bars in symbol.bars_dictonary.values():
                 if bars.look_back > 0:
-                    # look_back is the number of bars needed, convert to seconds
                     warmup_seconds_from_lookback = bars.look_back * bars.timeframe_seconds
                     if warmup_seconds_from_lookback > max_warmup_seconds:
                         max_warmup_seconds = warmup_seconds_from_lookback
-                        max_warmup_info = f"request_bars look_back={bars.look_back} bars on {bars.timeframe_seconds}s timeframe"
+                        max_warmup_info = f"Bars look_back={bars.look_back} on {bars.timeframe_seconds}s timeframe"
         
-        # Convert to timedelta and add 2 days buffer
-        warmup_timedelta = timedelta(seconds=max_warmup_seconds) + timedelta(days=2)
+        warmup_timedelta = timedelta(seconds=max_warmup_seconds)
         
-        # Log the longest warm-up requirement if found
         if max_warmup_info:
             warmup_days = warmup_timedelta.total_seconds() / Constants.SEC_PER_DAY
-            self._debug_log(f"Indicator warm-up calculation: Longest requirement is {max_warmup_info} = {max_warmup_seconds/Constants.SEC_PER_DAY:.2f} days, plus 2 days buffer = {warmup_days:.2f} days total")
-        elif max_warmup_seconds == 0:
-            self._debug_log("Indicator warm-up calculation: No indicators or look_back found, using 2 days buffer only")
+            self._debug_log(f"Indicator warm-up calculation: Longest requirement is {max_warmup_info} = {warmup_days:.2f} days total")
+        else:
+            self._debug_log("Indicator warm-up calculation: No indicators or look_back found, using 0 warm-up")
         
         return warmup_timedelta
 
     def _convert_date_to_utc_midnight(self, date_datetime: datetime) -> datetime:
         """
         Convert a date to UTC 00:00 (midnight UTC).
-        This matches cTrader CLI behavior where dates are interpreted as UTC 00:00.
+        This UTC midnight where dates are interpreted as UTC 00:00.
         
         Args:
             date_datetime: datetime with date only (time will be set to 00:00 UTC)
@@ -717,7 +653,7 @@ class KitaApi:
 
         # Convert BacktestStart/BacktestEnd to UTC
         # If BacktestStart/BacktestEnd have time components (hours:minutes:seconds), preserve them
-        # Otherwise, convert to UTC 00:00 (matches cTrader CLI behavior)
+        
         if hasattr(self, 'BacktestStart') and self.BacktestStart != datetime.min:
             # Check if time components are set (not midnight)
             if self.BacktestStart.hour == 0 and self.BacktestStart.minute == 0 and self.BacktestStart.second == 0 and self.BacktestStart.microsecond == 0:
@@ -734,9 +670,12 @@ class KitaApi:
         if hasattr(self, 'BacktestEnd') and self.BacktestEnd != datetime.max:
             # Check if time components are set (not midnight)
             if self.BacktestEnd.hour == 0 and self.BacktestEnd.minute == 0 and self.BacktestEnd.second == 0 and self.BacktestEnd.microsecond == 0:
-                # Date only - convert to UTC midnight (exclusive)
-                self._BacktestEndUtc = self._convert_date_to_utc_midnight(self.BacktestEnd)
-                self._debug_log(f"BacktestEnd: {self.BacktestEnd} (exclusive) -> UTC 00:00: {self._BacktestEndUtc}")
+                # Date only - treat as inclusive end date (include all of that day)
+                # Convert to next day 00:00:00 UTC (exclusive) to include all of the specified date
+                # Example: BacktestEnd = 03.12.2025 -> _BacktestEndUtc = 04.12.2025 00:00:00 UTC (includes all of Dec 3)
+                next_day = self.BacktestEnd + timedelta(days=1)
+                self._BacktestEndUtc = self._convert_date_to_utc_midnight(next_day)
+                self._debug_log(f"BacktestEnd: {self.BacktestEnd} (inclusive date) -> UTC next day 00:00 (exclusive): {self._BacktestEndUtc}")
             else:
                 # Has time components - use as-is (assumed to be UTC, exclusive)
                 self._BacktestEndUtc = self.BacktestEnd
@@ -749,52 +688,49 @@ class KitaApi:
         self.robot.on_init()  # type: ignore
         self._debug_log("[DEBUG KitaApi.do_init] robot.on_init() completed")
 
-        # Calculate warm-up period needed for all indicators
-        warmup_period = self._calculate_indicator_warmup_period()
+    WarmupStart: datetime = datetime.min # Explicit warmup start date
+
+    def prepare_backtest(self):
+        """
+        Finalize warm-up period and load data.
+        Should be called after indicators are created (usually at end of do_start).
+        """
+        if self._prepared:
+            return
         
-        # Store original AllDataStartUtc if it was explicitly set
-        original_all_data_start = getattr(self, 'AllDataStartUtc', None)
-        
-        # Set AllDataStartUtc to _BacktestStartUtc minus warm-up period
-        # No timezone buffer needed since we're using UTC 00:00 directly
-        if original_all_data_start is None or original_all_data_start == datetime.min:
-            if self._BacktestStartUtc != datetime.min:
-                # Start loading data from UTC 00:00, minus warmup period
-                self.AllDataStartUtc = self._BacktestStartUtc - warmup_period
-                self._debug_log(f"Calculated AllDataStartUtc: {self.AllDataStartUtc} (BacktestStart UTC: {self._BacktestStartUtc} - warmup: {warmup_period})")
-            else:
-                # If BacktestStart is also not set, use a default (will be set later)
-                self.AllDataStartUtc = datetime.min
-        else:
-            # AllDataStartUtc was explicitly set, use it as-is
-            self.AllDataStartUtc = original_all_data_start
+        # User specified WarmupStart logic
+        if self.WarmupStart != datetime.min:
+             self.AllDataStartUtc = self._convert_date_to_utc_midnight(self.WarmupStart)
+             self._debug_log(f"Using manual WarmupStart: {self.WarmupStart} -> UTC: {self.AllDataStartUtc}")
+        elif self._BacktestStartUtc != datetime.min:
+             # Fallback if no warmup specified: start at backtest start (0 warmup)
+             self.AllDataStartUtc = self._BacktestStartUtc
+             self._debug_log(f"No WarmupStart specified, using BacktestStart: {self.AllDataStartUtc}")
         
         # Set AllDataEndUtc if not explicitly set
-        original_all_data_end = getattr(self, 'AllDataEndUtc', None)
-        if original_all_data_end is None or original_all_data_end == datetime.max:
+        if getattr(self, 'AllDataEndUtc', datetime.max) == datetime.max:
             if self._BacktestEndUtc != datetime.max:
-                # Use the end time as-is (already set to end of day 23:59:59.999)
                 self.AllDataEndUtc = self._BacktestEndUtc
-            else:
-                self.AllDataEndUtc = datetime.max
-        else:
-            # AllDataEndUtc was explicitly set, use it as-is
-            self.AllDataEndUtc = original_all_data_end
-
+        
         # load bars and data rate
-        self._debug_log(f"[DEBUG KitaApi.do_init] Loading data for {len(self.symbol_dictionary)} symbol(s)...")
+        self._debug_log(f"[DEBUG prepare_backtest] Loading data for {len(self.symbol_dictionary)} symbol(s)...")
         for symbol in self.symbol_dictionary.values():
-            self._debug_log(f"[DEBUG KitaApi.do_init] Checking historical data for {symbol.name}...")
+            self._debug_log(f"[DEBUG prepare_backtest] Checking historical data for {symbol.name}...")
             symbol.check_historical_data()  # make sure data do exist since AllDataStartUtc
-            self._debug_log(f"[DEBUG KitaApi.do_init] Making time aware for {symbol.name}...")
+            self._debug_log(f"[DEBUG prepare_backtest] Making time aware for {symbol.name}...")
             symbol.make_time_aware()  # make sure all start/end datetimes are time zone aware
-            self._debug_log(f"[DEBUG KitaApi.do_init] Loading datarate and bars for {symbol.name}...")
+            self._debug_log(f"[DEBUG prepare_backtest] Loading datarate and bars for {symbol.name}...")
             symbol.load_datarate_and_bars()
-            self._debug_log(f"[DEBUG KitaApi.do_init] Completed loading for {symbol.name}")
+            self._debug_log(f"[DEBUG prepare_backtest] Completed loading for {symbol.name}")
+        
+        self._prepared = True
 
     def do_start(self):
         for symbol in self.symbol_dictionary.values():
             self.robot.on_start(symbol)  # type: ignore
+        
+        # Finalize and load data now that all indicators are created
+        self.prepare_backtest()
 
     def do_tick(self):
         # Update quote, bars, indicators, account, bot

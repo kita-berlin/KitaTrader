@@ -19,8 +19,8 @@ class TestOHLC:
 
         # Platform mode how the robot will be used by the platform
         self.robot.RunningMode = RunMode.SilentBacktesting
-        # Historical data path - using cTrader cache path (MUST use Spotware folder, same as C# bot)
-        # C# bot downloads to: C:\Users\HMz\AppData\Roaming\Spotware\Cache\Spotware\BacktestingCache\V1\demo_19011fd1\
+        
+        
         # Python MUST use the same path to ensure both bots use identical data
         self.robot.DataPath = r"C:\Users\HMz\AppData\Roaming\Spotware\Cache\Spotware\BacktestingCache\V1\demo_19011fd1"
         
@@ -44,14 +44,19 @@ class TestOHLC:
         
         # 2. Define the backtest time window
         # region
-        # Match C# bot's exact date/time range to get same number of ticks
-        # C# bot uses: --start=01/12/2025 --end=02/12/2025 (exclusive end)
+        
+        
         # This is a 1-day test for quick comparison
         from datetime import timedelta
         # Start at beginning of Dec 1 (UTC timezone-aware)
         self.robot.BacktestStart = datetime.strptime("01.12.2025 00:00", "%d.%m.%Y %H:%M").replace(tzinfo=pytz.UTC)
-        # End at beginning of Dec 4 (exclusive, UTC timezone-aware) 
-        self.robot.BacktestEnd = datetime.strptime("04.12.2025 00:00", "%d.%m.%Y %H:%M").replace(tzinfo=pytz.UTC)
+        
+        # Explicit warmup start date (Nov 24) to ensure indicators have enough data
+        # This replaces auto-calculation and decouples data loading from backtest start
+        self.robot.WarmupStart = datetime.strptime("24.11.2025", "%d.%m.%Y")
+        
+        # End at beginning of Dec 5 (exclusive, UTC timezone-aware) to capture Dec 4 data
+        self.robot.BacktestEnd = datetime.strptime("05.12.2025 00:00", "%d.%m.%Y %H:%M").replace(tzinfo=pytz.UTC)
 
         # endregion
 

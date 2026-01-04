@@ -73,6 +73,20 @@ class Ringbuffer(Generic[T]):
         elif out_fallout:
             return fall_out
 
+    def exchange(self, item: T):
+        """
+        Replaces the most recent item in the buffer with a new one.
+        Does not advance the position or increase the count.
+        """
+        if self._count == 0:
+            self.add(item)
+            return
+        
+        # The most recent item is at position - 1
+        last_idx = (self._position - 1 + self._size) % self._size
+        self._buffer[last_idx] = item
+        self._version += 1
+
     def clear(self):
         """
         Clears the _buffer.

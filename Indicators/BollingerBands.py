@@ -65,7 +65,7 @@ class BollingerBands(IIndicator):
         if index1 >= count or index1 < 0:
             return
 
-        # Get the MA and StdDev values using [] indexing exactly like C#: Result[index]
+        
         ma_value = self.MovingAverage.result[index]  # type: ignore
         std_value = self.StandardDeviation.result[index]  # type: ignore
         
@@ -73,16 +73,16 @@ class BollingerBands(IIndicator):
         if math.isnan(ma_value) or math.isnan(std_value):
             return  # Sub-indicators not calculated yet
         
-        # C# code: double num = _standardDeviation.Result[index] * StandardDeviations;
-        # C# code: Main[index2] = _movingAverage.Result[index];
-        # C# code: Bottom[index2] = _movingAverage.Result[index] - num;
-        # C# code: Top[index2] = _movingAverage.Result[index] + num;
-        # C# uses pure double precision - NO rounding during calculation
+        
+        
+        
+        
+        
         num = float(std_value) * float(self.standard_deviations)  # Ensure double precision
         
         # For indicator ring buffers, use write_indicator_value() which handles circular indexing
         # The result is always written to the current position, regardless of index
-        # NO rounding - store pure double precision values (matching C# exactly)
+        
         self.main.write_indicator_value(float(ma_value))
         self.bottom.write_indicator_value(float(ma_value - num))
         self.top.write_indicator_value(float(ma_value + num))

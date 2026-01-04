@@ -25,14 +25,14 @@ class Vidya(MovingAverage):
         if index < self.periods:
             return
 
-        # Get previous result using [] indexing exactly like C#: Result[index - 1]
+        
         prev_result = self.result[index - 1] if index > 0 else float('nan')
         
         # If previous result is NaN (start of calculation), use previous price
         import math
         if math.isnan(prev_result) or prev_result == 0:
             if index > 0:
-                # Use [] indexing exactly like C#: Source[index - 1]
+                
                 prev_result = self.source[index - 1]
             else:
                 prev_result = self.source[index] if index >= 0 else float('nan')
@@ -43,14 +43,14 @@ class Vidya(MovingAverage):
         # Alpha = Sigma * CMO
         alpha = self.sigma * cmo_val
         
-        # Get current price using [] indexing exactly like C#: Source[index]
+        
         current_price = self.source[index]
         
-        # C# uses pure double precision - NO rounding during calculation
+        
         # Result = (1 - alpha) * PrevResult + alpha * Price
         # Ensure all values are double precision and calculate without rounding
         result_value = (1.0 - float(alpha)) * float(prev_result) + float(alpha) * float(current_price)
-        # Write to ring buffer - NO rounding, pure double precision (matching C# exactly)
+        
         self.result.write_indicator_value(float(result_value))
 
     def cmo(self, index: int) -> float:
@@ -67,7 +67,7 @@ class Vidya(MovingAverage):
             if prev_idx < 0:
                 continue
 
-            # Use [] indexing exactly like C#: Source[curr_idx] and Source[prev_idx]
+            
             curr_price = float(self.source[curr_idx])  # Ensure double precision
             prev_price = float(self.source[prev_idx])  # Ensure double precision
             

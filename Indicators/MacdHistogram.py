@@ -1,6 +1,5 @@
 """
 Moving Average Convergence Divergence (MACD) Histogram Indicator
-Ported from cTrader.Automate.Indicators
 """
 from Api.IIndicator import IIndicator
 from Api.DataSeries import DataSeries

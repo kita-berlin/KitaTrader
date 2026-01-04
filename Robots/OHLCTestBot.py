@@ -1,6 +1,6 @@
 """
 OHLC Test Bot - Compare tick values between C# and Python implementations
-Step 1: Ticks only - Bar tests and indicator tests are commented out for now, will test later
+Logs all bars and indicators only on BarOpened events (1:1 lock step port from C# bot)
 """
 import os
 from datetime import datetime, timedelta
@@ -8,6 +8,7 @@ from Api.KitaApi import KitaApi
 from Api.Symbol import Symbol
 from Api.KitaApiEnums import *
 from Api.Constants import Constants
+from Api.BarOpenedEventArgs import BarOpenedEventArgs
 
 
 class OHLCTestBot(KitaApi):
@@ -73,14 +74,15 @@ class OHLCTestBot(KitaApi):
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
             
-        # Create tick log file
-        log_path_ticks = os.path.join(log_dir, "OHLC_Test_Python_Ticks.csv")
-        self.log_file_ticks = open(log_path_ticks, "w", encoding="utf-8")
-        self.log_file_ticks.write("Time,Bid,Ask,Spread\n")
-        self.log_file_ticks.flush()
+        # TICK LOGGING DISABLED - Only OHLCV bar data is logged
+        # log_path_ticks = os.path.join(log_dir, "OHLC_Test_Python_Ticks.csv")
+        # self.log_file_ticks = open(log_path_ticks, "w", encoding="utf-8")
+        # self.log_file_ticks.write("Time,Bid,Ask,Spread\n")
+        # self.log_file_ticks.flush()
+        self.log_file_ticks = None
         
         # Keep old log_file for backward compatibility
-        self.log_file = self.log_file_ticks
+        self.log_file = None  # No tick logging
         
         # Bar tests - commented out for now, will test later
         log_path_m1 = os.path.join(log_dir, "OHLC_Test_Python_M1.csv")
@@ -88,9 +90,9 @@ class OHLCTestBot(KitaApi):
         log_path_h4 = os.path.join(log_dir, "OHLC_Test_Python_H4.csv")
         
         self.log_file_m1 = open(log_path_m1, "w", encoding="utf-8")
-        m1_header = "Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread,SMAOpen,SMAHigh,SMALow,SMAClose,Volume\n"
-        h1_header = "Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread,SMAOpen,SMAHigh,SMALow,SMAClose,Volume\n"
-        h4_header = "Time,Open,High,Low,Close,OpenBid,OpenAsk,SymbolBid,SymbolAsk,SymbolSpread,SMAOpen,SMAHigh,SMALow,SMAClose,Volume\n"
+        m1_header = "Time,Open,High,Low,Close,Volume,SMAOpen,SMAHigh,SMALow,SMAClose\n"
+        h1_header = "Time,Open,High,Low,Close,Volume,SMAOpen,SMAHigh,SMALow,SMAClose\n"
+        h4_header = "Time,Open,High,Low,Close,Volume,SMAOpen,SMAHigh,SMALow,SMAClose\n"
         self.log_file_m1.write(m1_header)
         self.log_file_m1.flush()
         
@@ -107,18 +109,17 @@ class OHLCTestBot(KitaApi):
         self.debug_log_file = open(debug_log_path, "w", encoding="utf-8")
         self._debug_log("OHLCTestBot: on_init() called")
         
-        # Indicator tests - commented out for now, will test later
-        # Setup BB logging
-        # bb_log_path = os.path.join(log_dir, "BB_Test_Python.log")
-        # self.bb_log_file = open(bb_log_path, "w", encoding="utf-8")
-        # self.bb_log_file.write("Time,Source,Main,Top,Bottom\n")
-        # self.bb_log_file.flush()
-        # 
+        # Setup BB logging (for H4 indicators)
+        bb_log_path = os.path.join(log_dir, "BB_Test_Python.log")
+        self.bb_log_file = open(bb_log_path, "w", encoding="utf-8")
+        self.bb_log_file.write("Time,Source,Main,Top,Bottom\n")
+        self.bb_log_file.flush()
+        
         # Setup SMA logging (with bar OHLC and bid/ask for verification)
-        # sma_log_path = os.path.join(log_dir, "SMA_Test_Python.log")
-        # self.sma_log_file = open(sma_log_path, "w", encoding="utf-8")
-        # self.sma_log_file.write("Time,Source,Value,BarOpen,BarHigh,BarLow,BarClose,BarOpenBid,BarOpenAsk\n")
-        # self.sma_log_file.flush()
+        sma_log_path = os.path.join(log_dir, "SMA_Test_Python.log")
+        self.sma_log_file = open(sma_log_path, "w", encoding="utf-8")
+        self.sma_log_file.write("Time,Source,Value,BarOpen,BarHigh,BarLow,BarClose,BarOpenBid,BarOpenAsk\n")
+        self.sma_log_file.flush()
         
         # Request symbol for tick testing only
         err, self.active_symbol = self.request_symbol(
@@ -127,8 +128,8 @@ class OHLCTestBot(KitaApi):
             self.trade_provider
         )
         if err == "":
-            # For tick testing, we don't request bars - ticks are processed one at a time
-            self._debug_log(f"OHLCTestBot: Initialized for tick testing for {self.symbol_name}")
+            # OHLCV bar testing only - no tick logging
+            self._debug_log(f"OHLCTestBot: Initialized for OHLCV bar testing for {self.symbol_name}")
         else:
             self._debug_log(f"OHLCTestBot: Error requesting symbol: {err}")
         
@@ -142,14 +143,29 @@ class OHLCTestBot(KitaApi):
             # Request H4 bars (14400 seconds = 4 hours)
             self.active_symbol.request_bars(14400, 50)  # 50 bars for H4
             self._debug_log(f"OHLCTestBot: Requested M1, H1, and H4 bars for {self.symbol_name}")
+            
+            # Create indicators in on_init() - warmup phase ensures enough bars are available
+            # Indicators must be created during initialization, not in on_start() or on_tick()
+            self.m_bars_m1 = self.MarketData.GetBars(60, self.symbol_name)
+            self.m_bars_h1 = self.MarketData.GetBars(3600, self.symbol_name)
+            self.m_bars_h4 = self.MarketData.GetBars(14400, self.symbol_name)
+            
+            if self.m_bars_m1:
+                self._create_sma_indicators(self.m_bars_m1, "M1",
+                                           "sma_m1_open", "sma_m1_high", "sma_m1_low", "sma_m1_close")
+            if self.m_bars_h1:
+                self._create_sma_indicators(self.m_bars_h1, "H1",
+                                           "sma_h1_open", "sma_h1_high", "sma_h1_low", "sma_h1_close")
+            if self.m_bars_h4:
+                self._create_sma_indicators(self.m_bars_h4, "H4",
+                                           "sma_open", "sma_high", "sma_low", "sma_close")
 
     def on_start(self, symbol: Symbol) -> None:
-        """Called when backtest starts for a specific symbol - Tick testing only"""
-        # For tick testing, we don't need bars
-        self._debug_log(f"OHLCTestBot: Started tick testing for {self.symbol_name}")
+        """Called when backtest starts for a specific symbol - OHLCV bar testing only"""
+        # OHLCV bar testing only - no tick logging
+        self._debug_log(f"OHLCTestBot: Started OHLCV bar testing for {self.symbol_name}")
         
-        # Bar tests - commented out for now, will test later
-        # Get M1, H1, and H4 Bars using MarketData API (only called during initialization)
+        # Get M1, H1, and H4 Bars using MarketData API (already created in on_init, just get references)
         self.m_bars_m1 = self.MarketData.GetBars(60, self.symbol_name)  # M1 = 60 seconds
         self.m_bars_h1 = self.MarketData.GetBars(3600, self.symbol_name)  # H1 = 3600 seconds
         self.m_bars_h4 = self.MarketData.GetBars(14400, self.symbol_name)  # H4 = 14400 seconds
@@ -159,20 +175,18 @@ class OHLCTestBot(KitaApi):
         else:
             self._debug_log(f"OHLCTestBot: Got M1 bars, initial count: {self.m_bars_m1.count}")
             self.last_logged_count_m1 = 0
-            # Create M1 SMA indicators when enough bars are available
-            if self.m_bars_m1.count >= self.sma_periods:
-                self._create_sma_indicators(self.m_bars_m1, "M1",
-                                           "sma_m1_open", "sma_m1_high", "sma_m1_low", "sma_m1_close")
+            # Subscribe to BarOpened event for M1
+            self.m_bars_m1.BarOpened += self.Bars_M1_BarOpened
+            # Indicators are already created in on_init() - warmup ensures enough bars
         
         if self.m_bars_h1 is None:
             self._debug_log(f"OHLCTestBot: Error getting H1 bars for {self.symbol_name}")
         else:
             self._debug_log(f"OHLCTestBot: Got H1 bars, initial count: {self.m_bars_h1.count}")
             self.last_logged_count_h1 = 0
-            # Create H1 SMA indicators when enough bars are available
-            if self.m_bars_h1.count >= self.sma_periods:
-                self._create_sma_indicators(self.m_bars_h1, "H1",
-                                           "sma_h1_open", "sma_h1_high", "sma_h1_low", "sma_h1_close")
+            # Subscribe to BarOpened event for H1
+            self.m_bars_h1.BarOpened += self.Bars_H1_BarOpened
+            # Indicators are already created in on_init() - warmup ensures enough bars
         
         if self.m_bars_h4 is None:
             self._debug_log(f"OHLCTestBot: Error getting H4 bars for {self.symbol_name}")
@@ -180,10 +194,9 @@ class OHLCTestBot(KitaApi):
             self._debug_log(f"OHLCTestBot: Got H4 bars, initial count: {self.m_bars_h4.count}")
             self.last_logged_count_h4 = 0
             self._bb_indicators_created = False  # Track if BB indicators have been created
-            # Create H4 SMA indicators when enough bars are available
-            if self.m_bars_h4.count >= self.sma_periods:
-                self._create_sma_indicators(self.m_bars_h4, "H4",
-                                           "sma_open", "sma_high", "sma_low", "sma_close")
+            # Subscribe to BarOpened event for H4
+            self.m_bars_h4.BarOpened += self.Bars_H4_BarOpened
+            # Indicators are already created in on_init() - warmup ensures enough bars
         
         # Keep old m_bars for backward compatibility (H4)
         self.m_bars = self.m_bars_h4
@@ -191,8 +204,8 @@ class OHLCTestBot(KitaApi):
     
     def _create_sma_indicators(self, bars, timeframe_name: str, 
                                attr_open: str, attr_high: str, attr_low: str, attr_close: str):
-        """Create SMA indicators for a given timeframe when enough bars are available"""
-        if bars is None or bars.count < self.sma_periods:
+        """Create SMA indicators for a given timeframe"""
+        if bars is None:
             return
         
         self._debug_log(f"Creating Simple Moving Average on all OHLC values for {timeframe_name} (periods={self.sma_periods})")
@@ -309,15 +322,8 @@ class OHLCTestBot(KitaApi):
             digits = symbol.digits
             fmt = f".{digits}f"
             
-            # Get bid and ask at bar open time
+            # Get bar index for the previous bar (the one that just closed)
             barIndex = bars.count - 2
-            barOpenBid = bars.open_bids.last(1) if barIndex >= 0 else 0.0
-            barOpenAsk = bars.open_asks.last(1) if barIndex >= 0 else 0.0
-            
-            # Get symbol bid/ask/spread at bar open time (current symbol values)
-            symbolBid = symbol.bid
-            symbolAsk = symbol.ask
-            symbolSpread = symbol.spread
             
             # Get SMA values if indicators are available
             smaOpenVal = ""
@@ -339,11 +345,12 @@ class OHLCTestBot(KitaApi):
                         sma_low.calculate(barIndex)
                         sma_close.calculate(barIndex)
                         
-                        # Get results using [] indexing exactly like C#: Result[barIndex]
-                        smaOpenVal = sma_open.result[barIndex]
-                        smaHighVal = sma_high.result[barIndex]
-                        smaLowVal = sma_low.result[barIndex]
-                        smaCloseVal = sma_close.result[barIndex]
+                        # Access result using shifted index (matching C#: Result[index2] where index2 = index + Shift)
+                        result_index = barIndex + sma_open.shift
+                        smaOpenVal = sma_open.result[result_index]
+                        smaHighVal = sma_high.result[result_index]
+                        smaLowVal = sma_low.result[result_index]
+                        smaCloseVal = sma_close.result[result_index]
                         
                         # Debug: Log if values are NaN
                         if math.isnan(smaOpenVal) or math.isnan(smaHighVal) or math.isnan(smaLowVal) or math.isnan(smaCloseVal):
@@ -373,10 +380,10 @@ class OHLCTestBot(KitaApi):
             if smaCloseVal != "":
                 smaCloseVal = f"{smaCloseVal:{fmt}}"
             
-            # Log OHLC values with bid/ask and SMA at bar open time
+            # Log OHLC values with Volume and SMA (matching C# FINAL_BAR format: Time|Open|High|Low|Close|Volume|SMAOpen|SMAHigh|SMALow|SMAClose)
             time_str = barTime.strftime("%Y-%m-%d %H:%M:%S")
             barVolume = prevBar.TickVolume
-            log_line = f"{time_str},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}},{symbolBid:{fmt}},{symbolAsk:{fmt}},{symbolSpread:{fmt}},{smaOpenVal},{smaHighVal},{smaLowVal},{smaCloseVal},{barVolume}\n"
+            log_line = f"{time_str},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barVolume},{smaOpenVal},{smaHighVal},{smaLowVal},{smaCloseVal}\n"
             log_file.write(log_line)
             log_file.flush()
 
@@ -386,358 +393,302 @@ class OHLCTestBot(KitaApi):
             setattr(self, last_logged_time_attr, barTime)
     
     def on_tick(self, symbol: Symbol):
-        """Main tick processing - logs tick values only (Step 1)"""
-        # Only log ticks - bar tests and indicator tests are commented out for now
-        if symbol.time is None:
+        """Main tick processing - TICK LOGGING DISABLED, only OHLCV bars are logged"""
+        # TICK LOGGING DISABLED - Only OHLCV bar data is logged in BarOpened event handlers
+        # if symbol.time is None:
+        #     return
+        # 
+        # # Log tick: Time,Bid,Ask,Spread
+        # time_str = symbol.time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds
+        # digits = symbol.digits
+        # fmt = f".{digits}f"
+        # log_line = f"{time_str},{symbol.bid:{fmt}},{symbol.ask:{fmt}},{symbol.spread:{fmt}}\n"
+        # self.log_file_ticks.write(log_line)
+        # self.log_file_ticks.flush()
+        
+        # Indicators are created only in on_init() - warmup phase ensures enough bars are available
+        # Bar and indicator logging now happens only in BarOpened event handlers
+        # No bar logging in on_tick - only tick logging remains
+    
+    def Bars_M1_BarOpened(self, args: BarOpenedEventArgs):
+        """BarOpened event handler for M1 bars - logs bars and indicators only on BarOpened"""
+        bars = args.Bars
+        symbol = self.active_symbol
+        if bars is None or bars.count < 2 or symbol is None:
             return
         
-        # OVER THE HOOD: Logging happens in the bot's on_tick
-        # Note: Filtering for unchanged prices and BacktestStart/BacktestEnd range checking
-        # happens "under the hood" in symbol_on_tick and KitaApi.do_tick
-        # By the time we reach here, the tick is already filtered and within the date range
+        # Get the previous closed bar (Last(1))
+        prevBar = bars.Last(1)
+        if prevBar is None:
+            return
         
-        # Log tick: Time,Bid,Ask,Spread
-        time_str = symbol.time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # Include milliseconds
-        digits = symbol.digits
-        fmt = f".{digits}f"
-        log_line = f"{time_str},{symbol.bid:{fmt}},{symbol.ask:{fmt}},{symbol.spread:{fmt}}\n"
-        self.log_file_ticks.write(log_line)
-        self.log_file_ticks.flush()
+        barTime = prevBar.OpenTime
         
-        # Bar tests - commented out for now, will test later
-        # Create SMA indicators if not created yet and enough bars are available
-        if self.m_bars_m1 and not self.sma_m1_open and self.m_bars_m1.count >= self.sma_periods:
-            self._create_sma_indicators(self.m_bars_m1, "M1",
-                                       "sma_m1_open", "sma_m1_high", "sma_m1_low", "sma_m1_close")
-        if self.m_bars_h1 and not self.sma_h1_open and self.m_bars_h1.count >= self.sma_periods:
-            self._create_sma_indicators(self.m_bars_h1, "H1",
-                                       "sma_h1_open", "sma_h1_high", "sma_h1_low", "sma_h1_close")
-        if self.m_bars_h4 and not self.sma_open and self.m_bars_h4.count >= self.sma_periods:
-            self._create_sma_indicators(self.m_bars_h4, "H4",
-                                       "sma_open", "sma_high", "sma_low", "sma_close")
+        # Match C# bot behavior: only log bars within backtest period (start <= barTime < end)
+        # C# bot checks: bar.OpenTime >= startDate && bar.OpenTime < endDate
+        if barTime < self.BacktestStartUtc or barTime >= self.BacktestEndUtc:
+            return
         
-        # Log bars for all timeframes with SMA values
-        self._log_bars_for_timeframe(
-            self.m_bars_m1, "M1", self.log_file_m1,
-            "last_logged_count_m1", "_last_logged_bar_time_m1", symbol,
+        # Log the closed bar with indicators
+        self._log_bar_with_indicators(
+            bars, prevBar, barTime, "M1", self.log_file_m1, symbol,
             self.sma_m1_open, self.sma_m1_high, self.sma_m1_low, self.sma_m1_close
         )
-        self._log_bars_for_timeframe(
-            self.m_bars_h1, "H1", self.log_file_h1,
-            "last_logged_count_h1", "_last_logged_bar_time_h1", symbol,
+    
+    def Bars_H1_BarOpened(self, args: BarOpenedEventArgs):
+        """BarOpened event handler for H1 bars - logs bars and indicators only on BarOpened"""
+        bars = args.Bars
+        symbol = self.active_symbol
+        if bars is None or bars.count < 2 or symbol is None:
+            return
+        
+        # Get the previous closed bar (Last(1))
+        prevBar = bars.Last(1)
+        if prevBar is None:
+            return
+        
+        barTime = prevBar.OpenTime
+        
+        # Match C# bot behavior: only log bars within backtest period (start <= barTime < end)
+        # C# bot checks: bar.OpenTime >= startDate && bar.OpenTime < endDate
+        if barTime < self.BacktestStartUtc or barTime >= self.BacktestEndUtc:
+            return
+        
+        # Log the closed bar with indicators
+        self._log_bar_with_indicators(
+            bars, prevBar, barTime, "H1", self.log_file_h1, symbol,
             self.sma_h1_open, self.sma_h1_high, self.sma_h1_low, self.sma_h1_close
         )
-        # 
-        # For H4, also handle indicators (existing logic)
-        if not hasattr(self, 'm_bars_h4') or self.m_bars_h4 is None or self.m_bars_h4.count == 0:
-            return
-
-        # Log H4 bars (with indicator logging)
-        self._log_h4_bars_with_indicators(symbol)
     
-    def _log_h4_bars_with_indicators(self, symbol: Symbol):
-        """Log H4 bars and handle indicators (existing logic)"""
-        # Use m_bars_h4 for H4 bars
-        bars = self.m_bars_h4
-        if bars is None or bars.count == 0:
+    def Bars_H4_BarOpened(self, args: BarOpenedEventArgs):
+        """BarOpened event handler for H4 bars - logs bars and indicators only on BarOpened"""
+        bars = args.Bars
+        symbol = self.active_symbol
+        if bars is None or bars.count < 2 or symbol is None:
             return
         
-        # Update last_logged_count to current count on first call (after warm-up, bars may have been created)
-        if self.last_logged_count_h4 == 0:
-            self.last_logged_count_h4 = bars.count
+        # Get the previous closed bar (Last(1))
+        prevBar = bars.Last(1)
+        if prevBar is None:
+            return
         
-        # Track the last logged bar time to detect new bars even when count doesn't increase (ring buffer full)
-        if not hasattr(self, '_last_logged_bar_time_h4'):
-            self._last_logged_bar_time_h4 = None
+        barTime = prevBar.OpenTime
         
-        # Create indicators when enough bars are available (bars are built incrementally)
-        if not hasattr(self, '_bb_indicators_created'):
-            self._bb_indicators_created = False
-        if not hasattr(self, '_sma_indicators_created'):
-            self._sma_indicators_created = False
-            
-        # Create SMA indicators first (simpler, easier to test)
-        if not self._sma_indicators_created and bars.count >= self.sma_periods:
-            self._debug_log(f"Creating Simple Moving Average on all OHLC values (periods={self.sma_periods})")
-            
-            # SMA on Open
-            error, self.sma_open = self.Indicators.moving_average(
-                source=bars.OpenPrices,
-                periods=self.sma_periods,
-                ma_type=MovingAverageType.Simple
-            )
-            if error != "":
-                self._debug_log(f"Error creating SMA on Open: {error}")
-            
-            # SMA on High
-            error, self.sma_high = self.Indicators.moving_average(
-                source=bars.HighPrices,
-                periods=self.sma_periods,
-                ma_type=MovingAverageType.Simple
-            )
-            if error != "":
-                self._debug_log(f"Error creating SMA on High: {error}")
-            
-            # SMA on Low
-            error, self.sma_low = self.Indicators.moving_average(
-                source=bars.LowPrices,
-                periods=self.sma_periods,
-                ma_type=MovingAverageType.Simple
-            )
-            if error != "":
-                self._debug_log(f"Error creating SMA on Low: {error}")
-            
-            # SMA on Close
-            error, self.sma_close = self.Indicators.moving_average(
-                source=bars.ClosePrices,
-                periods=self.sma_periods,
-                ma_type=MovingAverageType.Simple
-            )
-            if error != "":
-                self._debug_log(f"Error creating SMA on Close: {error}")
-            
-            if self.sma_open and self.sma_high and self.sma_low and self.sma_close:
-                self._debug_log("Simple Moving Average created successfully on all OHLC values")
-                self._sma_indicators_created = True
+        # Match C# bot behavior: only log bars within backtest period (start <= barTime < end)
+        # C# bot checks: bar.OpenTime >= startDate && bar.OpenTime < endDate
+        if barTime < self.BacktestStartUtc or barTime >= self.BacktestEndUtc:
+            return
         
-        # Create BB indicators
+        # Create indicators if not created yet and enough bars are available
         if not self._bb_indicators_created and bars.count >= self.bb_periods:
-            self._debug_log(f"Creating Bollinger Bands on all OHLC values (periods={self.bb_periods}, std_dev={self.bb_std_dev})")
-            
-            # BB on Open (using cTrader API: Bars.OpenPrices)
-            error, self.bb_open = self.Indicators.bollinger_bands(
-                source=bars.OpenPrices,
-                periods=self.bb_periods,
-                standard_deviations=self.bb_std_dev,
-                ma_type=MovingAverageType.Simple,
-                shift=0
-            )
-            if error != "":
-                self._debug_log(f"Error creating BB on Open: {error}")
-            
-            # BB on High (using cTrader API: Bars.HighPrices)
-            error, self.bb_high = self.Indicators.bollinger_bands(
-                source=bars.HighPrices,
-                periods=self.bb_periods,
-                standard_deviations=self.bb_std_dev,
-                ma_type=MovingAverageType.Simple,
-                shift=0
-            )
-            if error != "":
-                self._debug_log(f"Error creating BB on High: {error}")
-            
-            # BB on Low (using cTrader API: Bars.LowPrices)
-            error, self.bb_low = self.Indicators.bollinger_bands(
-                source=bars.LowPrices,
-                periods=self.bb_periods,
-                standard_deviations=self.bb_std_dev,
-                ma_type=MovingAverageType.Simple,
-                shift=0
-            )
-            if error != "":
-                self._debug_log(f"Error creating BB on Low: {error}")
-            
-            # BB on Close (using cTrader API: Bars.ClosePrices)
-            error, self.bb_close = self.Indicators.bollinger_bands(
-                source=bars.ClosePrices,
-                periods=self.bb_periods,
-                standard_deviations=self.bb_std_dev,
-                ma_type=MovingAverageType.Simple,
-                shift=0
-            )
-            if error != "":
-                self._debug_log(f"Error creating BB on Close: {error}")
-            
-            if self.bb_open and self.bb_high and self.bb_low and self.bb_close:
-                self._debug_log("Bollinger Bands created successfully on all OHLC values")
-                self._bb_indicators_created = True
+            self._create_bb_indicators(bars)
         
-        # Check for new bars: check if bar time changed (works even when ring buffer is full)
-        new_bar_detected = False
-        if bars.count > 1:  # Need at least 2 bars (current + previous)
-            prevBar = bars.Last(1)  # Previous closed bar
-            if prevBar:
-                barTime = prevBar.OpenTime
-                
-                # Check if this is a new bar we haven't logged yet
-                if bars.count > self.last_logged_count_h4:
-                    # Count increased - definitely a new bar
-                    new_bar_detected = True
-                elif self._last_logged_bar_time_h4 is not None and barTime != self._last_logged_bar_time_h4:
-                    # Ring buffer is full (count == size), but bar time changed - new bar overwrote oldest
-                    new_bar_detected = True
-                    self._debug_log(f"[on_tick] H4 new bar detected via time change: barTime={barTime}, _last_logged_bar_time={self._last_logged_bar_time_h4}, count={bars.count}, last_logged_count={self.last_logged_count_h4}")
-                elif self._last_logged_bar_time_h4 is None:
-                    # First time logging - always log
-                    new_bar_detected = True
-                
-                if new_bar_detected:
-                    # Debug logging for bar filtering
-                    self._debug_log(f"[on_tick] H4 new bar detected: count={bars.count}, last_logged={self.last_logged_count_h4}, barTime={barTime}, BacktestStartUtc={self.BacktestStartUtc}, BacktestEndUtc={self.BacktestEndUtc}")
+        # Log the closed bar with indicators
+        self._log_bar_with_indicators(
+            bars, prevBar, barTime, "H4", self.log_file_h4, symbol,
+            self.sma_open, self.sma_high, self.sma_low, self.sma_close
+        )
         
-        if new_bar_detected and bars.count > 1:
-            # When a new bar forms, log the previous closed bar (Last(1))
-            prevBar = bars.Last(1)
-            barTime = prevBar.OpenTime
-            
-            # Only log bars within backtest period
-            if barTime < self.BacktestStartUtc:
-                self._debug_log(f"[on_tick] H4 bar filtered: barTime ({barTime}) < BacktestStartUtc ({self.BacktestStartUtc})")
-                self.last_logged_count_h4 = bars.count
-                self._last_logged_bar_time_h4 = barTime
-                return
-            if barTime >= self.BacktestEndUtc:
-                self._debug_log(f"[on_tick] H4 bar filtered: barTime ({barTime}) >= BacktestEndUtc ({self.BacktestEndUtc})")
-                self.last_logged_count_h4 = bars.count
-                self._last_logged_bar_time_h4 = barTime
-                return
-            
-            # Bar is within date range - log it
-            self._debug_log(f"[on_tick] H4 bar passed filter, logging: barTime={barTime}, count={bars.count}")
-            barOpen = prevBar.Open  # Matching C#: prevBar.Open
-            barHigh = prevBar.High  # Matching C#: prevBar.High
-            barLow = prevBar.Low  # Matching C#: prevBar.Low
-            barClose = prevBar.Close  # Matching C#: prevBar.Close
-            digits = symbol.digits
-            fmt = f".{digits}f"
-            
-            # Get bid and ask at bar open time
-            # barIndex = count - 2 (for Last(1))
-            barIndex = bars.count - 2
-            barOpenBid = bars.open_bids.last(1) if barIndex >= 0 else 0.0
-            barOpenAsk = bars.open_asks.last(1) if barIndex >= 0 else 0.0
-            
-            # Get symbol bid/ask/spread at bar open time (current symbol values)
-            symbolBid = symbol.bid
-            symbolAsk = symbol.ask
-            symbolSpread = symbol.spread
-            
-            # Log OHLC values with bid/ask and SMA at bar open time (matching common format)
-            time_str = barTime.strftime("%Y-%m-%d %H:%M:%S")
-            barVolume = prevBar.TickVolume
-            
-            # Get SMA values for H4 (using existing sma_open indicators)
-            smaOpenVal = ""
-            smaHighVal = ""
-            smaLowVal = ""
-            smaCloseVal = ""
-            if self.sma_open and self.sma_high and self.sma_low and self.sma_close:
-                if barIndex >= self.sma_periods - 1:
-                    import math
-                    val = self.sma_open.result[barIndex]
-                    if not math.isnan(val): smaOpenVal = f"{val:{fmt}}"
-                    val = self.sma_high.result[barIndex]
-                    if not math.isnan(val): smaHighVal = f"{val:{fmt}}"
-                    val = self.sma_low.result[barIndex]
-                    if not math.isnan(val): smaLowVal = f"{val:{fmt}}"
-                    val = self.sma_close.result[barIndex]
-                    if not math.isnan(val): smaCloseVal = f"{val:{fmt}}"
-
-            log_line = f"{time_str},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}},{symbolBid:{fmt}},{symbolAsk:{fmt}},{symbolSpread:{fmt}},{smaOpenVal},{smaHighVal},{smaLowVal},{smaCloseVal},{barVolume}\n"
-            self.log_file_h4.write(log_line)
-            self.log_file_h4.flush()
-            
-            # Log indicator values for this bar (if indicators are ready)
-            # Get the bar index (Last(1) means index = Count - 2)
-            barIndex = bars.count - 2
-            
-            # Log Simple Moving Average values (simpler indicator, easier to test)
-            if barIndex >= self.sma_periods - 1 and self.sma_open and self.sma_high and self.sma_low and self.sma_close:
-                import math
+        # Log indicator values for H4 (BB and SMA)
+        self._log_h4_indicators(bars, prevBar, barTime, symbol)
+    
+    def _log_bar_with_indicators(self, bars, prevBar, barTime, timeframe_name: str, log_file, symbol: Symbol,
+                                 sma_open=None, sma_high=None, sma_low=None, sma_close=None):
+        """Helper method to log a bar with indicator values"""
+        barOpen = prevBar.Open
+        barHigh = prevBar.High
+        barLow = prevBar.Low
+        barClose = prevBar.Close
+        digits = symbol.digits
+        fmt = f".{digits}f"
+        
+        # Get bar index for the previous bar (the one that just closed)
+        barIndex = bars.count - 2
+        
+        # Get SMA values if indicators are available
+        smaOpenVal = ""
+        smaHighVal = ""
+        smaLowVal = ""
+        smaCloseVal = ""
+        
+        if sma_open and sma_high and sma_low and sma_close:
+            import math
+            if barIndex >= 0 and barIndex >= self.sma_periods - 1:
                 try:
-                    # Ensure indicators are calculated for this bar index
-                    self.sma_open.calculate(barIndex)
-                    self.sma_high.calculate(barIndex)
-                    self.sma_low.calculate(barIndex)
-                    self.sma_close.calculate(barIndex)
+                    # Calculate indicators for this bar index
+                    sma_open.calculate(barIndex)
+                    sma_high.calculate(barIndex)
+                    sma_low.calculate(barIndex)
+                    sma_close.calculate(barIndex)
                     
-                    # Get bid and ask at bar open time for verification
-                    barOpenBid = self.m_bars.open_bids.last(1) if barIndex >= 0 else 0.0
-                    barOpenAsk = self.m_bars.open_asks.last(1) if barIndex >= 0 else 0.0
+                    smaOpenVal = sma_open.result[barIndex]
+                    smaHighVal = sma_high.result[barIndex]
+                    smaLowVal = sma_low.result[barIndex]
+                    smaCloseVal = sma_close.result[barIndex]
                     
-                    # SMA on Open - use [] indexing exactly like C#: Result[barIndex]
-                    smaOpen = self.sma_open.result[barIndex]
-                    if not math.isnan(smaOpen):
-                        # Log: Time,Source,Value,BarOpen,BarHigh,BarLow,BarClose,BarOpenBid,BarOpenAsk
-                        self.sma_log_file.write(f"{time_str},Open,{smaOpen:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
-                    
-                    # SMA on High
-                    smaHigh = self.sma_high.result[barIndex]
-                    if not math.isnan(smaHigh):
-                        self.sma_log_file.write(f"{time_str},High,{smaHigh:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
-                    
-                    # SMA on Low
-                    smaLow = self.sma_low.result[barIndex]
-                    if not math.isnan(smaLow):
-                        self.sma_log_file.write(f"{time_str},Low,{smaLow:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
-                    
-                    # SMA on Close
-                    smaClose = self.sma_close.result[barIndex]
-                    if not math.isnan(smaClose):
-                        self.sma_log_file.write(f"{time_str},Close,{smaClose:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
-                    
-                    self.sma_log_file.flush()
-                except (IndexError, AttributeError, TypeError) as e:
-                    self._debug_log(f"Error logging SMA values for barIndex {barIndex}: {e}")
-            
-            # Log Bollinger Bands values for this bar (if indicators are ready)
-            if barIndex >= self.bb_periods - 1 and self.bb_open and self.bb_high and self.bb_low and self.bb_close:
-                import math
-                try:
-                    # Ensure indicators are calculated for this bar index
-                    # Indicators use ring buffers, so last(0) gives the most recently calculated value
-                    # We need to calculate the indicator for this bar first
-                    self.bb_open.calculate(barIndex)
-                    self.bb_high.calculate(barIndex)
-                    self.bb_low.calculate(barIndex)
-                    self.bb_close.calculate(barIndex)
-                    
-                    # BB on Open - use [] indexing exactly like C#: Result[barIndex]
-                    bbOpenMain = self.bb_open.main[barIndex]
-                    bbOpenTop = self.bb_open.top[barIndex]
-                    bbOpenBottom = self.bb_open.bottom[barIndex]
-                    self._debug_log(f"BB Open for {time_str}: Main={bbOpenMain}, Top={bbOpenTop}, Bottom={bbOpenBottom}, isNaN={math.isnan(bbOpenMain)}")
-                    if not math.isnan(bbOpenMain):
-                        self.bb_log_file.write(f"{time_str},Open,{bbOpenMain:{fmt}},{bbOpenTop:{fmt}},{bbOpenBottom:{fmt}}\n")
+                    # Check for NaN values and convert to empty string
+                    if math.isnan(smaOpenVal):
+                        smaOpenVal = ""
                     else:
-                        self._debug_log(f"BB Open Main is NaN, skipping log")
-                    
-                    # BB on High
-                    bbHighMain = self.bb_high.main[barIndex]
-                    bbHighTop = self.bb_high.top[barIndex]
-                    bbHighBottom = self.bb_high.bottom[barIndex]
-                    if not math.isnan(bbHighMain):
-                        self.bb_log_file.write(f"{time_str},High,{bbHighMain:{fmt}},{bbHighTop:{fmt}},{bbHighBottom:{fmt}}\n")
-                    
-                    # BB on Low
-                    bbLowMain = self.bb_low.main[barIndex]
-                    bbLowTop = self.bb_low.top[barIndex]
-                    bbLowBottom = self.bb_low.bottom[barIndex]
-                    if not math.isnan(bbLowMain):
-                        self.bb_log_file.write(f"{time_str},Low,{bbLowMain:{fmt}},{bbLowTop:{fmt}},{bbLowBottom:{fmt}}\n")
-                    
-                    # BB on Close
-                    bbCloseMain = self.bb_close.main[barIndex]
-                    bbCloseTop = self.bb_close.top[barIndex]
-                    bbCloseBottom = self.bb_close.bottom[barIndex]
-                    if not math.isnan(bbCloseMain):
-                        self.bb_log_file.write(f"{time_str},Close,{bbCloseMain:{fmt}},{bbCloseTop:{fmt}},{bbCloseBottom:{fmt}}\n")
-                    
-                    self.bb_log_file.flush()
-                except (IndexError, AttributeError, TypeError) as e:
-                    # Skip if BB values not available yet
-                    self._debug_log(f"Error logging BB values for barIndex {barIndex}: {e}")
-                    import traceback
-                    self._debug_log(traceback.format_exc())
+                        smaOpenVal = f"{smaOpenVal:{fmt}}"
+                    if math.isnan(smaHighVal):
+                        smaHighVal = ""
+                    else:
+                        smaHighVal = f"{smaHighVal:{fmt}}"
+                    if math.isnan(smaLowVal):
+                        smaLowVal = ""
+                    else:
+                        smaLowVal = f"{smaLowVal:{fmt}}"
+                    if math.isnan(smaCloseVal):
+                        smaCloseVal = ""
+                    else:
+                        smaCloseVal = f"{smaCloseVal:{fmt}}"
                 except Exception as e:
-                    self._debug_log(f"Unexpected error logging BB values: {e}")
-                    import traceback
-                    self._debug_log(traceback.format_exc())
-            
-            # Update last_logged_count and last_logged_bar_time after successful logging
-            self.last_logged_count_h4 = bars.count
-            self._last_logged_bar_time_h4 = barTime
-
+                    self._debug_log(f"Error calculating SMA for {timeframe_name} barIndex {barIndex}: {e}")
+        
+        # Log OHLC values with Volume and SMA (matching C# FINAL_BAR format: Time|Open|High|Low|Close|Volume|SMAOpen|SMAHigh|SMALow|SMAClose)
+        time_str = barTime.strftime("%Y-%m-%d %H:%M:%S")
+        barVolume = prevBar.TickVolume
+        log_line = f"{time_str},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barVolume},{smaOpenVal},{smaHighVal},{smaLowVal},{smaCloseVal}\n"
+        log_file.write(log_line)
+        log_file.flush()
+    
+    def _create_bb_indicators(self, bars):
+        """Create Bollinger Bands indicators for H4"""
+        self._debug_log(f"Creating Bollinger Bands on all OHLC values (periods={self.bb_periods}, std_dev={self.bb_std_dev})")
+        
+        error, self.bb_open = self.Indicators.bollinger_bands(
+            source=bars.OpenPrices,
+            periods=self.bb_periods,
+            standard_deviations=self.bb_std_dev,
+            ma_type=MovingAverageType.Simple,
+            shift=0
+        )
+        if error != "":
+            self._debug_log(f"Error creating BB on Open: {error}")
+        
+        error, self.bb_high = self.Indicators.bollinger_bands(
+            source=bars.HighPrices,
+            periods=self.bb_periods,
+            standard_deviations=self.bb_std_dev,
+            ma_type=MovingAverageType.Simple,
+            shift=0
+        )
+        if error != "":
+            self._debug_log(f"Error creating BB on High: {error}")
+        
+        error, self.bb_low = self.Indicators.bollinger_bands(
+            source=bars.LowPrices,
+            periods=self.bb_periods,
+            standard_deviations=self.bb_std_dev,
+            ma_type=MovingAverageType.Simple,
+            shift=0
+        )
+        if error != "":
+            self._debug_log(f"Error creating BB on Low: {error}")
+        
+        error, self.bb_close = self.Indicators.bollinger_bands(
+            source=bars.ClosePrices,
+            periods=self.bb_periods,
+            standard_deviations=self.bb_std_dev,
+            ma_type=MovingAverageType.Simple,
+            shift=0
+        )
+        if error != "":
+            self._debug_log(f"Error creating BB on Close: {error}")
+        
+        if self.bb_open and self.bb_high and self.bb_low and self.bb_close:
+            self._debug_log("Bollinger Bands created successfully on all OHLC values")
+            self._bb_indicators_created = True
+    
+    def _log_h4_indicators(self, bars, prevBar, barTime, symbol: Symbol):
+        """Log indicator values for H4 (BB and SMA)"""
+        barIndex = bars.count - 2
+        
+        # Log Simple Moving Average values
+        if barIndex >= self.sma_periods - 1 and self.sma_open and self.sma_high and self.sma_low and self.sma_close:
+            import math
+            try:
+                # Ensure indicators are calculated for this bar index
+                self.sma_open.calculate(barIndex)
+                self.sma_high.calculate(barIndex)
+                self.sma_low.calculate(barIndex)
+                self.sma_close.calculate(barIndex)
+                
+                # Get bid and ask at bar open time for verification
+                barOpenBid = bars.open_bids.last(1) if barIndex >= 0 else 0.0
+                barOpenAsk = bars.open_asks.last(1) if barIndex >= 0 else 0.0
+                
+                digits = symbol.digits
+                fmt = f".{digits}f"
+                time_str = barTime.strftime("%Y-%m-%d %H:%M:%S")
+                barOpen = prevBar.Open
+                barHigh = prevBar.High
+                barLow = prevBar.Low
+                barClose = prevBar.Close
+                
+                smaOpen = self.sma_open.result[barIndex]
+                if not math.isnan(smaOpen):
+                    self.sma_log_file.write(f"{time_str},Open,{smaOpen:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
+                
+                smaHigh = self.sma_high.result[barIndex]
+                if not math.isnan(smaHigh):
+                    self.sma_log_file.write(f"{time_str},High,{smaHigh:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
+                
+                smaLow = self.sma_low.result[barIndex]
+                if not math.isnan(smaLow):
+                    self.sma_log_file.write(f"{time_str},Low,{smaLow:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
+                
+                smaClose = self.sma_close.result[barIndex]
+                if not math.isnan(smaClose):
+                    self.sma_log_file.write(f"{time_str},Close,{smaClose:{fmt}},{barOpen:{fmt}},{barHigh:{fmt}},{barLow:{fmt}},{barClose:{fmt}},{barOpenBid:{fmt}},{barOpenAsk:{fmt}}\n")
+                
+                self.sma_log_file.flush()
+            except (IndexError, AttributeError, TypeError) as e:
+                self._debug_log(f"Error logging SMA values for barIndex {barIndex}: {e}")
+        
+        # Log Bollinger Bands values
+        if barIndex >= self.bb_periods - 1 and self.bb_open and self.bb_high and self.bb_low and self.bb_close:
+            import math
+            try:
+                # Ensure indicators are calculated for this bar index
+                self.bb_open.calculate(barIndex)
+                self.bb_high.calculate(barIndex)
+                self.bb_low.calculate(barIndex)
+                self.bb_close.calculate(barIndex)
+                
+                digits = symbol.digits
+                fmt = f".{digits}f"
+                time_str = barTime.strftime("%Y-%m-%d %H:%M:%S")
+                
+                bbOpenMain = self.bb_open.main[barIndex]
+                bbOpenTop = self.bb_open.top[barIndex]
+                bbOpenBottom = self.bb_open.bottom[barIndex]
+                if not math.isnan(bbOpenMain):
+                    self.bb_log_file.write(f"{time_str},Open,{bbOpenMain:{fmt}},{bbOpenTop:{fmt}},{bbOpenBottom:{fmt}}\n")
+                
+                bbHighMain = self.bb_high.main[barIndex]
+                bbHighTop = self.bb_high.top[barIndex]
+                bbHighBottom = self.bb_high.bottom[barIndex]
+                if not math.isnan(bbHighMain):
+                    self.bb_log_file.write(f"{time_str},High,{bbHighMain:{fmt}},{bbHighTop:{fmt}},{bbHighBottom:{fmt}}\n")
+                
+                bbLowMain = self.bb_low.main[barIndex]
+                bbLowTop = self.bb_low.top[barIndex]
+                bbLowBottom = self.bb_low.bottom[barIndex]
+                if not math.isnan(bbLowMain):
+                    self.bb_log_file.write(f"{time_str},Low,{bbLowMain:{fmt}},{bbLowTop:{fmt}},{bbLowBottom:{fmt}}\n")
+                
+                bbCloseMain = self.bb_close.main[barIndex]
+                bbCloseTop = self.bb_close.top[barIndex]
+                bbCloseBottom = self.bb_close.bottom[barIndex]
+                if not math.isnan(bbCloseMain):
+                    self.bb_log_file.write(f"{time_str},Close,{bbCloseMain:{fmt}},{bbCloseTop:{fmt}},{bbCloseBottom:{fmt}}\n")
+                
+                self.bb_log_file.flush()
+            except (IndexError, AttributeError, TypeError) as e:
+                self._debug_log(f"Error logging BB values for barIndex {barIndex}: {e}")
+    
     def on_stop(self, symbol: Symbol = None):
         """Cleanup when backtest ends"""
         if self.log_file_ticks:

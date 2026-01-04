@@ -1,6 +1,5 @@
 """
 Relative Strength Index (RSI) Indicator
-Ported from cTrader.Automate.Indicators
 """
 import math
 from Api.IIndicator import IIndicator

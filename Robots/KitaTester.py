@@ -1,4 +1,4 @@
-﻿import numpy as np
+import numpy as np
 import mmap
 import time
 import ctypes
@@ -148,13 +148,13 @@ class KitaTester(KitaApi):
         if symbol.is_warm_up:
             return
 
-        # Skip first tick from cTrader OnStart()
+        
         if self.is_first_run:
             self.is_first_run = False
             return
 
         # Step 1: Wait for QuoteMessage
-        # print("Waiting for QuoteMessage signal from C#...")
+        
         self.kernel32.WaitForSingleObject(self.quote_ready_semaphore, 0xFFFFFFFF)  # type:ignore
 
         # Read the size of the serialized message
@@ -247,7 +247,7 @@ class KitaTester(KitaApi):
         self.memory_map.write(serialized_response)  # Write serialized message # type: ignore
         self.memory_map.flush()
 
-        # Signal C# that the response is ready
+        
         if not self.kernel32.ReleaseSemaphore(self.quote_acc_semaphore, 1, None):
             raise OSError("Failed to release ResultReady semaphore")
 

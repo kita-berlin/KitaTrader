@@ -1,2 +1,0 @@
-@echo off
-"C:\Users\HMz\AppData\Local\Spotware\cTrader\abb70432efbee65d18af69e79fe8efe1\ctrader-cli.exe" backtest "C:\Users\HMz\Documents\cAlgo\Sources\Robots\EmaTestBot\bin\Release\net6.0\Robots.algo" --start=10/07/2025 --end=20/07/2025 --data-mode=ticks --balance=10000 --commission=0 --spread=0 --ctid=Quantrosoft --pwd-file="C:\Users\HMz\Documents\Source\cTraderTools\Apps\PyDownload\password.txt" --account=5166098 --symbol=AUDNZD --period=h1 > "C:\Users\HMz\Documents\cAlgo\Logfiles\EMA_Test_CSharp.txt" 2>&1

@@ -20,12 +20,12 @@ class TestH1BarsBB:
 
         # Platform mode
         self.robot.RunningMode = RunMode.SilentBacktesting
-        # Historical data path - using cTrader cache path
+        
         # This path uses t1 subdirectory (not tick)
         self.robot.DataPath = r"C:\Users\HMz\AppData\Roaming\Spotware\Cache\pepperstone\BacktestingCache\V1\demo_19011fd1"
         
         # Quote Provider Configuration
-        # QuoteCtraderCache expects {base_path}\{symbol}\t1\{YYYYMMDD}.zticks
+        
         # So we pass the base path directly
         self.robot.quote_provider = QuoteCtraderCache(
             data_rate=0,  # Tick data
@@ -43,7 +43,7 @@ class TestH1BarsBB:
         self.robot.AccountCurrency = "EUR"
         
         # 2. Define the backtest time window - December 2025
-        # BacktestStart/BacktestEnd are interpreted as UTC 00:00 (matches cTrader CLI)
+        
         self.robot.BacktestStart = datetime.strptime("01.12.2025", "%d.%m.%Y")
         self.robot.BacktestEnd = datetime.strptime("30.12.2025", "%d.%m.%Y")
 

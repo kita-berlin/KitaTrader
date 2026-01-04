@@ -19,6 +19,7 @@ class MovingAverage(IIndicator, ABC):
         # For indicator results, use ring buffer with size exactly matching the period
         # This saves memory and ensures we only keep the necessary data
         self.result = DataSeries(parent_bars, self.periods, is_indicator_result=True)
+        self.result.set_owner_indicator(self)
 
     pass
 

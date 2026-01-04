@@ -1,6 +1,5 @@
 """
 Exponential Moving Average (EMA) Indicator
-Ported from cTrader.Automate.Indicators
 """
 from Api.IIndicator import IIndicator
 from Api.DataSeries import DataSeries
@@ -68,28 +67,25 @@ class ExponentialMovingAverage(IIndicator):
         if shifted_index >= count or shifted_index < 0 or shifted_index >= len(self.result.data):
             return
         
-        # Get previous EMA value using [] indexing exactly like C#: Result[index - 1]
+        # Get previous EMA value
         prev_ema = self.result[index - 1] if index > 0 else float('nan')
         
-        # Get current source value using [] indexing exactly like C#: Source[index]
+        # Get current source value
         current_value = self.source[index]
         
         import math
         if math.isnan(current_value):
             return
         
-        # C# code: if (double.IsNaN(num2)) { Result[num] = Source[index]; }
-        # C# code: else { Result[num] = Source[index] * _alpha + num2 * (1.0 - _alpha); }
-        # C# uses pure double precision - NO rounding during calculation
         # Calculate EMA in pure double precision
         if math.isnan(prev_ema):
-            # First value: EMA = Price (matching C#: Result[num] = Source[index])
-            ema_value = float(current_value)  # Ensure double precision
+            # First value: EMA = Price
+            ema_value = float(current_value)
         else:
-            # EMA = Price * alpha + PrevEMA * (1 - alpha) (matching C# exactly)
+            # EMA = Price * alpha + PrevEMA * (1 - alpha)
             ema_value = float(current_value) * float(self._alpha) + float(prev_ema) * (1.0 - float(self._alpha))
         
-        # Write to ring buffer - NO rounding, pure double precision (matching C# exactly)
+        # Write to ring buffer with full precision
         self.result.write_indicator_value(float(ema_value))
     
 

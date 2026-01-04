@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{636cf776-2a26-42ce-b92c-ad2db37c2232}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>MainConsole.py</StartupFile>
+    <StartupFile>Kanga2Console.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -89,14 +89,18 @@
     <Compile Include="Indicators\SimpleMovingAverage.py" />
     <Compile Include="Indicators\StandardDeviation.py" />
     <Compile Include="Indicators\Vidya.py" />
-    <Compile Include="MainConsole.py" />
+    <Compile Include="Kanga2Console.py" />
     <Compile Include="BrokerProvider\QuoteCsv.py" />
     <Compile Include="BrokerProvider\TradePaper.py" />
     <Compile Include="MainRl.py" />
+    <Compile Include="OHLCTestConsole.py" />
+    <Compile Include="Robots\CsvTrader.py" />
     <Compile Include="Robots\Downloader.py" />
+    <Compile Include="Robots\Kanga2.py" />
     <Compile Include="Robots\KitaTesterProto_pb2.py" />
     <Compile Include="Robots\NinjaFiles.py" />
     <Compile Include="Robots\KitaTester.py" />
+    <Compile Include="Robots\OHLCTestBot.py" />
     <Compile Include="Robots\Template.py" />
     <Compile Include="Robots\Martingale.py" />
     <Compile Include="Robots\Ultron.py" />

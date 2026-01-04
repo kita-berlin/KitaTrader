@@ -593,7 +593,7 @@ class Symbol:
         # Resample the DataFrame
         rule = self._seconds_to_pandas_timeframe(new_timeframe_seconds)  # Resampling rule
         
-        # Match cTrader alignment (Anchor to 17:00 New York Time)
+        
         origin = 'start_day' # Default
         # Apply to all intraday bars larger than or equal to 1 hour, and Daily bars
         if new_timeframe_seconds >= 3600 and not df.empty:
@@ -1030,8 +1030,8 @@ class Symbol:
         # Get next tick from stream (one at a time, not stored)
         if 0 == self.quote_provider.data_rate:
             # Tick data: get from stream
-            # Match cTrader behavior: only process ticks when bid OR ask changes
-            # cTrader filters ticks where both bid AND ask are unchanged (matches ReadCtDayV2 usage)
+            
+            
             while True:
                 tick_data = self._get_next_tick()
                 if tick_data is None:
@@ -1040,7 +1040,7 @@ class Symbol:
                 
                 time, bid, ask, vol_delta = tick_data
                 
-                # UPDATE BARS FOR EVERY TICK (ensures Volume matches C#)
+                
                 bars_changed = False
                 for bars in self.bars_dictonary.values():
                     previous_count = bars.count
@@ -1062,7 +1062,7 @@ class Symbol:
                                 bid_rounded != prev_bid_rounded or ask_rounded != prev_ask_rounded
                 
                 if not price_changed and not bars_changed:
-                    # Skip this tick entirely (matches cTrader's filtering behavior contextually)
+                    
                     continue
                 
                 # Tick accepted
@@ -1101,8 +1101,11 @@ class Symbol:
         self.is_warm_up = self.time < self.api.robot._BacktestStartUtc
 
         # Step 2: Calculate indicators in dependency order
-        if bars_changed or self._has_close_indicators():
-            self._calculate_indicators_optimized(bars_changed)
+        # New Architecture: Skip indicator calculation during INTERNAL chain/warm-up
+        # Indicators will be calculated lazily when accessed by user code
+        if not self.is_warm_up:
+            if bars_changed or self._has_close_indicators():
+                self._calculate_indicators_optimized(bars_changed)
 
         return ""
     
