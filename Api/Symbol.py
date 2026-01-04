@@ -1287,7 +1287,9 @@ class Symbol:
         
         # Collect indicators that need updating based on what changed
         for bars in self.bars_dictonary.values():
-            current_bar_idx = bars.read_index
+            # Use absolute index for indicator calculation
+            # count is capped at buffer size, we need total added count
+            current_bar_idx = bars._bar_buffer._add_count - 1 if bars._bar_buffer else bars.count - 1
             if current_bar_idx < 0:
                 continue
             
@@ -1299,22 +1301,22 @@ class Symbol:
                             indicators_to_calculate.append(indicator)
                             indicator_to_bars[indicator] = (bars, current_bar_idx)
             
-            # High indicators: only when new high found
-            if bars.high_changed(self.bid):
-                for indicator, cached_bars, data_series in self._indicator_cache.get('high', []):
-                    if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+            # High indicators
+            for indicator, cached_bars, data_series in self._indicator_cache.get('high', []):
+                if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                    if bars.high_changed(self.bid) or bars.is_new_bar: 
                         if indicator not in indicators_to_calculate:
                             indicators_to_calculate.append(indicator)
                             indicator_to_bars[indicator] = (bars, current_bar_idx)
-            
-            # Low indicators: only when new low found
-            if bars.low_changed(self.bid):
-                for indicator, cached_bars, data_series in self._indicator_cache.get('low', []):
-                    if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+
+            # Low indicators
+            for indicator, cached_bars, data_series in self._indicator_cache.get('low', []):
+                if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
+                    if bars.low_changed(self.bid) or bars.is_new_bar: 
                         if indicator not in indicators_to_calculate:
                             indicators_to_calculate.append(indicator)
                             indicator_to_bars[indicator] = (bars, current_bar_idx)
-            
+
             # Close indicators: always update (on every tick)
             for indicator, cached_bars, data_series in self._indicator_cache.get('close', []):
                 if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:

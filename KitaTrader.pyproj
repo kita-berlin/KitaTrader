@@ -27,8 +27,6 @@
     <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="250109 Install ta-lib.txt" />
-    <Content Include="250109 Python Coding Conventions.txt" />
     <Content Include="Files\Assets_Dukascopy_Live.csv" />
     <Content Include="Files\Assets_NinjaFiles_Live.csv" />
     <Content Include="Files\Assets_Pepperstone_Demo.csv" />
@@ -36,7 +34,7 @@
     <Content Include="Files\Assets_Pepperstone_Live.csv" />
     <Content Include="Files\protoc.exe" />
     <Content Include="MainNotebook.ipynb" />
-    <Content Include="pyproject.toml" />
+    <Content Include="README.md" />
     <Content Include="requirements.txt" />
     <Content Include="typings\MetaTrader5\__init__.pyi" />
   </ItemGroup>
@@ -53,6 +51,7 @@
     <Compile Include="Api\Account.py" />
     <Compile Include="Api\Asset.py" />
     <Compile Include="Api\Bar.py" />
+    <Compile Include="Api\BarOpenedEventArgs.py" />
     <Compile Include="Api\Bars.py" />
     <Compile Include="Api\ConcreteAsset.py" />
     <Compile Include="Api\DataSeries.py" />
@@ -64,6 +63,7 @@
     <Compile Include="Api\CoFu.py" />
     <Compile Include="Api\LeverageTier.py" />
     <Compile Include="Api\LogParams.py" />
+    <Compile Include="Api\MarketData.py" />
     <Compile Include="Api\MarketHours.py" />
     <Compile Include="Api\PendingOrder.py" />
     <Compile Include="Api\Position.py" />
@@ -79,20 +79,18 @@
     <Compile Include="BrokerProvider\QuoteCtraderCache.py" />
     <Compile Include="BrokerProvider\QuoteDukascopy.py" />
     <Compile Include="BrokerProvider\QuoteNinjaFiles.py" />
-    <Compile Include="Indicators\BollingerBands.py" />
+    <Compile Include="BrokerProvider\QuoteQuantConnect.py" />
     <Compile Include="Indicators\ExponentialMovingAverage.py" />
     <Compile Include="Indicators\Indicators.py" />
-    <Compile Include="Indicators\MacdCrossOver.py" />
-    <Compile Include="Indicators\MacdHistogram.py" />
     <Compile Include="Indicators\MovingAverage.py" />
-    <Compile Include="Indicators\RelativeStrengthIndex.py" />
     <Compile Include="Indicators\SimpleMovingAverage.py" />
-    <Compile Include="Indicators\StandardDeviation.py" />
-    <Compile Include="Indicators\Vidya.py" />
+    <Compile Include="Indicators\StandardIndicator.py" />
+    <Compile Include="Indicators\WeightedMovingAverage.py" />
     <Compile Include="Kanga2Console.py" />
     <Compile Include="BrokerProvider\QuoteCsv.py" />
     <Compile Include="BrokerProvider\TradePaper.py" />
     <Compile Include="MainRl.py" />
+    <Compile Include="MainUltron.py" />
     <Compile Include="OHLCTestConsole.py" />
     <Compile Include="Robots\CsvTrader.py" />
     <Compile Include="Robots\Downloader.py" />

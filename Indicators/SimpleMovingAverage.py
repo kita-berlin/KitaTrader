@@ -17,11 +17,10 @@ class SimpleMovingAverage(MovingAverage, IIndicator):
         """
         1:1 port from C# SimpleMovingAverageIndicator.Calculate(int index)
         """
-        # checked { int index2 = index + Shift; ... }
         index2 = index + self.shift
         num = 0.0
-        # for (int i = index - Periods + 1; i <= index; i++) { num += Source[i]; }
         for i in range(index - self.periods + 1, index + 1):
             num += self.source[i]
+        
         # Result[index2] = num / (double)Periods;
         self.result[index2] = num / float(self.periods)

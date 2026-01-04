@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Iterator, Any
+from datetime import datetime
 import numpy as np
 from typing import Iterator
 from Api.ring_buffer import Ringbuffer
@@ -15,7 +16,6 @@ class DataSeries:
     _parent: Bars
     _size: int
     _is_indicator_result: bool  # True if this is an indicator result (ring buffer mode)
-    _add_count: int  # Total number of values added (linear count, for mapping absolute indices)
 
     def __init__(self, _parent: Bars, _size: int, is_indicator_result: bool = False):
         """
@@ -29,11 +29,18 @@ class DataSeries:
         self._parent = _parent
         self._size = _size
         self._is_indicator_result = is_indicator_result
-        self._add_count = 0  # Track total number of values added (linear count)
-        self.data = Ringbuffer[float](_size)  # Use true ringbuffer
+        self.data = Ringbuffer[float](_size)  # Use true ringbuffer - its _add_count is the linear index counter
         self.indicator_list = []  # List of indicators attached to this DataSeries
         self._owner_indicator = None  # The indicator that produces this DataSeries as a result
         self._last_calc_index = -1  # Last absolute index calculated for this indicator result
+    
+    @property
+    def _add_count(self) -> int:
+        """
+        Get the linear index counter from the ring buffer's add_count.
+        This is the total number of values added (linear count, for mapping absolute indices).
+        """
+        return self.data._add_count
     
     def register_indicator(self, indicator) -> None:
         """
@@ -88,22 +95,44 @@ class DataSeries:
         For tick data, this allows unbounded growth by using the ringbuffer's circular nature.
         """
         # Simply add to ringbuffer - it will overwrite oldest when full (circular behavior)
+        # The ring buffer's add() method increments its _add_count automatically
         self.data.add(value)
-        self._add_count += 1
     
     def append_ring(self, value: float, position: int):
         """
-        Append a value to a specific position in the ring buffer.
-        Used for ring buffer mode where data overwrites oldest entries.
-        Increments _add_count to track linear count of values added.
+        Append a value to sync DataSeries with the bar buffer.
+        Used by bar generation to sync DataSeries with the bar buffer.
+        
+        IMPORTANT: This is called for EVERY DataSeries (11 times per bar: open_times, open_bids, etc.).
+        We should only increment _add_count ONCE per bar, not once per DataSeries.
+        
+        The fix: Only increment _add_count if it's less than the parent's bar count.
+        This ensures _add_count equals the number of bars, not the number of append_ring calls.
         """
         if position < 0 or position >= self._size:
             return  # Invalid position
-        # For ringbuffer, we use add() which automatically handles circular indexing
-        # If we need to set at a specific position, we need to use __setitem__
-        # But append_ring is legacy - for new code, use add() directly
-        self.data.add(value)
-        self._add_count += 1  # Increment linear count
+        
+        # Get parent bar count logic adapted for infinite stream vs ring buffer
+        parent_count = 0
+        if hasattr(self._parent, '_bar_buffer') and self._parent._bar_buffer:
+             parent_count = self._parent._bar_buffer._add_count
+        elif hasattr(self._parent, 'count'):
+             parent_count = self._parent.count
+        
+        # Only increment _add_count if it's less than the parent's bar count
+        # This ensures _add_count equals the number of bars, not the number of append_ring calls
+        # Since append_ring is called 11 times per bar, this ensures we only increment once per bar
+        if self.data._add_count < parent_count:
+            # This is a new bar - increment _add_count by calling add()
+            self.data.add(value)
+        else:
+            # _add_count already matches parent count - this is a duplicate call for the same bar
+            # Just update the value at the newest position (relative position 0)
+            if self.data._count > 0:
+                self.data[0] = value
+            else:
+                # Empty buffer - use add()
+                self.data.add(value)
 
     def last(self, index: int) -> float:
         """
@@ -135,8 +164,9 @@ class DataSeries:
     
     def write_indicator_value(self, value: float) -> None:
         """
-        Write a value to the indicator result ring buffer and advance _add_count.
+        Write a value to the indicator result ring buffer.
         Equivalent to cTrader's logic when a value is appended to an IndicatorDataSeries.
+        The ring buffer's add() method increments its _add_count automatically.
         """
         if not self._is_indicator_result:
             raise ValueError("write_indicator_value() can only be called on indicator result DataSeries")
@@ -145,10 +175,9 @@ class DataSeries:
         digits = self._get_symbol_digits()
         rounded_value = round(value, digits) if not np.isnan(value) else float('nan')
         
-        # Simply append to the ringbuffer
+        # Simply append to the ringbuffer - it increments _add_count automatically
         self.data.add(rounded_value)
-        self._add_count += 1
-        self._last_calc_index = self._add_count - 1
+        self._last_calc_index = self.data._add_count - 1
 
     def exchange_indicator_value(self, value: float) -> None:
         """
@@ -215,28 +244,47 @@ class DataSeries:
         Maps to ringbuffer relative position based on _add_count and current count.
         Returns NaN if the value was overwritten.
         """
+        # Debug logging for first few accesses
+        debug_log = getattr(self, '_debug_log_func', None)
+        if debug_log and (index < 5 or index % 100 == 0):
+            debug_log(f"DataSeries.__getitem__(index={index}): _is_indicator_result={self._is_indicator_result}, _add_count={self._add_count}, _size={self._size}, data._count={self.data._count}")
+        
         # For indicator results, trigger lazy calculation if requested and possible
         if self._is_indicator_result and self._owner_indicator:
             if hasattr(self._owner_indicator, 'lazy_calculate'):
+                if debug_log and (index < 5 or index % 100 == 0):
+                    debug_log(f"DataSeries.__getitem__: calling lazy_calculate({index})")
                 self._owner_indicator.lazy_calculate(index)
 
         if index < 0 or index >= self._add_count:
+            if debug_log and (index < 5 or index % 100 == 0):
+                debug_log(f"DataSeries.__getitem__: index {index} out of range (_add_count={self._add_count}), returning NaN")
             return float("nan")
         
         # Check if value still exists (hasn't been overwritten)
         if self._add_count > self._size:
             if index < self._add_count - self._size:
+                if debug_log and (index < 5 or index % 100 == 0):
+                    debug_log(f"DataSeries.__getitem__: index {index} was overwritten, returning NaN")
                 return float("nan")  # Value was overwritten
         
         # Absolute index i maps to relative position (rel_pos)
-        rel_pos = (self._add_count - 1) - index
+        # Use ring buffer's add_count as the linear index counter
+        rel_pos = (self.data._add_count - 1) - index
         
         if 0 <= rel_pos < self.data._count:
             value = self.data[rel_pos]
             if value is None:
+                if debug_log and (index < 5 or index % 100 == 0):
+                    debug_log(f"DataSeries.__getitem__: value at rel_pos {rel_pos} is None, returning NaN")
                 return float("nan")
-            return float(value) if not np.isnan(value) else float('nan')
+            result = float(value) if not np.isnan(value) else float('nan')
+            if debug_log and (index < 5 or index % 100 == 0):
+                debug_log(f"DataSeries.__getitem__: returning value={result} from rel_pos={rel_pos}")
+            return result
         
+        if debug_log and (index < 5 or index % 100 == 0):
+            debug_log(f"DataSeries.__getitem__: rel_pos {rel_pos} out of range (data._count={self.data._count}), returning NaN")
         return float("nan")
 
     def __setitem__(self, index: int, value: float):
@@ -245,25 +293,40 @@ class DataSeries:
         If index == _add_count, it appends a new value.
         If index < _add_count, it updates an existing (non-overwritten) value.
         """
+        # Debug logging for first few sets
+        debug_log = getattr(self, '_debug_log_func', None)
+        if debug_log and (index < 5 or index % 100 == 0):
+            debug_log(f"DataSeries.__setitem__(index={index}, value={value}): _add_count={self._add_count}, _size={self._size}, data._count={self.data._count}")
+        
         if index < 0:
+            if debug_log and (index < 5 or index % 100 == 0):
+                debug_log(f"DataSeries.__setitem__: index {index} < 0, returning")
             return
             
         if index == self._add_count:
             # Append mode
+            if debug_log and (index < 5 or index % 100 == 0):
+                debug_log(f"DataSeries.__setitem__: append mode (index == _add_count)")
             self.write_indicator_value(value)
         elif index < self._add_count:
             # Update mode
             if self._add_count > self._size:
                 if index < self._add_count - self._size:
+                    if debug_log and (index < 5 or index % 100 == 0):
+                        debug_log(f"DataSeries.__setitem__: index {index} already overwritten, returning")
                     return # Value already overwritten in ringbuffer
             
-            rel_pos = (self._add_count - 1) - index
+            # Use ring buffer's add_count as the linear index counter
+            rel_pos = (self.data._add_count - 1) - index
             if 0 <= rel_pos < self.data._count:
-                
                 rounded_value = round(value, self._get_symbol_digits()) if not np.isnan(value) else float('nan')
+                if debug_log and (index < 5 or index % 100 == 0):
+                    debug_log(f"DataSeries.__setitem__: update mode, setting rel_pos={rel_pos} to {rounded_value}")
                 self.data[rel_pos] = rounded_value
         else:
             # index > _add_count: Gap! Fill with NaNs
+            if debug_log and (index < 5 or index % 100 == 0):
+                debug_log(f"DataSeries.__setitem__: gap mode (index {index} > _add_count {self._add_count}), filling with NaNs")
             while self._add_count < index:
                 self.write_indicator_value(float("nan"))
             self.write_indicator_value(value)
