@@ -172,8 +172,8 @@ class DataSeries:
             raise ValueError("write_indicator_value() can only be called on indicator result DataSeries")
         
         
-        digits = self._get_symbol_digits()
-        rounded_value = round(value, digits) if not np.isnan(value) else float('nan')
+        # No rounding for indicator results - maintain full precision
+        rounded_value = value if not np.isnan(value) else float('nan')
         
         # Simply append to the ringbuffer - it increments _add_count automatically
         self.data.add(rounded_value)
@@ -319,10 +319,11 @@ class DataSeries:
             # Use ring buffer's add_count as the linear index counter
             rel_pos = (self.data._add_count - 1) - index
             if 0 <= rel_pos < self.data._count:
-                rounded_value = round(value, self._get_symbol_digits()) if not np.isnan(value) else float('nan')
+                # No rounding for indicator results - maintain full precision
+                new_value = value if not np.isnan(value) else float('nan')
                 if debug_log and (index < 5 or index % 100 == 0):
-                    debug_log(f"DataSeries.__setitem__: update mode, setting rel_pos={rel_pos} to {rounded_value}")
-                self.data[rel_pos] = rounded_value
+                    debug_log(f"DataSeries.__setitem__: update mode, setting rel_pos={rel_pos} to {new_value}")
+                self.data[rel_pos] = new_value
         else:
             # index > _add_count: Gap! Fill with NaNs
             if debug_log and (index < 5 or index % 100 == 0):
