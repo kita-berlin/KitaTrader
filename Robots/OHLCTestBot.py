@@ -1,6 +1,6 @@
 """
 OHLC Test Bot - 1:1 lock step port from C# OHLCTestBot
-Logs bars only (no indicators) - matches C# bot logic exactly
+Logs bars with SMA indicators - matches C# bot logic exactly
 """
 import os
 from datetime import datetime
@@ -10,7 +10,7 @@ from Api.BarOpenedEventArgs import BarOpenedEventArgs
 
 
 class OHLCTestBot(KitaApi):
-    """Test bot to log all OHLC values for comparison with C# - 1:1 port"""
+    """Test bot to log all OHLC values with SMA for comparison with C# - 1:1 port"""
     
     def __init__(self):
         super().__init__()
@@ -27,6 +27,31 @@ class OHLCTestBot(KitaApi):
         self.m_last_bar_count_m5 = 0
         self.m_last_bar_count_h1 = 0
         self.m_last_bar_count_h4 = 0
+        
+        # Simple Moving Average indicators on all OHLC values for all timeframes
+        # M1 SMAs
+        self.m_sma_m1_open = None
+        self.m_sma_m1_high = None
+        self.m_sma_m1_low = None
+        self.m_sma_m1_close = None
+        # M5 SMAs
+        self.m_sma_m5_open = None
+        self.m_sma_m5_high = None
+        self.m_sma_m5_low = None
+        self.m_sma_m5_close = None
+        # H1 SMAs
+        self.m_sma_h1_open = None
+        self.m_sma_h1_high = None
+        self.m_sma_h1_low = None
+        self.m_sma_h1_close = None
+        # H4 SMAs
+        self.m_sma_h4_open = None
+        self.m_sma_h4_high = None
+        self.m_sma_h4_low = None
+        self.m_sma_h4_close = None
+        
+        # SMA parameters
+        self.m_sma_periods = 23
         
         # Log file for output (matching C# Print() behavior)
         self.log_file = None
@@ -102,30 +127,68 @@ class OHLCTestBot(KitaApi):
         self._log(f"Initial H1 bar count: {self.m_bars_h1.count}")
         self._log(f"Initial H4 bar count: {self.m_bars_h4.count}")
         
-        # C#: mLastBarCountM1 = 0; etc.
         self.m_last_bar_count_m1 = 0
         self.m_last_bar_count_m5 = 0
         self.m_last_bar_count_h1 = 0
         self.m_last_bar_count_h4 = 0
         
-        # C#: NO INDICATORS - user said "at the moment we are only interested in bar checks, no indicators!!!"
-        # So we skip CreateSMAIndicators calls
+        # Create SMA indicators for all timeframes - warmup phase ensures enough bars are available
+        self.create_sma_indicators(self.m_bars_m1, "M1")
+        self.create_sma_indicators(self.m_bars_m5, "M5")
+        self.create_sma_indicators(self.m_bars_h1, "H1")
+        self.create_sma_indicators(self.m_bars_h4, "H4")
         
-        # C#: Subscribe to BarOpened events for all timeframes
-        # mBarsM1.BarOpened += (args) => OnBarOpened("M1", args);
-        # mBarsM5.BarOpened += (args) => OnBarOpened("M5", args);
-        # mBarsH1.BarOpened += (args) => OnBarOpened("H1", args);
-        # mBarsH4.BarOpened += (args) => OnBarOpened("H4", args);
-        if self.m_bars_m1:
-            self.m_bars_m1.BarOpened += lambda args: self.on_bar_opened("M1", args)
-        if self.m_bars_m5:
-            self.m_bars_m5.BarOpened += lambda args: self.on_bar_opened("M5", args)
-        if self.m_bars_h1:
-            self.m_bars_h1.BarOpened += lambda args: self.on_bar_opened("H1", args)
-        if self.m_bars_h4:
-            self.m_bars_h4.BarOpened += lambda args: self.on_bar_opened("H4", args)
-        
+        # Subscribe to BarOpened events for all timeframes
+        self.m_bars_m1.BarOpened += lambda args: self.on_bar_opened("M1", args)
+        self.m_bars_m5.BarOpened += lambda args: self.on_bar_opened("M5", args)
+        self.m_bars_h1.BarOpened += lambda args: self.on_bar_opened("H1", args)
+        self.m_bars_h4.BarOpened += lambda args: self.on_bar_opened("H4", args)
         self._log("Subscribed to M1, M5, H1, H4 BarOpened events.")
+    
+    def create_sma_indicators(self, bars, timeframe_name):
+        """
+        1:1 port from C# CreateSMAIndicators
+        """
+        if not bars or bars.count < self.m_sma_periods:
+            return
+            
+        self._log(f"Creating Simple Moving Average on all OHLC values for {timeframe_name} (periods={self.m_sma_periods})")
+        
+        # SMA on Open
+        sma_open = self.Indicators.simple_moving_average(bars.OpenPrices, self.m_sma_periods)
+        
+        # SMA on High
+        sma_high = self.Indicators.simple_moving_average(bars.HighPrices, self.m_sma_periods)
+        
+        # SMA on Low
+        sma_low = self.Indicators.simple_moving_average(bars.LowPrices, self.m_sma_periods)
+        
+        # SMA on Close
+        sma_close = self.Indicators.simple_moving_average(bars.ClosePrices, self.m_sma_periods)
+        
+        # Store indicators by timeframe
+        if timeframe_name == "M1":
+            self.m_sma_m1_open = sma_open
+            self.m_sma_m1_high = sma_high
+            self.m_sma_m1_low = sma_low
+            self.m_sma_m1_close = sma_close
+        elif timeframe_name == "M5":
+            self.m_sma_m5_open = sma_open
+            self.m_sma_m5_high = sma_high
+            self.m_sma_m5_low = sma_low
+            self.m_sma_m5_close = sma_close
+        elif timeframe_name == "H1":
+            self.m_sma_h1_open = sma_open
+            self.m_sma_h1_high = sma_high
+            self.m_sma_h1_low = sma_low
+            self.m_sma_h1_close = sma_close
+        elif timeframe_name == "H4":
+            self.m_sma_h4_open = sma_open
+            self.m_sma_h4_high = sma_high
+            self.m_sma_h4_low = sma_low
+            self.m_sma_h4_close = sma_close
+        
+        self._log(f"Simple Moving Average created successfully on all OHLC values for {timeframe_name}")
     
     def on_tick(self, symbol: Symbol):
         """
@@ -135,12 +198,10 @@ class OHLCTestBot(KitaApi):
         # C#: var timeStr = Time.ToString("yyyy-MM-dd HH:mm:ss.fff");
         time_str = symbol.time.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] if symbol.time else ""
         
-        # C#: var digits = Symbol.Digits;
-        # C#: var fmt = "F" + digits;
-        digits = symbol.digits
-        fmt = f".{digits}f"
+        # C#: var fmt = "F20";
+        fmt = ".20f"
         
-        # C#: var tickLine = $"{timeStr},{Symbol.Bid.ToString(fmt, CultureInfo.InvariantCulture)},{Symbol.Ask.ToString(fmt, CultureInfo.InvariantCulture)},{Symbol.Spread.ToString(fmt, CultureInfo.InvariantCulture)}";
+        # C#: var tickLine = $"{timeStr},{Symbol.Bid.ToString(tickFmt, CultureInfo.InvariantCulture)},{Symbol.Ask.ToString(tickFmt, CultureInfo.InvariantCulture)},{Symbol.Spread.ToString(tickFmt, CultureInfo.InvariantCulture)}";
         # C#: Print(tickLine);
         tick_line = f"{time_str},{symbol.bid:{fmt}},{symbol.ask:{fmt}},{symbol.spread:{fmt}}"
         self._log(tick_line)
@@ -169,18 +230,48 @@ class OHLCTestBot(KitaApi):
             return
         
         # C#: var index = args.Bars.Count - 2;
-        index = args.Bars.count - 2
+        # Python: Use absolute index counter from RingBuffer
+        # args.Bars.count is capped at ring buffer size, but we need total added count
+        index = args.Bars._bar_buffer._add_count - 2
         
-        # C#: var fmt = "F" + Symbol.Digits;
-        digits = self.active_symbol.digits if self.active_symbol else 5
-        fmt = f".{digits}f"
+        # C#: var fmt = "F20";
+        fmt = ".20f"
         
-        # C#: NO INDICATORS - user said "at the moment we are only interested in bar checks, no indicators!!!"
-        # So we skip the SMA logic and just log empty strings for SMA values
+        # Get SMAs for this timeframe
+        sma_o, sma_h, sma_l, sma_c = None, None, None, None
+        if tf == "M1":
+             sma_o, sma_h, sma_l, sma_c = self.m_sma_m1_open, self.m_sma_m1_high, self.m_sma_m1_low, self.m_sma_m1_close
+        elif tf == "M5":
+             sma_o, sma_h, sma_l, sma_c = self.m_sma_m5_open, self.m_sma_m5_high, self.m_sma_m5_low, self.m_sma_m5_close
+        elif tf == "H1":
+             sma_o, sma_h, sma_l, sma_c = self.m_sma_h1_open, self.m_sma_h1_high, self.m_sma_h1_low, self.m_sma_h1_close
+        elif tf == "H4":
+             sma_o, sma_h, sma_l, sma_c = self.m_sma_h4_open, self.m_sma_h4_high, self.m_sma_h4_low, self.m_sma_h4_close
+        
         sO = ""
         sH = ""
         sL = ""
         sC = ""
+        
+        import math
+        # Helper to get result safely
+        def get_sma_val(sma, idx):
+            if sma and idx >= 0:
+                 # result uses ringbuffer, so use idx which is absolute
+                 # DataSeries handles abs index
+                 try:
+                    val = sma.result[idx]
+                    if not math.isnan(val):
+                        return f"{val:{fmt}}"
+                 except:
+                    pass
+            return ""
+
+        if index >= self.m_sma_periods - 1:
+             sO = get_sma_val(sma_o, index)
+             sH = get_sma_val(sma_h, index)
+             sL = get_sma_val(sma_l, index)
+             sC = get_sma_val(sma_c, index)
         
         # C#: // Date range filtering is handled "under the hood" by the platform/API
         # C#: // Log all bars that reach this point (platform has already filtered by date range)
