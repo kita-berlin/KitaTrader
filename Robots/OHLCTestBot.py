@@ -53,6 +53,9 @@ class OHLCTestBot(KitaApi):
         # SMA parameters
         self.m_sma_periods = 23
         
+        # Track if indicators have been created
+        self.indicators_created = False
+        
         # Log file for output (matching C# Print() behavior)
         self.log_file = None
     
@@ -132,13 +135,8 @@ class OHLCTestBot(KitaApi):
         self.m_last_bar_count_h1 = 0
         self.m_last_bar_count_h4 = 0
         
-        # Create SMA indicators for all timeframes - warmup phase ensures enough bars are available
-        self.create_sma_indicators(self.m_bars_m1, "M1")
-        self.create_sma_indicators(self.m_bars_m5, "M5")
-        self.create_sma_indicators(self.m_bars_h1, "H1")
-        self.create_sma_indicators(self.m_bars_h4, "H4")
-        
         # Subscribe to BarOpened events for all timeframes
+        # Note: Indicators will be created on first bar event when bars have data
         self.m_bars_m1.BarOpened += lambda args: self.on_bar_opened("M1", args)
         self.m_bars_m5.BarOpened += lambda args: self.on_bar_opened("M5", args)
         self.m_bars_h1.BarOpened += lambda args: self.on_bar_opened("H1", args)
@@ -149,10 +147,15 @@ class OHLCTestBot(KitaApi):
         """
         1:1 port from C# CreateSMAIndicators
         """
-        if not bars or bars.count < self.m_sma_periods:
+        if not bars:
+            self._log(f"Cannot create SMA for {timeframe_name}: bars is None")
             return
             
-        self._log(f"Creating Simple Moving Average on all OHLC values for {timeframe_name} (periods={self.m_sma_periods})")
+        if bars.count < self.m_sma_periods:
+            self._log(f"Cannot create SMA for {timeframe_name}: bars.count={bars.count} < periods={self.m_sma_periods}")
+            return
+            
+        self._log(f"Creating Simple Moving Average on all OHLC values for {timeframe_name} (periods={self.m_sma_periods}, bars.count={bars.count})")
         
         # SMA on Open
         sma_open = self.Indicators.simple_moving_average(bars.OpenPrices, self.m_sma_periods)
@@ -220,6 +223,16 @@ class OHLCTestBot(KitaApi):
         1:1 port from C# OnBarOpened(string tf, BarOpenedEventArgs args)
         C#: Log the CLOSED bar (Last(1))
         """
+        # Create indicators on first bar event (when bars have data)
+        if not self.indicators_created:
+            self._log(f"Creating SMA indicators (bars now have data) - indicators_created={self.indicators_created}")
+            self.create_sma_indicators(self.m_bars_m1, "M1")
+            self.create_sma_indicators(self.m_bars_m5, "M5")
+            self.create_sma_indicators(self.m_bars_h1, "H1")
+            self.create_sma_indicators(self.m_bars_h4, "H4")
+            self.indicators_created = True
+            self._log(f"Indicator creation complete - indicators_created={self.indicators_created}")
+        
         # C#: if (args.Bars.Count < 2) return;
         if args.Bars.count < 2:
             return
