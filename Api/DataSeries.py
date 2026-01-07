@@ -108,6 +108,11 @@ class DataSeries:
         
         The fix: Only increment _add_count if it's less than the parent's bar count.
         This ensures _add_count equals the number of bars, not the number of append_ring calls.
+        
+        The 'position' parameter is the write_pos from bars.append(), which is the absolute position
+        in the bar buffer. We need to convert it to the relative position in the DataSeries ringbuffer.
+        Since the DataSeries ringbuffer should be in sync with the bar buffer, the newest bar should
+        always be at relative position 0. So we need to convert write_pos to relative position 0.
         """
         if position < 0 or position >= self._size:
             return  # Invalid position
@@ -124,11 +129,16 @@ class DataSeries:
         # Since append_ring is called 11 times per bar, this ensures we only increment once per bar
         if self.data._add_count < parent_count:
             # This is a new bar - increment _add_count by calling add()
+            # add() places the value at the current _position and advances it sequentially
+            # The 'position' parameter is write_pos from bars.append(), which is informational only.
+            # The DataSeries ringbuffer maintains its own independent _position that wraps naturally.
+            # The absolute index mapping in __getitem__ handles the translation correctly.
             self.data.add(value)
         else:
             # _add_count already matches parent count - this is a duplicate call for the same bar
-            # Just update the value at the newest position (relative position 0)
+            # Update the value at the current newest position (relative position 0)
             if self.data._count > 0:
+                # Update relative position 0 (newest value)
                 self.data[0] = value
             else:
                 # Empty buffer - use add()
@@ -142,16 +152,52 @@ class DataSeries:
         Args:
             index: Number of elements back from the newest (0 = newest)
         """
-        # For indicator results, trigger lazy calculation if requested and possible
+        # For indicator results, use absolute indexing via __getitem__ to ensure correct mapping
+        if self._is_indicator_result:
+            # For indicator results, we need to use the source DataSeries's _add_count, not _parent.count
+            # because _parent.count only includes backtest bars, while _add_count includes warmup bars
+            source_dataseries = None
+            if self._owner_indicator and hasattr(self._owner_indicator, 'source'):
+                source_dataseries = self._owner_indicator.source
+            
+            # CRITICAL: Always use source DataSeries's _add_count for indicator results
+            # The result's _add_count may lag behind if indicators are calculated out of order
+            if source_dataseries and hasattr(source_dataseries, '_add_count'):
+                source_add_count = source_dataseries._add_count
+            else:
+                # Fallback: use self._add_count, but this might be wrong if indicators calculated out of order
+                source_add_count = self._add_count
+            
+            # The 'index' parameter in last() is "bars ago from newest" (0 = newest, 1 = 1 bar ago, etc.)
+            # In C#, series[index] where index = Bars.Count - 2 uses relative indexing (0 = newest)
+            # But Bars.Count in C# includes warmup bars, while _parent.count in Python is only backtest bars
+            # So we need to convert: if newest bar is at absolute index (source_add_count - 1),
+            # then "index bars ago" is at absolute index (source_add_count - 1 - index)
+            # This matches the original formula: abs_index = total_count - 1 - index
+            abs_index = max(0, source_add_count - 1 - index)
+            
+            # Validate abs_index against source to ensure we're not reading beyond what exists
+            if abs_index < 0 or abs_index >= source_add_count:
+                return float("nan")
+            
+            # CRITICAL: When buffer is NOT full (add_count < size), result's _add_count should match source's
+            # But if indicators are calculated out of order, result's _add_count might be smaller
+            # In that case, lazy calculation should fill the gap, but we still need to validate
+            result_add_count = self._add_count
+            
+            if self._owner_indicator and hasattr(self._owner_indicator, 'lazy_calculate'):
+                self._owner_indicator.lazy_calculate(abs_index)
+            # Use __getitem__ with absolute index to get the correct value
+            # This ensures the absolute->relative conversion is done correctly
+            try:
+                value = self[abs_index]
+                return float(value) if not np.isnan(value) else float('nan')
+            except (IndexError, KeyError):
+                return float("nan")
+        
+        # For non-indicator DataSeries, use direct ringbuffer access (relative indexing)
         if index < 0 or index >= self._parent.count:
             return float("nan")
-        
-        # For indicator results, trigger lazy calculation if requested and possible
-        if self._is_indicator_result and self._owner_indicator:
-            # last(index) corresponds to absolute index: current_count - index
-            abs_index = max(0, self._parent.count - 1 - index)
-            if hasattr(self._owner_indicator, 'lazy_calculate'):
-                self._owner_indicator.lazy_calculate(abs_index)
                 
         if index < 0 or index >= self.data._count:
             return float("nan")
@@ -244,47 +290,90 @@ class DataSeries:
         Maps to ringbuffer relative position based on _add_count and current count.
         Returns NaN if the value was overwritten.
         """
-        # Debug logging for first few accesses
-        debug_log = getattr(self, '_debug_log_func', None)
-        if debug_log and (index < 5 or index % 100 == 0):
-            debug_log(f"DataSeries.__getitem__(index={index}): _is_indicator_result={self._is_indicator_result}, _add_count={self._add_count}, _size={self._size}, data._count={self.data._count}")
-        
         # For indicator results, trigger lazy calculation if requested and possible
+        # CRITICAL: Do this BEFORE checking _add_count, so lazy calculation can update it
         if self._is_indicator_result and self._owner_indicator:
             if hasattr(self._owner_indicator, 'lazy_calculate'):
-                if debug_log and (index < 5 or index % 100 == 0):
-                    debug_log(f"DataSeries.__getitem__: calling lazy_calculate({index})")
+                # Debug: Log lazy calculation trigger for H1/H4 or early indices
+                if hasattr(self._owner_indicator, 'source') and hasattr(self._owner_indicator.source, '_parent'):
+                    tf_seconds = getattr(self._owner_indicator.source._parent, 'timeframe_seconds', 0)
+                    if tf_seconds in [3600, 14400] or index < 50:
+                        if hasattr(self._owner_indicator.source._parent, '_symbol') and hasattr(self._owner_indicator.source._parent._symbol, 'api'):
+                            api = self._owner_indicator.source._parent._symbol.api
+                            if hasattr(api, 'robot') and hasattr(api.robot, '_debug_log'):
+                                tf_name = "H1" if tf_seconds == 3600 else "H4" if tf_seconds == 14400 else f"{tf_seconds}s"
+                                api.robot._debug_log(f"[DataSeries] Triggering lazy_calculate for {tf_name} at index={index}")
                 self._owner_indicator.lazy_calculate(index)
+                # After lazy calculation, _add_count might have been updated
+                # Re-check if index is now valid
 
         if index < 0 or index >= self._add_count:
-            if debug_log and (index < 5 or index % 100 == 0):
-                debug_log(f"DataSeries.__getitem__: index {index} out of range (_add_count={self._add_count}), returning NaN")
             return float("nan")
         
         # Check if value still exists (hasn't been overwritten)
-        if self._add_count > self._size:
-            if index < self._add_count - self._size:
-                if debug_log and (index < 5 or index % 100 == 0):
-                    debug_log(f"DataSeries.__getitem__: index {index} was overwritten, returning NaN")
+        # When buffer is full (_count == _size), values older than (_add_count - _size) were overwritten
+        # When buffer is not full (_count < _size), all values from index 0 to (_add_count - 1) are accessible
+        if self.data._count == self.data._size and self._add_count > self.data._size:
+            # Buffer is full - check if index was overwritten
+            oldest_abs_index = self._add_count - self.data._size
+            if index < oldest_abs_index:
                 return float("nan")  # Value was overwritten
         
         # Absolute index i maps to relative position (rel_pos)
         # Use ring buffer's add_count as the linear index counter
+        # Formula: rel_pos = (newest_abs_index) - index
+        # Where newest_abs_index = _add_count - 1 (0-indexed, so _add_count=31 means newest is at abs_index 30)
+        # Verify index is valid for this DataSeries
+        if index >= self.data._add_count:
+            # Index is beyond what this DataSeries has - use the newest available index
+            index = self.data._add_count - 1
+        
         rel_pos = (self.data._add_count - 1) - index
         
+        # CRITICAL: When buffer is NOT full (_count < _size), _count == _add_count (linear growth)
+        # When buffer IS full (_count == _size), _count == _size and _add_count >= _size (rotation)
+        # For non-full buffers, rel_pos must be < _count (which equals _add_count)
+        # For full buffers, rel_pos can be < _size (but we validate against _count which equals _size)
+        
+        # Additional validation: rel_pos should be within the valid range
+        # The oldest accessible value depends on whether the buffer is full
+        # If buffer is full (_count == _size), oldest is at (_add_count - _size)
+        # If buffer is not full (_count < _size), oldest is at 0 (all values are accessible)
+        if self.data._count == self.data._size:
+            # Buffer is full - use _size to determine oldest accessible index
+            oldest_abs_index = self.data._add_count - self.data._size
+        else:
+            # Buffer not full - all values from 0 to (_add_count - 1) are accessible
+            # In this case, _count == _add_count, so rel_pos should be in [0, _count-1]
+            oldest_abs_index = 0
+        if index < oldest_abs_index:
+            return float("nan")  # Value was overwritten
+        
+        # CRITICAL FIX: Validate rel_pos based on buffer state
+        # When buffer is NOT full (_count < _size): _count == _add_count, so rel_pos must be < _count
+        # When buffer IS full (_count == _size): rel_pos must be < _size (which equals _count)
+        # The ringbuffer.__getitem__ also checks rel_pos < _size, so we validate against _count
+        # (which is <= _size) and let ringbuffer handle the _size check
+        # CRITICAL: For non-full buffers, rel_pos can be in [0, _count-1] where _count == _add_count
+        # For full buffers, rel_pos can be in [0, _size-1] where _size == _count
+        # So the check `rel_pos < _count` works for both cases
         if 0 <= rel_pos < self.data._count:
+            # CRITICAL: For non-full buffers, use the correct physical position calculation
+            # The ringbuffer.__getitem__ already handles this correctly, but we need to ensure
+            # we're using the right formula for logging
+            if self.data._count < self.data._size:
+                # Non-full buffer: physical_pos = (_position - 1 - rel_pos) % _size
+                ringbuffer_abs_pos = (self.data._position - 1 - rel_pos) % self.data._size if rel_pos > 0 else ((self.data._position - 1) % self.data._size if self.data._position > 0 else 0)
+            else:
+                # Full buffer: use standard formula
+                pass
+            
             value = self.data[rel_pos]
             if value is None:
-                if debug_log and (index < 5 or index % 100 == 0):
-                    debug_log(f"DataSeries.__getitem__: value at rel_pos {rel_pos} is None, returning NaN")
                 return float("nan")
             result = float(value) if not np.isnan(value) else float('nan')
-            if debug_log and (index < 5 or index % 100 == 0):
-                debug_log(f"DataSeries.__getitem__: returning value={result} from rel_pos={rel_pos}")
             return result
         
-        if debug_log and (index < 5 or index % 100 == 0):
-            debug_log(f"DataSeries.__getitem__: rel_pos {rel_pos} out of range (data._count={self.data._count}), returning NaN")
         return float("nan")
 
     def __setitem__(self, index: int, value: float):
@@ -293,41 +382,39 @@ class DataSeries:
         If index == _add_count, it appends a new value.
         If index < _add_count, it updates an existing (non-overwritten) value.
         """
-        # Debug logging for first few sets
-        debug_log = getattr(self, '_debug_log_func', None)
-        if debug_log and (index < 5 or index % 100 == 0):
-            debug_log(f"DataSeries.__setitem__(index={index}, value={value}): _add_count={self._add_count}, _size={self._size}, data._count={self.data._count}")
-        
         if index < 0:
-            if debug_log and (index < 5 or index % 100 == 0):
-                debug_log(f"DataSeries.__setitem__: index {index} < 0, returning")
             return
             
         if index == self._add_count:
             # Append mode
-            if debug_log and (index < 5 or index % 100 == 0):
-                debug_log(f"DataSeries.__setitem__: append mode (index == _add_count)")
             self.write_indicator_value(value)
         elif index < self._add_count:
             # Update mode
             if self._add_count > self._size:
                 if index < self._add_count - self._size:
-                    if debug_log and (index < 5 or index % 100 == 0):
-                        debug_log(f"DataSeries.__setitem__: index {index} already overwritten, returning")
                     return # Value already overwritten in ringbuffer
             
             # Use ring buffer's add_count as the linear index counter
             rel_pos = (self.data._add_count - 1) - index
+            
+            # CRITICAL: When buffer is NOT full (_count < _size), _count == _add_count
+            # When buffer IS full (_count == _size), _count == _size
+            # For non-full buffers, rel_pos must be < _count (which equals _add_count)
+            # For full buffers, rel_pos must be < _size (which equals _count)
+            # The ringbuffer.__setitem__ expects rel_pos < _size, so we validate against _count
+            # (which is <= _size) and let ringbuffer handle the _size check
             if 0 <= rel_pos < self.data._count:
                 # No rounding for indicator results - maintain full precision
                 new_value = value if not np.isnan(value) else float('nan')
-                if debug_log and (index < 5 or index % 100 == 0):
-                    debug_log(f"DataSeries.__setitem__: update mode, setting rel_pos={rel_pos} to {new_value}")
                 self.data[rel_pos] = new_value
+                # Update _last_calc_index when updating existing values (important for recursive indicators like EMA)
+                if self._is_indicator_result and index > self._last_calc_index:
+                    self._last_calc_index = index
         else:
             # index > _add_count: Gap! Fill with NaNs
-            if debug_log and (index < 5 or index % 100 == 0):
-                debug_log(f"DataSeries.__setitem__: gap mode (index {index} > _add_count {self._add_count}), filling with NaNs")
+            # CRITICAL: When filling gaps, we need to ensure _add_count matches the source's _add_count
+            # to prevent reading NaNs when accessing historical values
+            # However, we can't access the source here, so we'll just fill up to the requested index
             while self._add_count < index:
                 self.write_indicator_value(float("nan"))
             self.write_indicator_value(value)

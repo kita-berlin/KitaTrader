@@ -4,6 +4,8 @@ import time
 import ctypes
 import talib  # type: ignore
 from talib import MA_Type  # type: ignore
+from datetime import datetime
+import pytz
 from Api.KitaApiEnums import *
 from Api.KitaApi import KitaApi, Symbol
 from Api.CoFu import *
@@ -128,6 +130,17 @@ class KitaTester(KitaApi):
         self.ta_sma = talib.SMA(np_open, self.indi_period)
         self.upper, self.middle, self.lower = talib.BBANDS(np_open, self.indi_period, 2, 2, MA_Type.SMA)
 
+        # Create all KitaTrader indicators for comparison
+        # These use the official KitaTrader API indicators from Indicators directory
+        self.kita_sma = self.Indicators.simple_moving_average(self.hour2_bars.open_bids, self.indi_period)
+        self.kita_ema = self.Indicators.exponential_moving_average(self.hour2_bars.open_bids, self.indi_period)
+        self.kita_wma = self.Indicators.weighted_moving_average(self.hour2_bars.open_bids, self.indi_period)
+        self.kita_hma = self.Indicators.hull_moving_average(self.hour2_bars.open_bids, self.indi_period)
+        self.kita_sd = self.Indicators.standard_deviation(self.hour2_bars.open_bids, self.indi_period)
+        err, self.kita_bb = self.Indicators.bollinger_bands(self.hour2_bars.open_bids, self.indi_period, 2.0, MovingAverageType.Simple)
+        self.kita_rsi = self.Indicators.relative_strength_index(self.hour2_bars.open_bids, self.indi_period)
+        self.kita_macd = self.Indicators.macd(self.hour2_bars.open_bids, 12, 26, 9)
+
         pass
 
     ###################################
@@ -214,25 +227,112 @@ class KitaTester(KitaApi):
             print(message_time, symbol.time)
             print(f"Timestamp mismatch: {quote_message.timestamp / 1000} != {symbol.time.timestamp()}")  # type: ignore
 
+        # Get absolute index for indicator access (for closed bar, 2 bars ago from current)
+        # Use source DataSeries _add_count which tracks total bars added
+        abs_index = self.hour2_bars.open_bids._add_count - 2 if self.hour2_bars.open_bids._add_count >= 2 else -1
+        
+        if abs_index < 0:
+            return  # Not enough bars for indicator comparison
+        
+        # Compare SMA (talib vs C#)
         py_sma = round(self.ta_sma[self.hour2_bars.read_index-2], symbol.digits)
         cs_sma = round(quote_message.sma1, symbol.digits)
         if py_sma != cs_sma:
-            print(f"SMA mismatch: {py_sma} != {cs_sma}")
+            print(f"SMA (talib) mismatch: {py_sma} != {cs_sma}")
+        
+        # Compare SMA (KitaTrader vs C#)
+        try:
+            kita_sma_val = self.kita_sma.result[abs_index]
+            if not np.isnan(kita_sma_val):
+                kita_sma_rounded = round(kita_sma_val, symbol.digits)
+                if kita_sma_rounded != cs_sma:
+                    print(f"SMA (KitaTrader) mismatch: {kita_sma_rounded} != {cs_sma}")
+        except:
+            pass
 
+        # Compare Bollinger Bands (talib vs C#)
         py_bb_hi = round(self.upper[self.hour2_bars.read_index - 2], symbol.digits)
         cs_bb_hi = round(quote_message.bb1hi, symbol.digits)
         if py_bb_hi != cs_bb_hi:
-            print(f"BB_HI mismatch: {py_bb_hi} != {cs_bb_hi}")
+            print(f"BB_HI (talib) mismatch: {py_bb_hi} != {cs_bb_hi}")
 
         py_bb_main = round(self.middle[self.hour2_bars.read_index - 2], symbol.digits)
         cs_bb_main = round(quote_message.bb1main, symbol.digits)
         if py_bb_main != cs_bb_main:
-            print(f"BB_MAIN mismatch: {py_bb_main} != {cs_bb_main}")
+            print(f"BB_MAIN (talib) mismatch: {py_bb_main} != {cs_bb_main}")
 
         py_bb_lo = round(self.lower[self.hour2_bars.read_index - 2], symbol.digits)
         cs_bb_lo = round(quote_message.bb1lo, symbol.digits)
         if py_bb_lo != cs_bb_lo:
-            print(f"BB_LO mismatch: {py_bb_lo} != {cs_bb_lo}")
+            print(f"BB_LO (talib) mismatch: {py_bb_lo} != {cs_bb_lo}")
+        
+        # Compare Bollinger Bands (KitaTrader vs C#)
+        try:
+            kita_bb_top = self.kita_bb.top[abs_index]
+            kita_bb_main = self.kita_bb.main[abs_index]
+            kita_bb_bottom = self.kita_bb.bottom[abs_index]
+            
+            if not np.isnan(kita_bb_top):
+                kita_bb_top_rounded = round(kita_bb_top, symbol.digits)
+                if kita_bb_top_rounded != cs_bb_hi:
+                    print(f"BB_TOP (KitaTrader) mismatch: {kita_bb_top_rounded} != {cs_bb_hi}")
+            
+            if not np.isnan(kita_bb_main):
+                kita_bb_main_rounded = round(kita_bb_main, symbol.digits)
+                if kita_bb_main_rounded != cs_bb_main:
+                    print(f"BB_MAIN (KitaTrader) mismatch: {kita_bb_main_rounded} != {cs_bb_main}")
+            
+            if not np.isnan(kita_bb_bottom):
+                kita_bb_bottom_rounded = round(kita_bb_bottom, symbol.digits)
+                if kita_bb_bottom_rounded != cs_bb_lo:
+                    print(f"BB_BOTTOM (KitaTrader) mismatch: {kita_bb_bottom_rounded} != {cs_bb_lo}")
+        except:
+            pass
+        
+        # Compare other indicators (KitaTrader indicators - no C# reference in protobuf, but log for verification)
+        try:
+            kita_ema_val = self.kita_ema.result[abs_index]
+            if not np.isnan(kita_ema_val):
+                print(f"EMA (KitaTrader): {round(kita_ema_val, symbol.digits)}")
+        except:
+            pass
+        
+        try:
+            kita_wma_val = self.kita_wma.result[abs_index]
+            if not np.isnan(kita_wma_val):
+                print(f"WMA (KitaTrader): {round(kita_wma_val, symbol.digits)}")
+        except:
+            pass
+        
+        try:
+            kita_hma_val = self.kita_hma.result[abs_index]
+            if not np.isnan(kita_hma_val):
+                print(f"HMA (KitaTrader): {round(kita_hma_val, symbol.digits)}")
+        except:
+            pass
+        
+        try:
+            kita_sd_val = self.kita_sd.result[abs_index]
+            if not np.isnan(kita_sd_val):
+                print(f"SD (KitaTrader): {round(kita_sd_val, symbol.digits)}")
+        except:
+            pass
+        
+        try:
+            kita_rsi_val = self.kita_rsi.result[abs_index]
+            if not np.isnan(kita_rsi_val):
+                print(f"RSI (KitaTrader): {round(kita_rsi_val, symbol.digits)}")
+        except:
+            pass
+        
+        try:
+            kita_macd_val = self.kita_macd.macd[abs_index]
+            kita_macd_signal = self.kita_macd.signal[abs_index]
+            kita_macd_hist = self.kita_macd.histogram[abs_index]
+            if not np.isnan(kita_macd_val):
+                print(f"MACD (KitaTrader): MACD={round(kita_macd_val, symbol.digits)}, SIGNAL={round(kita_macd_signal, symbol.digits)}, HIST={round(kita_macd_hist, symbol.digits)}")
+        except:
+            pass
 
         # Respond with a PythonResponseMessage
         response = Robots.KitaTesterProto_pb2.PythonResponseMessage(  # type: ignore

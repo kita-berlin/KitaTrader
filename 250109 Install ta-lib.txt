@@ -1,0 +1,28 @@
+
+1.	Install ta lib from here https://github.com/TA-Lib/ta-lib
+
+2.	To C:\ta-lib
+
+3.	X64 Native Tools Command Prompt
+4.	C:\ta-lib\c\make\cdr\win32\msvc>nmake
+
+5.	Open Command Prompt in Python Environment
+6.	C:\ta-lib>pip install TA-Lib
+
+"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\bin\HostX86\x64\cl.exe" 
+/c /nologo /O2 /W3 /GL /DNDEBUG /MD 
+-ID:\source\ta-lib\c\include 
+-IC:\Users\hmunz\AppData\Local\Temp\pip-build-env-2bra11ho\normal\Lib\site-packages\numpy\core\include 
+-IC:\Users\hmunz\AppData\Local\Programs\Python\Python312\include 
+-IC:\Users\hmunz\AppData\Local\Programs\Python\Python312\Include 
+"-IC:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\include" 
+"-IC:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.40.33807\ATLMFC\include" 
+"-IC:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\VS\include" 
+"-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\ucrt" 
+"-IC:\Program Files (x86)\Windows Kits\10\\include\10.0.19041.0\\um" 
+"-IC:\Program Files (x86)\Windows Kits\10\\include\10.0.19041.0\\shared" 
+"-IC:\Program Files (x86)\Windows Kits\10\\include\10.0.19041.0\\winrt" 
+"-IC:\Program Files (x86)\Windows Kits\10\\include\10.0.19041.0\\cppwinrt" 
+"-IC:\Program Files (x86)\Windows Kits\NETFXSDK\4.8\include\um" 
+/Tctalib/_ta_lib.c 
+/Fobuild\temp.win-

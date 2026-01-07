@@ -596,9 +596,6 @@ class KitaApi:
         
         if max_warmup_info:
             warmup_days = warmup_timedelta.total_seconds() / Constants.SEC_PER_DAY
-            self._debug_log(f"Indicator warm-up calculation: Longest requirement is {max_warmup_info} = {warmup_days:.2f} days total")
-        else:
-            self._debug_log("Indicator warm-up calculation: No indicators or look_back found, using 0 warm-up")
         
         return warmup_timedelta
 
@@ -659,11 +656,9 @@ class KitaApi:
             if self.BacktestStart.hour == 0 and self.BacktestStart.minute == 0 and self.BacktestStart.second == 0 and self.BacktestStart.microsecond == 0:
                 # Date only - convert to UTC midnight
                 self._BacktestStartUtc = self._convert_date_to_utc_midnight(self.BacktestStart)
-                self._debug_log(f"BacktestStart: {self.BacktestStart} -> UTC 00:00: {self._BacktestStartUtc}")
             else:
                 # Has time components - use as-is (assumed to be UTC)
                 self._BacktestStartUtc = self.BacktestStart
-                self._debug_log(f"BacktestStart: {self.BacktestStart} -> UTC (preserved): {self._BacktestStartUtc}")
         else:
             self._BacktestStartUtc = datetime.min
         
@@ -671,22 +666,18 @@ class KitaApi:
             # Check if time components are set (not midnight)
             if self.BacktestEnd.hour == 0 and self.BacktestEnd.minute == 0 and self.BacktestEnd.second == 0 and self.BacktestEnd.microsecond == 0:
                 # Date only - treat as inclusive end date (include all of that day)
-                # Convert to next day 00:00:00 UTC (exclusive) to include all of the specified date
-                # Example: BacktestEnd = 03.12.2025 -> _BacktestEndUtc = 04.12.2025 00:00:00 UTC (includes all of Dec 3)
-                next_day = self.BacktestEnd + timedelta(days=1)
-                self._BacktestEndUtc = self._convert_date_to_utc_midnight(next_day)
-                self._debug_log(f"BacktestEnd: {self.BacktestEnd} (inclusive date) -> UTC next day 00:00 (exclusive): {self._BacktestEndUtc}")
+                # Convert to end of that day (23:59:59.999) UTC (inclusive) to include all of the specified date
+                # Example: BacktestEnd = 03.12.2025 -> _BacktestEndUtc = 03.12.2025 23:59:59.999 UTC (includes all of Dec 3)
+                # Set time to end of day (23:59:59.999) - assume naive datetime is in UTC
+                self._BacktestEndUtc = self.BacktestEnd.replace(hour=23, minute=59, second=59, microsecond=999000)
             else:
-                # Has time components - use as-is (assumed to be UTC, exclusive)
+                # Has time components - use as-is (assumed to be UTC, inclusive)
                 self._BacktestEndUtc = self.BacktestEnd
-                self._debug_log(f"BacktestEnd: {self.BacktestEnd} (exclusive) -> UTC (preserved): {self._BacktestEndUtc}")
         else:
             self._BacktestEndUtc = datetime.max
 
         # call robot's OnInit
-        self._debug_log("[DEBUG KitaApi.do_init] Calling robot.on_init()...")
         self.robot.on_init()  # type: ignore
-        self._debug_log("[DEBUG KitaApi.do_init] robot.on_init() completed")
 
     WarmupStart: datetime = datetime.min # Explicit warmup start date
 
@@ -701,11 +692,9 @@ class KitaApi:
         # User specified WarmupStart logic
         if self.WarmupStart != datetime.min:
              self.AllDataStartUtc = self._convert_date_to_utc_midnight(self.WarmupStart)
-             self._debug_log(f"Using manual WarmupStart: {self.WarmupStart} -> UTC: {self.AllDataStartUtc}")
         elif self._BacktestStartUtc != datetime.min:
              # Fallback if no warmup specified: start at backtest start (0 warmup)
              self.AllDataStartUtc = self._BacktestStartUtc
-             self._debug_log(f"No WarmupStart specified, using BacktestStart: {self.AllDataStartUtc}")
         
         # Set AllDataEndUtc if not explicitly set
         if getattr(self, 'AllDataEndUtc', datetime.max) == datetime.max:
@@ -713,15 +702,10 @@ class KitaApi:
                 self.AllDataEndUtc = self._BacktestEndUtc
         
         # load bars and data rate
-        self._debug_log(f"[DEBUG prepare_backtest] Loading data for {len(self.symbol_dictionary)} symbol(s)...")
         for symbol in self.symbol_dictionary.values():
-            self._debug_log(f"[DEBUG prepare_backtest] Checking historical data for {symbol.name}...")
             symbol.check_historical_data()  # make sure data do exist since AllDataStartUtc
-            self._debug_log(f"[DEBUG prepare_backtest] Making time aware for {symbol.name}...")
             symbol.make_time_aware()  # make sure all start/end datetimes are time zone aware
-            self._debug_log(f"[DEBUG prepare_backtest] Loading datarate and bars for {symbol.name}...")
             symbol.load_datarate_and_bars()
-            self._debug_log(f"[DEBUG prepare_backtest] Completed loading for {symbol.name}")
         
         self._prepared = True
 
@@ -763,13 +747,7 @@ class KitaApi:
             
             # Compare symbol.time (UTC) directly with _BacktestEndUtc (UTC) to avoid timezone conversion issues
             # symbol.time is in UTC from tick data, so compare with UTC end time
-            if "" != error:
-                self._debug_log(f"[do_tick] symbol_on_tick returned error: {error}")
-            if symbol.time > self._BacktestEndUtc:
-                self._debug_log(f"[do_tick] Stopping: symbol.time ({symbol.time}) > _BacktestEndUtc ({self._BacktestEndUtc})")
-            if self._stop_requested:
-                self._debug_log(f"[do_tick] Stopping: _stop_requested is True")
-            
+            # _BacktestEndUtc is now inclusive (end of day 23:59:59.999), so stop when time exceeds it
             if "" != error or symbol.time > self._BacktestEndUtc or self._stop_requested:
                 return True  # end reached
 
@@ -778,9 +756,7 @@ class KitaApi:
             new_h4_bar_created = False  # Track if H4 bar (14400 seconds) was created
             new_m1_bar_created = False  # Track if M1 bar (60 seconds) was created
             new_h1_bar_created = False  # Track if H1 bar (3600 seconds) was created
-            if len(previous_counts) == 0:
-                self._debug_log(f"[do_tick] WARNING: previous_counts is empty! bars_dictonary has {len(symbol.bars_dictonary)} entries")
-            else:
+            if len(previous_counts) > 0:
                 for bars_id, prev_count in previous_counts.items():
                     bars = None
                     for symbol_bars in symbol.bars_dictonary.values():
@@ -804,7 +780,6 @@ class KitaApi:
                         if bars.count > prev_count:
                             # Count increased - definitely a new bar
                             new_bar_created = True
-                            self._debug_log(f"[do_tick] New bar created: timeframe_seconds={bars.timeframe_seconds}, count={bars.count}, prev_count={prev_count}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")
                             # Track which timeframe created a new bar
                             if bars.timeframe_seconds == 60:
                                 new_m1_bar_created = True
@@ -815,7 +790,6 @@ class KitaApi:
                         elif prev_bar_time is not None and current_bar_time is not None and current_bar_time != prev_bar_time:
                             # Ring buffer is full (count == size), but bar time changed - new bar overwrote oldest
                             new_bar_created = True
-                            self._debug_log(f"[do_tick] New bar created (ring buffer full): timeframe_seconds={bars.timeframe_seconds}, count={bars.count}, prev_count={prev_count}, current_bar_time={current_bar_time}, prev_bar_time={prev_bar_time}, symbol.time={symbol.time}")
                             # Track which timeframe created a new bar
                             if bars.timeframe_seconds == 60:
                                 new_m1_bar_created = True
@@ -824,10 +798,10 @@ class KitaApi:
                             elif bars.timeframe_seconds == 14400:
                                 new_h4_bar_created = True
                         elif bars.count < prev_count:
-                            self._debug_log(f"[do_tick] WARNING: bars.count ({bars.count}) < prev_count ({prev_count}) for timeframe_seconds={bars.timeframe_seconds}")
-                        # Don't break here - we need to check all bars to find H4 bars
+                            # Don't break here - we need to check all bars to find H4 bars
+                            pass
                     else:
-                        self._debug_log(f"[do_tick] WARNING: Could not find bars object with id={bars_id}")
+                        pass
 
             # During warm-up phase, only build bars and update indicators, skip OnTick
             if symbol.is_warm_up:
@@ -901,11 +875,9 @@ class KitaApi:
                 # Here we only check the timestamp range - user's on_tick is only called for ticks in range
                 if symbol.time >= self._BacktestStartUtc and symbol.time < self._BacktestEndUtc:
                     should_call_ontick = True
-                    self._debug_log(f"[do_tick] Calling on_tick (tick mode): symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}, BacktestEndUtc={self._BacktestEndUtc}")
             elif (new_m1_bar_created or new_h1_bar_created or new_h4_bar_created) and symbol.time >= self._BacktestStartUtc:
                 # Bar mode: call on_tick only when a new bar is created
                 should_call_ontick = True
-                self._debug_log(f"[do_tick] Calling on_tick (bar mode): new_m1={new_m1_bar_created}, new_h1={new_h1_bar_created}, new_h4={new_h4_bar_created}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")
             
             if should_call_ontick:
                 # Update Account
@@ -918,13 +890,12 @@ class KitaApi:
                 
                 if self._last_ontick_date is None or self._last_ontick_date != current_date_str:
                     # OnTick date message goes to debug log, not stdout/stderr
-                    self._debug_log(f"OnTick {current_date_str}")
                     self._last_ontick_date = current_date_str
 
                 # call the robot
                 self.robot.on_tick(symbol)  # type: ignore
             elif (new_m1_bar_created or new_h1_bar_created or new_h4_bar_created) and symbol.time < self._BacktestStartUtc:
-                self._debug_log(f"[do_tick] Skipping on_tick (warm-up): new_m1={new_m1_bar_created}, new_h1={new_h1_bar_created}, new_h4={new_h4_bar_created}, symbol.time={symbol.time}, BacktestStartUtc={self._BacktestStartUtc}")
+                pass
             elif not new_bar_created:
                 # No new bar, but still update account if needed (for positions)
                 if len(self.positions) >= 1:
@@ -960,7 +931,6 @@ class KitaApi:
     def do_stop(self):
         """Stop the robot and close debug log file"""
         if self._debug_log_file:
-            self._debug_log("KitaApi.do_stop() called")
             self._debug_log_file.close()
             self._debug_log_file = None
         for symbol in self.symbol_dictionary.values():

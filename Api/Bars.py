@@ -301,15 +301,6 @@ class Bars:
             if current_bar_time is None or bar_start_time > current_bar_time:
                 # New bar started - the previous bar is now closed
                 # Start new bar (read_index will be updated to point to the new bar)
-                # Debug logging for H4 bars
-                if self.timeframe_seconds == 14400:
-                    import sys
-                    if hasattr(sys, '_getframe'):
-                        caller = sys._getframe(1)
-                        if caller and hasattr(caller, 'f_locals') and 'self' in caller.f_locals:
-                            symbol = caller.f_locals.get('self')
-                            if symbol and hasattr(symbol, 'api') and hasattr(symbol.api, '_debug_log'):
-                                symbol.api._debug_log(f"[bars_on_tick] H4 new bar: time={time}, bar_start_time={bar_start_time}, current_bar_time={current_bar_time}, count={self.count}")
                 self._start_new_bar(bar_start_time, bid, ask, tick_volume)
                 self.is_new_bar = True
                 # read_index is updated in _start_new_bar via append()
@@ -339,9 +330,6 @@ class Bars:
                         # If bar_start_time >= BacktestEndUtc, the previous bar closed at or after the end time
                         if bar_start_time >= self._symbol.api.robot._BacktestEndUtc:
                             should_fire = False
-                            # Debug logging
-                            if hasattr(self._symbol.api, '_debug_log'):
-                                self._symbol.api._debug_log(f"[Bars.bars_on_tick] BarOpened event suppressed: new bar open time ({bar_start_time}) >= BacktestEndUtc ({self._symbol.api.robot._BacktestEndUtc})")
                 
                 if should_fire:
                     self._fire_bar_opened_event()
@@ -517,9 +505,7 @@ class Bars:
                     if hasattr(sys, '_getframe'):
                         caller = sys._getframe(2)
                         if caller and hasattr(caller, 'f_locals') and 'self' in caller.f_locals:
-                            symbol = caller.f_locals.get('self')
-                            if symbol and hasattr(symbol, 'api') and hasattr(symbol.api, '_debug_log'):
-                                symbol.api._debug_log(f"[Bars._fire_bar_opened_event] Error in handler: {e}")
+                            pass
     
     class BarOpenedEvent:
         """Event object that supports += and -= operators"""

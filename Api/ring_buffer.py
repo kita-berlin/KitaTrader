@@ -28,12 +28,43 @@ class Ringbuffer(Generic[T]):
             raise IndexError("Must add a ring _buffer slot after initialization")
         if rel_pos < 0 or rel_pos >= self._size:
             raise IndexError("Index out of range")
-        return self._buffer[(self._position + self._size - rel_pos - 1) % self._size]
+        # When buffer hasn't wrapped (_count < _size), use direct indexing
+        # Newest value (rel_pos=0) is at physical position (_position - 1)
+        # Oldest value (rel_pos=_count-1) is at physical position 0
+        if self._count < self._size:
+            # Buffer not full: newest is at (_position - 1), oldest is at 0
+            # rel_pos=0 (newest) -> physical position (_position - 1)
+            # rel_pos=_count-1 (oldest) -> physical position 0
+            if rel_pos == 0:
+                return self._buffer[(self._position - 1) % self._size] if self._position > 0 else self._buffer[0]
+            else:
+                # For other positions, map directly: rel_pos -> physical position (_position - 1 - rel_pos)
+                physical_pos = (self._position - 1 - rel_pos) % self._size
+                return self._buffer[physical_pos]
+        else:
+            # Buffer full: use standard ringbuffer formula
+            return self._buffer[(self._position + self._size - rel_pos - 1) % self._size]
 
     def __setitem__(self, rel_pos: int, value: T):
         if self._count < 1:
             raise IndexError("Must add a ring _buffer slot after initialization")
-        self._buffer[(self._position + self._size - rel_pos - 1) % self._size] = value
+        # When buffer hasn't wrapped (_count < _size), use direct indexing
+        # Newest value (rel_pos=0) is at physical position (_position - 1)
+        # Oldest value (rel_pos=_count-1) is at physical position 0
+        if self._count < self._size:
+            # Buffer not full: newest is at (_position - 1), oldest is at 0
+            # rel_pos=0 (newest) -> physical position (_position - 1)
+            # rel_pos=_count-1 (oldest) -> physical position 0
+            if rel_pos == 0:
+                physical_pos = (self._position - 1) % self._size if self._position > 0 else 0
+                self._buffer[physical_pos] = value
+            else:
+                # For other positions, map directly: rel_pos -> physical position (_position - 1 - rel_pos)
+                physical_pos = (self._position - 1 - rel_pos) % self._size
+                self._buffer[physical_pos] = value
+        else:
+            # Buffer full: use standard ringbuffer formula
+            self._buffer[(self._position + self._size - rel_pos - 1) % self._size] = value
 
     def get_abs_pos(self, rel_pos: int) -> int:
         """

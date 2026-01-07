@@ -43,15 +43,16 @@ class OHLCTestConsole:
         
         # 2. Define the backtest time window
         # region
-        # Date range: 1 day only (Dec 1, 2025) - EXACTLY matching C# bot
-        # C# bot runs Dec 1 only (00:00:00 to 23:59:59)
+        # Date range: Dec 1-3, 2025 (3 days, matching C# bot)
+        # Framework will convert BacktestEnd to next day 00:00:00 (exclusive)
+        # This ensures we get all bars from Dec 1 00:00:00 to Dec 3 23:59:59
         from datetime import timedelta
 
         self.robot.WarmupStart = datetime.strptime("24.11.2025", "%d.%m.%Y")
         self.robot.BacktestStart = datetime.strptime("01.12.2025", "%d.%m.%Y")
-        # Set to Dec 1 (date only) - framework will convert to Dec 2 00:00:00 (exclusive)
-        # This ensures we get all bars from Dec 1 00:00:00 to Dec 1 23:59:59, matching C# exactly
-        self.robot.BacktestEnd = datetime.strptime("01.12.2025", "%d.%m.%Y")  # Dec 1 only (inclusive)
+        # Set to Dec 3 (date only) - framework will convert to Dec 3 23:59:59.999 (inclusive end)
+        # This ensures we get all bars from Dec 1 00:00:00 to Dec 3 23:59:59 (matching C# bot)
+        self.robot.BacktestEnd = datetime.strptime("03.12.2025", "%d.%m.%Y")  # Dec 1-3 (inclusive)
         # endregion
 
         # 3. Initialize the platform and the robot
@@ -69,21 +70,24 @@ class OHLCTestConsole:
         import time
         start_time = time.time()
         tick_count = 0
-        # All debug output goes to robot's debug log file, nothing to stdout
+        last_log_time = start_time
         try:
             while True:
                 tick_count += 1
-                if tick_count % 100000 == 0:
-                    self.robot._debug_log(f"Processed {tick_count:,} ticks...")
                 result = self.robot.do_tick()
                 if result:
-                    self.robot._debug_log(f"Tick loop ended after {tick_count:,} ticks")
                     break
+                
+                # Log progress every 5 seconds
+                current_time = time.time()
+                if current_time - last_log_time >= 5.0:
+                    elapsed = current_time - start_time
+                    self.robot._debug_log(f"Console: Processed {tick_count} ticks in {elapsed:.1f}s ({tick_count/elapsed:.0f} ticks/sec)")
+                    last_log_time = current_time
         except KeyboardInterrupt:
-             self.robot._debug_log(f"Backtest interrupted by user.")       
+             pass       
         
         elapsed_time = time.time() - start_time
-        self.robot._debug_log(f"Backtest completed: {tick_count:,} ticks processed in {elapsed_time:.2f} seconds")
         # endregion
 
         # 6. Stop the robot and the platform

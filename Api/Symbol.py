@@ -312,48 +312,67 @@ class Symbol:
                     # we need the zip file to keep track of stored data files
                     self._write_zip_file(tick_folder, run_utc, daily_tick_csv_buffer, "tick")
 
-                    # write out a daily minute file; one file for each day
-                    minute_bars = self._resample(one_day_provider_data, Constants.SEC_PER_MINUTE)
-                    for i in range(minute_bars.count):
+                    # Build minute bars from ticks (same mechanism as M1 during backtest)
+                    minute_bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0, symbol=self)
+                    if one_day_provider_data.timeframe_seconds == 0:
+                        # Tick data: build bars incrementally from ticks
+                        for i in range(one_day_provider_data.count):
+                            time = one_day_provider_data.open_times_list[i]
+                            bid = one_day_provider_data.open_bids_list[i]
+                            ask = one_day_provider_data.open_asks_list[i]
+                            vol_delta = int(one_day_provider_data.volume_bids_list[i])
+                            minute_bars.bars_on_tick(time, bid, ask, vol_delta)
+                    else:
+                        # Bar data: build bars incrementally from existing bars
+                        for i in range(one_day_provider_data.count):
+                            time = one_day_provider_data.open_times.data[i]
+                            bid = one_day_provider_data.close_bids.data[i]  # Use close as bid for bar data
+                            ask = one_day_provider_data.close_asks.data[i]  # Use close as ask for bar data
+                            vol_delta = int(one_day_provider_data.volume_bids.data[i])
+                            minute_bars.bars_on_tick(time, bid, ask, vol_delta)
+                    
+                    # Write minute bars to cache file
+                    minute_df = self._resample(minute_bars, Constants.SEC_PER_MINUTE)
+                    for idx, row in minute_df.iterrows():
                         daily_minute_csv_writer.writerow(
                             [
                                 int(
                                     (
-                                        minute_bars.open_times.data[i].replace(second=0, microsecond=0) - run_utc
+                                        idx.replace(second=0, microsecond=0) - run_utc
                                     ).total_seconds()
                                     * 1_000
                                 ),
-                                f"{minute_bars.open_bids.data[i]:.{self.digits}f}",
-                                f"{minute_bars.high_bids.data[i]:.{self.digits}f}",
-                                f"{minute_bars.low_bids.data[i]:.{self.digits}f}",
-                                f"{minute_bars.close_bids.data[i]:.{self.digits}f}",
-                                f"{minute_bars.volume_bids.data[i]:.2f}",
-                                f"{minute_bars.open_asks.data[i]:.{self.digits}f}",
-                                f"{minute_bars.high_asks.data[i]:.{self.digits}f}",
-                                f"{minute_bars.low_asks.data[i]:.{self.digits}f}",
-                                f"{minute_bars.close_asks.data[i]:.{self.digits}f}",
-                                f"{minute_bars.volume_asks.data[i]:.2f}",
+                                f"{row['open_bids']:.{self.digits}f}",
+                                f"{row['high_bids']:.{self.digits}f}",
+                                f"{row['low_bids']:.{self.digits}f}",
+                                f"{row['close_bids']:.{self.digits}f}",
+                                f"{row['volume_bids']:.2f}",
+                                f"{row['open_asks']:.{self.digits}f}",
+                                f"{row['high_asks']:.{self.digits}f}",
+                                f"{row['low_asks']:.{self.digits}f}",
+                                f"{row['close_asks']:.{self.digits}f}",
+                                f"{row['volume_asks']:.2f}",
                             ]
                         )
                     self._write_zip_file(minute_folder, run_utc, daily_minute_csv_buffer, "minute")
 
                     # append to the hours file
-                    hour_bars = self._resample(minute_bars, Constants.SEC_PER_HOUR)
+                    hour_df = self._resample(minute_bars, Constants.SEC_PER_HOUR)
                     rows: list[list[Any]] = []
-                    for i in range(hour_bars.count):
+                    for idx, row in hour_df.iterrows():
                         rows.append(  # type:ignore
                             [
-                                hour_bars.open_times.data[i].strftime("%Y%m%d %H:%M"),
-                                f"{hour_bars.open_bids.data[i]:.{self.digits}f}",
-                                f"{hour_bars.high_bids.data[i]:.{self.digits}f}",
-                                f"{hour_bars.low_bids.data[i]:.{self.digits}f}",
-                                f"{hour_bars.close_bids.data[i]:.{self.digits}f}",
-                                f"{hour_bars.volume_bids.data[i]:.2f}",
-                                f"{hour_bars.open_asks.data[i]:.{self.digits}f}",
-                                f"{hour_bars.high_asks.data[i]:.{self.digits}f}",
-                                f"{hour_bars.low_asks.data[i]:.{self.digits}f}",
-                                f"{hour_bars.close_asks.data[i]:.{self.digits}f}",
-                                f"{hour_bars.volume_asks.data[i]:.2f}",
+                                idx.strftime("%Y%m%d %H:%M"),
+                                f"{row['open_bids']:.{self.digits}f}",
+                                f"{row['high_bids']:.{self.digits}f}",
+                                f"{row['low_bids']:.{self.digits}f}",
+                                f"{row['close_bids']:.{self.digits}f}",
+                                f"{row['volume_bids']:.2f}",
+                                f"{row['open_asks']:.{self.digits}f}",
+                                f"{row['high_asks']:.{self.digits}f}",
+                                f"{row['low_asks']:.{self.digits}f}",
+                                f"{row['close_asks']:.{self.digits}f}",
+                                f"{row['volume_asks']:.2f}",
                             ]
                         )
                     self._append_rows_to_zip(hour_folder, run_utc, self.name, rows)
@@ -369,7 +388,24 @@ class Symbol:
                         else:
                             assert "" == error, error
                             self._resize_bars(yesterday_ticks)
-                            yesterday_minutes = self._resample(yesterday_ticks, Constants.SEC_PER_MINUTE)
+                            # Build minute bars from ticks (same mechanism as M1 during backtest)
+                            yesterday_minutes = Bars(self.name, Constants.SEC_PER_MINUTE, 0, symbol=self)
+                            if yesterday_ticks.timeframe_seconds == 0:
+                                # Tick data: build bars incrementally from ticks
+                                for i in range(yesterday_ticks.count):
+                                    time = yesterday_ticks.open_times_list[i]
+                                    bid = yesterday_ticks.open_bids_list[i]
+                                    ask = yesterday_ticks.open_asks_list[i]
+                                    vol_delta = int(yesterday_ticks.volume_bids_list[i])
+                                    yesterday_minutes.bars_on_tick(time, bid, ask, vol_delta)
+                            else:
+                                # Bar data: build bars incrementally from existing bars
+                                for i in range(yesterday_ticks.count):
+                                    time = yesterday_ticks.open_times.data[i]
+                                    bid = yesterday_ticks.close_bids.data[i]  # Use close as bid for bar data
+                                    ask = yesterday_ticks.close_asks.data[i]  # Use close as ask for bar data
+                                    vol_delta = int(yesterday_ticks.volume_bids.data[i])
+                                    yesterday_minutes.bars_on_tick(time, bid, ask, vol_delta)
 
                     if (
                         len(minute_bars.open_times.data) > 0
@@ -466,23 +502,24 @@ class Symbol:
                             )
                         )
 
-                        daily_bars = self._resample(local_minute_bars, Constants.SEC_PER_DAY)
-                        daily_bars.open_times.data += utc_open_delta  # type: ignore
+                        daily_df = self._resample(local_minute_bars, Constants.SEC_PER_DAY)
+                        # Adjust times by utc_open_delta
+                        daily_df.index = daily_df.index + utc_open_delta  # type: ignore
                         rows: list[list[Any]] = []
-                        for i in range(daily_bars.count):
+                        for idx, row in daily_df.iterrows():
                             rows.append(  # type:ignore
                                 [
-                                    daily_bars.open_times.data[i].strftime("%Y%m%d %H:%M"),  # type: ignore
-                                    f"{daily_bars.open_bids.data[i]:.{self.digits}f}",
-                                    f"{daily_bars.high_bids.data[i]:.{self.digits}f}",
-                                    f"{daily_bars.low_bids.data[i]:.{self.digits}f}",
-                                    f"{daily_bars.close_bids.data[i]:.{self.digits}f}",
-                                    f"{daily_bars.volume_bids.data[i]:.2f}",
-                                    f"{daily_bars.open_asks.data[i]:.{self.digits}f}",
-                                    f"{daily_bars.high_asks.data[i]:.{self.digits}f}",
-                                    f"{daily_bars.low_asks.data[i]:.{self.digits}f}",
-                                    f"{daily_bars.close_asks.data[i]:.{self.digits}f}",
-                                    f"{daily_bars.volume_asks.data[i]:.2f}",
+                                    idx.strftime("%Y%m%d %H:%M"),  # type: ignore
+                                    f"{row['open_bids']:.{self.digits}f}",
+                                    f"{row['high_bids']:.{self.digits}f}",
+                                    f"{row['low_bids']:.{self.digits}f}",
+                                    f"{row['close_bids']:.{self.digits}f}",
+                                    f"{row['volume_bids']:.2f}",
+                                    f"{row['open_asks']:.{self.digits}f}",
+                                    f"{row['high_asks']:.{self.digits}f}",
+                                    f"{row['low_asks']:.{self.digits}f}",
+                                    f"{row['close_asks']:.{self.digits}f}",
+                                    f"{row['volume_asks']:.2f}",
                                 ]
                             )
                         self._append_rows_to_zip(daily_folder, run_utc, self.name, rows)
@@ -536,10 +573,25 @@ class Symbol:
         bars.volume_bids.data = np.delete(bars.volume_bids.data, np.s_[bars.count :])
         bars.volume_asks.data = np.delete(bars.volume_asks.data, np.s_[bars.count :])
 
-    def _resample(self, bars: Bars, new_timeframe_seconds: int) -> Bars:
-        # Slice all data arrays to match bars.count (only use valid data, not the full buffer)
-        # The data arrays may be larger than bars.count due to buffer pre-allocation
-        count = bars.count
+    def _resample(self, bars_or_df, new_timeframe_seconds: int):
+        """
+        Resample bars or DataFrame to a new timeframe for cache file writing only.
+        Returns a pandas DataFrame - does NOT populate ringbuffers.
+        All backtest bars are built incrementally from ticks using bars_on_tick().
+        
+        Args:
+            bars_or_df: Either a Bars object or a pandas DataFrame
+            new_timeframe_seconds: Target timeframe in seconds
+        """
+        # If input is already a DataFrame, use it directly
+        if isinstance(bars_or_df, pd.DataFrame):
+            df = bars_or_df
+        else:
+            # Input is a Bars object - convert to DataFrame
+            bars = bars_or_df
+            # Slice all data arrays to match bars.count (only use valid data, not the full buffer)
+            # The data arrays may be larger than bars.count due to buffer pre-allocation
+            count = bars.count
         
         # Extract the data into a DataFrame
         if 0 == bars.timeframe_seconds:
@@ -570,25 +622,25 @@ class Symbol:
                 "volume_asks": bars.volume_asks.data[:count],
             }
 
-        # Convert numpy array of datetime objects to pandas DatetimeIndex
-        # bars.open_times.data is a Ringbuffer containing datetime objects
-        # We need to convert it properly for pandas
-        if count > 0:
-            if 0 == bars.timeframe_seconds:
-                 # Tick data: use list from open_times_list
-                 times_list = bars.open_times_list[:count]
+            # Convert numpy array of datetime objects to pandas DatetimeIndex
+            # bars.open_times.data is a Ringbuffer containing datetime objects
+            # We need to convert it properly for pandas
+            if count > 0:
+                if 0 == bars.timeframe_seconds:
+                     # Tick data: use list from open_times_list
+                     times_list = bars.open_times_list[:count]
+                else:
+                     # Bar data: extract from Ringbuffer
+                     # Use list comprehension to extract the first 'count' items from Ringbuffer
+                     times_list = [bars.open_times.data[i] for i in range(count)]
+                
+                # Convert to pandas DatetimeIndex
+                index = pd.to_datetime(times_list)  # type: ignore
             else:
-                 # Bar data: extract from Ringbuffer
-                 # Use list comprehension to extract the first 'count' items from Ringbuffer
-                 times_list = [bars.open_times.data[i] for i in range(count)]
+                # Empty bars - create empty DatetimeIndex
+                index = pd.DatetimeIndex([])  # type: ignore
             
-            # Convert to pandas DatetimeIndex
-            index = pd.to_datetime(times_list)  # type: ignore
-        else:
-            # Empty bars - create empty DatetimeIndex
-            index = pd.DatetimeIndex([])  # type: ignore
-        
-        df = pd.DataFrame(data, index=index)  # type: ignore
+            df = pd.DataFrame(data, index=index)  # type: ignore
 
         # Resample the DataFrame
         rule = self._seconds_to_pandas_timeframe(new_timeframe_seconds)  # Resampling rule
@@ -627,25 +679,10 @@ class Symbol:
             .dropna()
         )  # Drop rows with NaN values after resampling
 
-        # Create a new Bars instance for the lower timeframe
-        new_bars = Bars(bars.symbol_name, new_timeframe_seconds, bars.look_back, symbol=self)
-
-        # Populate the new Bars instance
-        new_bars.open_times.data = np.array(resampled.index.to_pydatetime(), dtype=object)  # type: ignore
-        new_bars.open_bids.data = resampled["open_bids"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.high_bids.data = resampled["high_bids"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.low_bids.data = resampled["low_bids"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.close_bids.data = resampled["close_bids"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.volume_bids.data = resampled["volume_bids"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.open_asks.data = resampled["open_asks"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.high_asks.data = resampled["high_asks"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.low_asks.data = resampled["low_asks"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.close_asks.data = resampled["close_asks"].to_numpy(dtype=np.float64)  # type: ignore
-        new_bars.volume_asks.data = resampled["volume_asks"].to_numpy(dtype=np.float64)  # type: ignore
-
-        new_bars.count = len(resampled)
-        # DEBUG: Resampled - messages removed
-        return new_bars
+        # Return DataFrame directly - do NOT populate ringbuffers
+        # This is only used for cache file writing, not for backtest bars
+        # All backtest bars are built incrementally from ticks using bars_on_tick()
+        return resampled
 
     def _append_rows_to_zip(self, folder: str, run_utc: datetime, symbol: str, new_rows: list[list[Any]]) -> None:
         """
@@ -705,7 +742,6 @@ class Symbol:
         min_start = self.api.AllDataStartUtc
         if 0 == self.quote_provider.data_rate:
             # Initialize tick stream - ticks will be processed one at a time, not stored
-            self.api._debug_log(f"[load_datarate_and_bars] Initializing tick stream starting from {min_start}")
             self._init_tick_stream(min_start)
             # Get first tick to determine min_start (peek at first tick without consuming it)
             # Save current state
@@ -718,7 +754,6 @@ class Symbol:
             first_tick = self._get_next_tick()
             if first_tick:
                 min_start = first_tick[0]  # time
-                self.api._debug_log(f"[load_datarate_and_bars] First tick time: {min_start}")
                 # Restore stream state to start from beginning
                 self._tick_current_day = saved_day
                 self._tick_day_bars = saved_day_bars
@@ -727,7 +762,6 @@ class Symbol:
                 self._tick_total_processed = 0
             else:
                 min_start = self.api.robot._BacktestStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
-                self.api._debug_log(f"[load_datarate_and_bars] No ticks found, using BacktestStart: {min_start}")
             
             if min_start is not None and min_start.tzinfo is None:
                 min_start = min_start.replace(tzinfo=pytz.UTC)
@@ -819,11 +853,11 @@ class Symbol:
             start = start.replace(tzinfo=pytz.UTC)
             
         self._tick_current_day = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        # For end day, we want to process all ticks up to but not including the end date
-        # _BacktestEndUtc is exclusive (e.g., 2025-12-06 00:00:00 means process up to but not including 12/06)
-        # So we set _tick_end_day to the end date itself (2025-12-06), and we'll stop when current_day exceeds it
-        # This way, we'll process all ticks from 12/05 (the last day before the end date)
-        # and stop when current_day becomes 2025-12-06 (which is the end date, so we don't process it)
+        # For end day, we want to process all ticks up to and including the end date
+        # _BacktestEndUtc is now inclusive (e.g., 2025-12-03 23:59:59.999 means process up to and including 12/03)
+        # So we set _tick_end_day to the end date itself (2025-12-03), and we'll stop when current_day exceeds it
+        # This way, we'll process all ticks from 12/03 (the last day, inclusive)
+        # and stop when current_day becomes 2025-12-04 (which is after the end date, so we don't process it)
         self._tick_end_day = self.api.robot._BacktestEndUtc.replace(hour=0, minute=0, second=0, microsecond=0)
         self._tick_day_bars = None
         self._tick_day_index = 0
@@ -836,7 +870,6 @@ class Symbol:
         self.rate_data.read_index = -1  # Will be incremented before each tick
         self.rate_data.count = 999999999  # Large number so read_index never exceeds it (not used for streaming)
         
-        self.api._debug_log(f"[_init_tick_stream] Initialized tick stream from {self._tick_current_day} to {self._tick_end_day}")
     
     def _get_next_tick(self) -> tuple[datetime, float, float, int] | None:
         """
@@ -846,9 +879,9 @@ class Symbol:
         # Load next day if current day is exhausted
         while self._tick_day_index >= self._tick_day_count:
             # Stop when current_day exceeds end_day (end_day is inclusive, so process all ticks from end_day)
-            # _BacktestEndUtc is exclusive (e.g., 2025-12-06 00:00:00 means process up to but not including 12/06)
-            # But _tick_end_day is set to 2025-12-06 00:00:00, so we want to process all ticks from 12/06
-            # and stop when current_day becomes 2025-12-07 00:00:00
+            # _BacktestEndUtc is now inclusive (e.g., 2025-12-03 23:59:59.999 means process up to and including 12/03)
+            # _tick_end_day is set to 2025-12-03 00:00:00, so we want to process all ticks from 12/03
+            # and stop when current_day becomes 2025-12-04 00:00:00 (which is after the end date)
             if self._tick_current_day > self._tick_end_day:
                 return None  # No more ticks
             
@@ -863,10 +896,8 @@ class Symbol:
                     # Fallback: should not happen, but handle gracefully
                     self._tick_day_count = 0
                 self._tick_day_index = 0
-                if self._tick_day_count > 0:
-                    self.api._debug_log(f"[_get_next_tick] Loaded {self._tick_day_count} ticks for {self._tick_current_day.strftime('%Y-%m-%d')}")
             else:
-                self.api._debug_log(f"[_get_next_tick] Error loading {self._tick_current_day.strftime('%Y-%m-%d')}: {error}")
+                pass
                 self._tick_day_bars = None
                 self._tick_day_count = 0
                 self._tick_day_index = 0
@@ -1035,7 +1066,7 @@ class Symbol:
             while True:
                 tick_data = self._get_next_tick()
                 if tick_data is None:
-                    self.api._debug_log(f"[symbol_on_tick] End reached: processed {self._tick_total_processed} ticks")
+                    pass
                     return "End reached"
                 
                 time, bid, ask, vol_delta = tick_data
@@ -1075,7 +1106,7 @@ class Symbol:
                 
                 # Log progress
                 if self._tick_total_processed % 10000 == 0:
-                    self.api._debug_log(f"[symbol_on_tick] Progress: {self._tick_total_processed} ticks, time={self.time}")
+                    pass
                 break
         else:
             # Bar data: use DataSeries (not implemented for streaming yet)
@@ -1088,12 +1119,9 @@ class Symbol:
             bars_changed = True # Always count as change for bars data
 
         # Debug first few ticks
-        if self.rate_data.read_index < 3:
-            self.api._debug_log(f"[symbol_on_tick] Tick {self.rate_data.read_index}: time={self.time}, bid={self.bid}, ask={self.ask}")
-
         # Safety check: ensure time is not None
         if self.time is None:
-            self.api._debug_log(f"[symbol_on_tick] ERROR: time is None for read_index {self.rate_data.read_index}")
+            pass
             return "End reached"
 
         # Compare symbol.time (UTC) directly with _BacktestStartUtc (UTC) to avoid timezone conversion issues
@@ -1101,11 +1129,14 @@ class Symbol:
         self.is_warm_up = self.time < self.api.robot._BacktestStartUtc
 
         # Step 2: Calculate indicators in dependency order
-        # New Architecture: Skip indicator calculation during INTERNAL chain/warm-up
-        # Indicators will be calculated lazily when accessed by user code
-        if not self.is_warm_up:
-            if bars_changed or self._has_close_indicators():
-                self._calculate_indicators_optimized(bars_changed)
+        # IMPORTANT: Indicators are ALWAYS calculated, regardless of warmup status
+        # Warmup only affects whether OnTick/OnBar callbacks are called, not indicator calculation
+        if bars_changed or self._has_close_indicators():
+            # Debug: Log when indicators are being calculated (only for first few or periodically)
+            if hasattr(self, 'api') and hasattr(self.api, 'robot') and hasattr(self.api.robot, '_debug_log'):
+                if not self.is_warm_up or (hasattr(self, '_tick_total_processed') and self._tick_total_processed < 100):
+                    self.api.robot._debug_log(f"[Symbol] _calculate_indicators_optimized called: bars_changed={bars_changed}, time={self.time}, is_warm_up={self.is_warm_up}")
+            self._calculate_indicators_optimized(bars_changed)
 
         return ""
     
@@ -1294,35 +1325,53 @@ class Symbol:
                 continue
             
             # Open indicators: only on new bar
+            # Use the source DataSeries's _add_count for index calculation
             if bars.is_new_bar:
                 for indicator, cached_bars, data_series in self._indicator_cache.get('open', []):
-                    if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
-                        if indicator not in indicators_to_calculate:
-                            indicators_to_calculate.append(indicator)
-                            indicator_to_bars[indicator] = (bars, current_bar_idx)
+                    if cached_bars == bars and hasattr(indicator, 'periods'):
+                        source_add_count = data_series.data._add_count if hasattr(data_series, 'data') else bars._bar_buffer._add_count if bars._bar_buffer else bars.count
+                        source_bar_idx = source_add_count - 1
+                        if source_bar_idx >= indicator.periods - 1:
+                            if indicator not in indicators_to_calculate:
+                                indicators_to_calculate.append(indicator)
+                                indicator_to_bars[indicator] = (bars, source_bar_idx)
             
             # High indicators
+            # Use the source DataSeries's _add_count for index calculation
             for indicator, cached_bars, data_series in self._indicator_cache.get('high', []):
-                if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
-                    if bars.high_changed(self.bid) or bars.is_new_bar: 
-                        if indicator not in indicators_to_calculate:
-                            indicators_to_calculate.append(indicator)
-                            indicator_to_bars[indicator] = (bars, current_bar_idx)
+                if cached_bars == bars and hasattr(indicator, 'periods'):
+                    if bars.high_changed(self.bid) or bars.is_new_bar:
+                        source_add_count = data_series.data._add_count if hasattr(data_series, 'data') else bars._bar_buffer._add_count if bars._bar_buffer else bars.count
+                        source_bar_idx = source_add_count - 1
+                        if source_bar_idx >= indicator.periods - 1:
+                            if indicator not in indicators_to_calculate:
+                                indicators_to_calculate.append(indicator)
+                                indicator_to_bars[indicator] = (bars, source_bar_idx)
 
             # Low indicators
+            # Use the source DataSeries's _add_count for index calculation
             for indicator, cached_bars, data_series in self._indicator_cache.get('low', []):
-                if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
-                    if bars.low_changed(self.bid) or bars.is_new_bar: 
-                        if indicator not in indicators_to_calculate:
-                            indicators_to_calculate.append(indicator)
-                            indicator_to_bars[indicator] = (bars, current_bar_idx)
+                if cached_bars == bars and hasattr(indicator, 'periods'):
+                    if bars.low_changed(self.bid) or bars.is_new_bar:
+                        source_add_count = data_series.data._add_count if hasattr(data_series, 'data') else bars._bar_buffer._add_count if bars._bar_buffer else bars.count
+                        source_bar_idx = source_add_count - 1
+                        if source_bar_idx >= indicator.periods - 1:
+                            if indicator not in indicators_to_calculate:
+                                indicators_to_calculate.append(indicator)
+                                indicator_to_bars[indicator] = (bars, source_bar_idx)
 
             # Close indicators: always update (on every tick)
+            # CRITICAL: Use the source DataSeries's _add_count for the index, not bar_buffer._add_count
+            # This ensures the index matches what DataSeries.__getitem__ expects
             for indicator, cached_bars, data_series in self._indicator_cache.get('close', []):
-                if cached_bars == bars and hasattr(indicator, 'periods') and current_bar_idx >= indicator.periods - 1:
-                    if indicator not in indicators_to_calculate:
-                        indicators_to_calculate.append(indicator)
-                        indicator_to_bars[indicator] = (bars, current_bar_idx)
+                if cached_bars == bars and hasattr(indicator, 'periods'):
+                    # Use the source DataSeries's _add_count for index calculation
+                    source_add_count = data_series.data._add_count if hasattr(data_series, 'data') else bars._bar_buffer._add_count if bars._bar_buffer else bars.count
+                    source_bar_idx = source_add_count - 1
+                    if source_bar_idx >= indicator.periods - 1:
+                        if indicator not in indicators_to_calculate:
+                            indicators_to_calculate.append(indicator)
+                            indicator_to_bars[indicator] = (bars, source_bar_idx)
         
         # Separate into dependent and independent indicators
         independent_indicators = []
@@ -1351,14 +1400,35 @@ class Symbol:
         
         # Calculate independent indicators first
         for indicator, bars, current_bar_idx in independent_indicators:
+            # Ensure DataSeries is fully populated before calculating indicators
+            # Check that close_bids._add_count matches _bar_buffer._add_count
+            if hasattr(bars, '_bar_buffer') and bars._bar_buffer and hasattr(bars, 'close_bids'):
+                bar_buffer_add_count = bars._bar_buffer._add_count
+                close_bids_add_count = bars.close_bids.data._add_count if hasattr(bars.close_bids, 'data') else 0
+                if close_bids_add_count != bar_buffer_add_count:
+                    # DataSeries not fully populated yet - skip indicator calculation for this bar
+                    continue
+            
+            # Calculate indicator (always, regardless of warmup status)
             indicator.calculate(current_bar_idx)
         
         # Calculate dependent indicators (sub-indicators first, then top-level)
         for indicator, bars, current_bar_idx, sub_indicators in dependent_indicators:
+            # Ensure DataSeries is fully populated before calculating indicators
+            # Check that close_bids._add_count matches _bar_buffer._add_count
+            if hasattr(bars, '_bar_buffer') and bars._bar_buffer and hasattr(bars, 'close_bids'):
+                bar_buffer_add_count = bars._bar_buffer._add_count
+                close_bids_add_count = bars.close_bids.data._add_count if hasattr(bars.close_bids, 'data') else 0
+                if close_bids_add_count != bar_buffer_add_count:
+                    # DataSeries not fully populated yet - skip indicator calculation for this bar
+                    continue
+            
+            # Calculate sub-indicators first for the current bar (always, regardless of warmup)
             for sub_indicator in sub_indicators:
                 if hasattr(sub_indicator, 'calculate') and hasattr(sub_indicator, 'periods'):
                     if current_bar_idx >= sub_indicator.periods - 1:
                         sub_indicator.calculate(current_bar_idx)
+            # Calculate top-level indicator (always, regardless of warmup)
             indicator.calculate(current_bar_idx)
 
 
