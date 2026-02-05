@@ -220,315 +220,76 @@ class Symbol:
 
         self.api.AllDataEndUtc = self.api.AllDataEndUtc.replace(tzinfo=UTC)
 
-        # define and create folders for the symbol
-        tick_folder = minute_folder = hour_folder = daily_folder = ""
-        max_data_rate = self.quote_provider.get_highest_data_rate()
-        if max_data_rate < Constants.SEC_PER_MINUTE:
-            tick_folder = os.path.join(
-                self.api.DataPath,
-                self.quote_provider.provider_name,
-                "tick",
-                f"{self.name}",
-            )
-            os.makedirs(tick_folder, exist_ok=True)
+        # Only load tick data if DataPath is set
+        # This function should only ensure data exists, not process it into bars
+        # Bar processing happens during backtest via bars_on_tick()
+        if not self.api.DataPath or self.api.DataPath == "":
+            return
 
-        if max_data_rate < Constants.SEC_PER_HOUR:
-            minute_folder = os.path.join(
-                self.api.DataPath,
-                self.quote_provider.provider_name,
-                "minute",
-                f"{self.name}",
-            )
-            os.makedirs(minute_folder, exist_ok=True)
-
-        if max_data_rate < Constants.SEC_PER_DAY:
-            hour_folder = os.path.join(
-                self.api.DataPath,
-                self.quote_provider.provider_name,
-                "hour",
-            )
-            os.makedirs(hour_folder, exist_ok=True)
-
-        daily_folder = os.path.join(
+        # Create tick folder for storing raw tick data
+        tick_folder = os.path.join(
             self.api.DataPath,
             self.quote_provider.provider_name,
-            "daily",
+            "tick",
+            f"{self.name}",
         )
-        os.makedirs(daily_folder, exist_ok=True)
+        os.makedirs(tick_folder, exist_ok=True)
 
-        # Checking symbol - messages removed
+        # Check and load missing tick data from broker
         run_utc = self.api.AllDataStartUtc.replace(hour=0, minute=0, second=0, microsecond=0)
-        one_day_provider_data: Bars = Bars(self.name, 0, 0, symbol=self)
-        yesterday_minutes = Bars(self.name, Constants.SEC_PER_MINUTE, 0, symbol=self)
-
         while True:
-            # daily loop
-            if not os.path.exists(os.path.join(tick_folder, run_utc.strftime("%Y%m%d_quote.zip"))):
+            # Check if tick file exists for this day
+            tick_file = os.path.join(tick_folder, run_utc.strftime("%Y%m%d_quote.zip"))
+            if not os.path.exists(tick_file):
+                # Load missing data from broker
                 error, quote_provider_dt, one_day_provider_data = self.quote_provider.get_day_at_utc(run_utc)
                 if "No data" == error:
-                    return
+                    # No more data available, stop
+                    break
                 else:
                     assert "" == error, error
+                
+                # Resize bars if needed
                 self._resize_bars(one_day_provider_data)
 
-                # Getting data - messages removed
+                # Write tick data to cache file
                 daily_tick_csv_buffer = StringIO()
                 daily_tick_csv_writer = csv.writer(daily_tick_csv_buffer)
-                daily_minute_csv_buffer = StringIO()
-                daily_minute_csv_writer = csv.writer(daily_minute_csv_buffer)
 
-                # tick loop
-                if "No data" != error:
-                    for i in range(one_day_provider_data.count):
-                        # use absolute array ...data[i], not rolling windows stuff
-                        if 0 == one_day_provider_data.timeframe_seconds:
-                            time = one_day_provider_data.open_times_list[i]
-                            # Use lists for ticks
-                            bid = round(one_day_provider_data.open_bids_list[i], ndigits=self.digits)
-                            ask = round(one_day_provider_data.open_asks_list[i], ndigits=self.digits)
-                            volume_bid = one_day_provider_data.volume_bids_list[i]
-                            volume_ask = one_day_provider_data.volume_asks_list[i]
-                        else:
-                            # Use Ringbuffer for bars
-                            time = one_day_provider_data.open_times.data[i]  # type:ignore
-                            bid = round(one_day_provider_data.open_bids.data[i], ndigits=self.digits)
-                            ask = round(one_day_provider_data.open_asks.data[i], ndigits=self.digits)
-                            volume_bid = one_day_provider_data.volume_bids.data[i]
-                            volume_ask = one_day_provider_data.volume_asks.data[i]
-
-                        # write daily tick data into the csv/zip file
-                        daily_tick_csv_writer.writerow(
-                            [
-                                round((time - run_utc).total_seconds() * 1_000.0, 3),  # type:ignore
-                                f"{bid:.{self.digits}f}",
-                                f"{ask:.{self.digits}f}",
-                                f"{volume_bid}",
-                                f"{volume_ask}",
-                            ]
-                        )
-
-                    # write out a daily ticks file; one file for each day
-                    # csv file inside the zip file is empty if no ticks are available
-                    # we need the zip file to keep track of stored data files
-                    self._write_zip_file(tick_folder, run_utc, daily_tick_csv_buffer, "tick")
-
-                    # Build minute bars from ticks (same mechanism as M1 during backtest)
-                    minute_bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0, symbol=self)
-                    if one_day_provider_data.timeframe_seconds == 0:
-                        # Tick data: build bars incrementally from ticks
-                        for i in range(one_day_provider_data.count):
-                            time = one_day_provider_data.open_times_list[i]
-                            bid = one_day_provider_data.open_bids_list[i]
-                            ask = one_day_provider_data.open_asks_list[i]
-                            vol_delta = int(one_day_provider_data.volume_bids_list[i])
-                            minute_bars.bars_on_tick(time, bid, ask, vol_delta)
+                # Write ticks to CSV
+                for i in range(one_day_provider_data.count):
+                    if 0 == one_day_provider_data.timeframe_seconds:
+                        # Tick data: use lists
+                        time = one_day_provider_data.open_times_list[i]
+                        bid = round(one_day_provider_data.open_bids_list[i], ndigits=self.digits)
+                        ask = round(one_day_provider_data.open_asks_list[i], ndigits=self.digits)
+                        volume_bid = one_day_provider_data.volume_bids_list[i]
+                        volume_ask = one_day_provider_data.volume_asks_list[i]
                     else:
-                        # Bar data: build bars incrementally from existing bars
-                        for i in range(one_day_provider_data.count):
-                            time = one_day_provider_data.open_times.data[i]
-                            bid = one_day_provider_data.close_bids.data[i]  # Use close as bid for bar data
-                            ask = one_day_provider_data.close_asks.data[i]  # Use close as ask for bar data
-                            vol_delta = int(one_day_provider_data.volume_bids.data[i])
-                            minute_bars.bars_on_tick(time, bid, ask, vol_delta)
-                    
-                    # Write minute bars to cache file
-                    minute_df = self._resample(minute_bars, Constants.SEC_PER_MINUTE)
-                    for idx, row in minute_df.iterrows():
-                        daily_minute_csv_writer.writerow(
-                            [
-                                int(
-                                    (
-                                        idx.replace(second=0, microsecond=0) - run_utc
-                                    ).total_seconds()
-                                    * 1_000
-                                ),
-                                f"{row['open_bids']:.{self.digits}f}",
-                                f"{row['high_bids']:.{self.digits}f}",
-                                f"{row['low_bids']:.{self.digits}f}",
-                                f"{row['close_bids']:.{self.digits}f}",
-                                f"{row['volume_bids']:.2f}",
-                                f"{row['open_asks']:.{self.digits}f}",
-                                f"{row['high_asks']:.{self.digits}f}",
-                                f"{row['low_asks']:.{self.digits}f}",
-                                f"{row['close_asks']:.{self.digits}f}",
-                                f"{row['volume_asks']:.2f}",
-                            ]
-                        )
-                    self._write_zip_file(minute_folder, run_utc, daily_minute_csv_buffer, "minute")
+                        # Bar data: use Ringbuffer (shouldn't happen for tick data, but handle it)
+                        time = one_day_provider_data.open_times.data[i]  # type:ignore
+                        bid = round(one_day_provider_data.open_bids.data[i], ndigits=self.digits)
+                        ask = round(one_day_provider_data.open_asks.data[i], ndigits=self.digits)
+                        volume_bid = one_day_provider_data.volume_bids.data[i]
+                        volume_ask = one_day_provider_data.volume_asks.data[i]
 
-                    # append to the hours file
-                    hour_df = self._resample(minute_bars, Constants.SEC_PER_HOUR)
-                    rows: list[list[Any]] = []
-                    for idx, row in hour_df.iterrows():
-                        rows.append(  # type:ignore
-                            [
-                                idx.strftime("%Y%m%d %H:%M"),
-                                f"{row['open_bids']:.{self.digits}f}",
-                                f"{row['high_bids']:.{self.digits}f}",
-                                f"{row['low_bids']:.{self.digits}f}",
-                                f"{row['close_bids']:.{self.digits}f}",
-                                f"{row['volume_bids']:.2f}",
-                                f"{row['open_asks']:.{self.digits}f}",
-                                f"{row['high_asks']:.{self.digits}f}",
-                                f"{row['low_asks']:.{self.digits}f}",
-                                f"{row['close_asks']:.{self.digits}f}",
-                                f"{row['volume_asks']:.2f}",
-                            ]
-                        )
-                    self._append_rows_to_zip(hour_folder, run_utc, self.name, rows)
+                    # Write tick to CSV
+                    daily_tick_csv_writer.writerow(
+                        [
+                            round((time - run_utc).total_seconds() * 1_000.0, 3),  # type:ignore
+                            f"{bid:.{self.digits}f}",
+                            f"{ask:.{self.digits}f}",
+                            f"{volume_bid}",
+                            f"{volume_ask}",
+                        ]
+                    )
 
-                    # do the daily bars; a new day starts at market open times, not at UTC :-(
-                    is_have_yesterday = True
-                    if 0 == yesterday_minutes.count:
-                        error, quote_provider_dt, yesterday_ticks = self.quote_provider.get_day_at_utc(
-                            run_utc - timedelta(1)
-                        )
-                        if "No data" == error:
-                            is_have_yesterday = False
-                        else:
-                            assert "" == error, error
-                            self._resize_bars(yesterday_ticks)
-                            # Build minute bars from ticks (same mechanism as M1 during backtest)
-                            yesterday_minutes = Bars(self.name, Constants.SEC_PER_MINUTE, 0, symbol=self)
-                            if yesterday_ticks.timeframe_seconds == 0:
-                                # Tick data: build bars incrementally from ticks
-                                for i in range(yesterday_ticks.count):
-                                    time = yesterday_ticks.open_times_list[i]
-                                    bid = yesterday_ticks.open_bids_list[i]
-                                    ask = yesterday_ticks.open_asks_list[i]
-                                    vol_delta = int(yesterday_ticks.volume_bids_list[i])
-                                    yesterday_minutes.bars_on_tick(time, bid, ask, vol_delta)
-                            else:
-                                # Bar data: build bars incrementally from existing bars
-                                for i in range(yesterday_ticks.count):
-                                    time = yesterday_ticks.open_times.data[i]
-                                    bid = yesterday_ticks.close_bids.data[i]  # Use close as bid for bar data
-                                    ask = yesterday_ticks.close_asks.data[i]  # Use close as ask for bar data
-                                    vol_delta = int(yesterday_ticks.volume_bids.data[i])
-                                    yesterday_minutes.bars_on_tick(time, bid, ask, vol_delta)
-
-                    if (
-                        len(minute_bars.open_times.data) > 0
-                        and is_have_yesterday
-                        and len(yesterday_minutes.open_times.data) > 0
-                    ):
-                        utc_open_delta = self._local_time_of_day_to_utc(
-                            self.market_open_delta, self.market_data_tz
-                        )
-
-                        market_open_utc_yesterday = (
-                            yesterday_minutes.open_times.data[0].replace(hour=0, minute=0, second=0, microsecond=0)
-                            + utc_open_delta
-                        )
-                        idx_start_yesterday = bisect_left(
-                            yesterday_minutes.open_times.data, market_open_utc_yesterday
-                        )
-
-                        market_open_utc_today = (
-                            minute_bars.open_times.data[0].replace(hour=0, minute=0, second=0, microsecond=0)
-                            + utc_open_delta
-                        )
-                        idx_start_today = bisect_left(minute_bars.open_times.data, market_open_utc_today)
-
-                        local_minute_bars = Bars(self.name, Constants.SEC_PER_MINUTE, 0, symbol=self)
-                        local_minute_bars.open_times.data = np.concatenate(
-                            (
-                                yesterday_minutes.open_times.data[idx_start_yesterday:],
-                                minute_bars.open_times.data[:idx_start_today],  # type: ignore
-                            )
-                        )
-
-                        local_minute_bars.open_times.data -= utc_open_delta  # type: ignore
-
-                        local_minute_bars.open_bids.data = np.concatenate(
-                            (
-                                yesterday_minutes.open_bids.data[idx_start_yesterday:],
-                                minute_bars.open_bids.data[:idx_start_today],
-                            )
-                        )
-                        local_minute_bars.high_bids.data = np.concatenate(
-                            (
-                                yesterday_minutes.high_bids.data[idx_start_yesterday:],
-                                minute_bars.high_bids.data[:idx_start_today],
-                            )
-                        )
-                        local_minute_bars.low_bids.data = np.concatenate(
-                            (
-                                yesterday_minutes.low_bids.data[idx_start_yesterday:],
-                                minute_bars.low_bids.data[:idx_start_today],
-                            )
-                        )
-                        local_minute_bars.close_bids.data = np.concatenate(
-                            (
-                                yesterday_minutes.close_bids.data[idx_start_yesterday:],
-                                minute_bars.close_bids.data[:idx_start_today],
-                            )
-                        )
-                        local_minute_bars.volume_bids.data = np.concatenate(
-                            (
-                                yesterday_minutes.volume_bids.data[idx_start_yesterday:],
-                                minute_bars.volume_bids.data[:idx_start_today],
-                            )
-                        )
-
-                        local_minute_bars.open_asks.data = np.concatenate(
-                            (
-                                yesterday_minutes.open_asks.data[idx_start_yesterday:],
-                                minute_bars.open_asks.data[:idx_start_today],
-                            )
-                        )
-                        local_minute_bars.high_asks.data = np.concatenate(
-                            (
-                                yesterday_minutes.high_asks.data[idx_start_yesterday:],
-                                minute_bars.high_asks.data[:idx_start_today],
-                            )
-                        )
-                        local_minute_bars.low_asks.data = np.concatenate(
-                            (
-                                yesterday_minutes.low_asks.data[idx_start_yesterday:],
-                                minute_bars.low_asks.data[:idx_start_today],
-                            )
-                        )
-                        local_minute_bars.close_asks.data = np.concatenate(
-                            (
-                                yesterday_minutes.close_asks.data[idx_start_yesterday:],
-                                minute_bars.close_asks.data[:idx_start_today],
-                            )
-                        )
-                        local_minute_bars.volume_asks.data = np.concatenate(
-                            (
-                                yesterday_minutes.volume_asks.data[idx_start_yesterday:],
-                                minute_bars.volume_asks.data[:idx_start_today],
-                            )
-                        )
-
-                        daily_df = self._resample(local_minute_bars, Constants.SEC_PER_DAY)
-                        # Adjust times by utc_open_delta
-                        daily_df.index = daily_df.index + utc_open_delta  # type: ignore
-                        rows: list[list[Any]] = []
-                        for idx, row in daily_df.iterrows():
-                            rows.append(  # type:ignore
-                                [
-                                    idx.strftime("%Y%m%d %H:%M"),  # type: ignore
-                                    f"{row['open_bids']:.{self.digits}f}",
-                                    f"{row['high_bids']:.{self.digits}f}",
-                                    f"{row['low_bids']:.{self.digits}f}",
-                                    f"{row['close_bids']:.{self.digits}f}",
-                                    f"{row['volume_bids']:.2f}",
-                                    f"{row['open_asks']:.{self.digits}f}",
-                                    f"{row['high_asks']:.{self.digits}f}",
-                                    f"{row['low_asks']:.{self.digits}f}",
-                                    f"{row['close_asks']:.{self.digits}f}",
-                                    f"{row['volume_asks']:.2f}",
-                                ]
-                            )
-                        self._append_rows_to_zip(daily_folder, run_utc, self.name, rows)
-
-                    yesterday_minutes = minute_bars
+                # Write tick file to cache
+                self._write_zip_file(tick_folder, run_utc, daily_tick_csv_buffer, "tick")
 
             run_utc += timedelta(days=1)
 
-            # check if end reached
+            # Check if end reached
             if run_utc >= self.api.AllDataEndUtc:
                 break
         return
@@ -609,17 +370,18 @@ class Symbol:
                 "volume_asks": bars.volume_asks_list[:count],
             }
         else:
+            # Bar data: extract from Ringbuffer using list comprehension (Ringbuffer doesn't support slicing)
             data = {
-                "open_bids": bars.open_bids.data[:count],
-                "high_bids": bars.high_bids.data[:count],
-                "low_bids": bars.low_bids.data[:count],
-                "close_bids": bars.close_bids.data[:count],
-                "volume_bids": bars.volume_bids.data[:count],
-                "open_asks": bars.open_asks.data[:count],
-                "high_asks": bars.high_asks.data[:count],
-                "low_asks": bars.low_asks.data[:count],
-                "close_asks": bars.close_asks.data[:count],
-                "volume_asks": bars.volume_asks.data[:count],
+                "open_bids": [bars.open_bids.data[i] for i in range(count)],
+                "high_bids": [bars.high_bids.data[i] for i in range(count)],
+                "low_bids": [bars.low_bids.data[i] for i in range(count)],
+                "close_bids": [bars.close_bids.data[i] for i in range(count)],
+                "volume_bids": [bars.volume_bids.data[i] for i in range(count)],
+                "open_asks": [bars.open_asks.data[i] for i in range(count)],
+                "high_asks": [bars.high_asks.data[i] for i in range(count)],
+                "low_asks": [bars.low_asks.data[i] for i in range(count)],
+                "close_asks": [bars.close_asks.data[i] for i in range(count)],
+                "volume_asks": [bars.volume_asks.data[i] for i in range(count)],
             }
 
             # Convert numpy array of datetime objects to pandas DatetimeIndex
@@ -853,11 +615,11 @@ class Symbol:
             start = start.replace(tzinfo=pytz.UTC)
             
         self._tick_current_day = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        # For end day, we want to process all ticks up to and including the end date
-        # _BacktestEndUtc is now inclusive (e.g., 2025-12-03 23:59:59.999 means process up to and including 12/03)
-        # So we set _tick_end_day to the end date itself (2025-12-03), and we'll stop when current_day exceeds it
-        # This way, we'll process all ticks from 12/03 (the last day, inclusive)
-        # and stop when current_day becomes 2025-12-04 (which is after the end date, so we don't process it)
+        # For end day, we want to process all ticks up to but not including the end date
+        # _BacktestEndUtc is exclusive (e.g., 2025-12-06 00:00:00 means process up to but not including 12/06)
+        # So we set _tick_end_day to the end date itself (2025-12-06), and we'll stop when current_day exceeds it
+        # This way, we'll process all ticks from 12/05 (the last day before the end date)
+        # and stop when current_day becomes 2025-12-06 (which is the end date, so we don't process it)
         self._tick_end_day = self.api.robot._BacktestEndUtc.replace(hour=0, minute=0, second=0, microsecond=0)
         self._tick_day_bars = None
         self._tick_day_index = 0
@@ -879,9 +641,9 @@ class Symbol:
         # Load next day if current day is exhausted
         while self._tick_day_index >= self._tick_day_count:
             # Stop when current_day exceeds end_day (end_day is inclusive, so process all ticks from end_day)
-            # _BacktestEndUtc is now inclusive (e.g., 2025-12-03 23:59:59.999 means process up to and including 12/03)
-            # _tick_end_day is set to 2025-12-03 00:00:00, so we want to process all ticks from 12/03
-            # and stop when current_day becomes 2025-12-04 00:00:00 (which is after the end date)
+            # _BacktestEndUtc is exclusive (e.g., 2025-12-06 00:00:00 means process up to but not including 12/06)
+            # But _tick_end_day is set to 2025-12-06 00:00:00, so we want to process all ticks from 12/06
+            # and stop when current_day becomes 2025-12-07 00:00:00
             if self._tick_current_day > self._tick_end_day:
                 return None  # No more ticks
             
@@ -1071,6 +833,8 @@ class Symbol:
                 
                 time, bid, ask, vol_delta = tick_data
                 
+                # Reset stop flag before processing bars
+                self._should_stop_processing = False
                 
                 bars_changed = False
                 for bars in self.bars_dictonary.values():
@@ -1079,6 +843,11 @@ class Symbol:
                     bars.bars_on_tick(time, bid, ask, vol_delta)
                     if bars.count != previous_count or bars.read_index != previous_read_index or bars.is_new_bar:
                         bars_changed = True
+                
+                # Check if any bar signaled to stop (because it would be >= BacktestEndUtc)
+                # This happens when bars_on_tick detects that a new bar would start at or after BacktestEndUtc
+                if hasattr(self, '_should_stop_processing') and self._should_stop_processing:
+                    return "End reached"  # Stop processing this tick and signal end
 
                 # FILTERING: Check if user's OnTick should be called
                 digits = self.digits

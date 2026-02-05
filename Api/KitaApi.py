@@ -568,20 +568,47 @@ class KitaApi:
         """
         Calculate the warm-up period needed for all indicators across all symbols.
         New Architecture: max(periods + 1) * timeframe_seconds.
+        Recursively checks internal indicators (e.g., EMAs in RSI).
         """
         from Api.Constants import Constants
         
         max_warmup_seconds = 0
         max_warmup_info = None
+        processed_indicators = set()  # Avoid processing same indicator twice
+        
+        def check_indicator(indicator, depth=0):
+            """Recursively check indicator and its internal indicators"""
+            if indicator is None or id(indicator) in processed_indicators:
+                return
+            processed_indicators.add(id(indicator))
+            
+            # Check this indicator's warmup requirement
+            if hasattr(indicator, 'periods') and hasattr(indicator, 'timeframe_seconds'):
+                periods = indicator.periods
+                timeframe_seconds = indicator.timeframe_seconds
+                if periods is not None and timeframe_seconds > 0:
+                    warmup_seconds = (periods + 1) * timeframe_seconds
+                    nonlocal max_warmup_seconds, max_warmup_info
+                    if warmup_seconds > max_warmup_seconds:
+                        max_warmup_seconds = warmup_seconds
+                        max_warmup_info = f"{indicator.indicator_name}(periods={periods}) on {timeframe_seconds}s bars"
+            
+            # Check for internal indicators (e.g., EMAs in RSI, EMAs in MACD)
+            if hasattr(indicator, '_exponentialMovingAverageGain'):
+                check_indicator(indicator._exponentialMovingAverageGain, depth + 1)
+            if hasattr(indicator, '_exponentialMovingAverageLoss'):
+                check_indicator(indicator._exponentialMovingAverageLoss, depth + 1)
+            if hasattr(indicator, '_fast_ema'):
+                check_indicator(indicator._fast_ema, depth + 1)
+            if hasattr(indicator, '_slow_ema'):
+                check_indicator(indicator._slow_ema, depth + 1)
+            if hasattr(indicator, '_signal_ema'):
+                check_indicator(indicator._signal_ema, depth + 1)
         
         # METHOD 1: Use Indicators API tracked indicators
         if self.Indicators is not None and len(self.Indicators._created_indicators) > 0:
             for info in self.Indicators._created_indicators:
-                # Use periods + 1 bar as buffer
-                warmup_seconds = (info.periods + 1) * info.timeframe_seconds
-                if warmup_seconds > max_warmup_seconds:
-                    max_warmup_seconds = warmup_seconds
-                    max_warmup_info = f"{info.indicator_name}(periods={info.periods}) on {info.timeframe_seconds}s bars"
+                check_indicator(info)
         
         # METHOD 2: Check Bars look_back as fallback
         for symbol in self.symbol_dictionary.values():
@@ -666,12 +693,12 @@ class KitaApi:
             # Check if time components are set (not midnight)
             if self.BacktestEnd.hour == 0 and self.BacktestEnd.minute == 0 and self.BacktestEnd.second == 0 and self.BacktestEnd.microsecond == 0:
                 # Date only - treat as inclusive end date (include all of that day)
-                # Convert to end of that day (23:59:59.999) UTC (inclusive) to include all of the specified date
-                # Example: BacktestEnd = 03.12.2025 -> _BacktestEndUtc = 03.12.2025 23:59:59.999 UTC (includes all of Dec 3)
-                # Set time to end of day (23:59:59.999) - assume naive datetime is in UTC
-                self._BacktestEndUtc = self.BacktestEnd.replace(hour=23, minute=59, second=59, microsecond=999000)
+                # Convert to next day 00:00:00 UTC (exclusive) to include all of the specified date
+                # Example: BacktestEnd = 03.12.2025 -> _BacktestEndUtc = 04.12.2025 00:00:00 UTC (includes all of Dec 3)
+                next_day = self.BacktestEnd + timedelta(days=1)
+                self._BacktestEndUtc = self._convert_date_to_utc_midnight(next_day)
             else:
-                # Has time components - use as-is (assumed to be UTC, inclusive)
+                # Has time components - use as-is (assumed to be UTC, exclusive)
                 self._BacktestEndUtc = self.BacktestEnd
         else:
             self._BacktestEndUtc = datetime.max
@@ -747,7 +774,6 @@ class KitaApi:
             
             # Compare symbol.time (UTC) directly with _BacktestEndUtc (UTC) to avoid timezone conversion issues
             # symbol.time is in UTC from tick data, so compare with UTC end time
-            # _BacktestEndUtc is now inclusive (end of day 23:59:59.999), so stop when time exceeds it
             if "" != error or symbol.time > self._BacktestEndUtc or self._stop_requested:
                 return True  # end reached
 

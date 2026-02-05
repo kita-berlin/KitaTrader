@@ -180,8 +180,7 @@ class Quantrobot:
                 source=self.m_bot_bars.close_bids,
                 periods=self.bollinger_period,
                 standard_deviations=self.bollinger_std_dev,
-                ma_type=self.ma_type,
-                shift=0
+                ma_type=self.ma_type
             )
             if error != "" or self.m_bollinger is None:
                 self._debug_log(f"Error creating Bollinger Bands: {error}")
@@ -373,9 +372,9 @@ class Quantrobot:
         # The bars object is automatically updated as new bars form, so we just check the count
         if self.m_bot_bars is None:
             # This should never happen if initialization was successful
-                if self.m_tick_count == 1:
+            if self.m_tick_count == 1:
                 self._debug_log(f"Error: m_bot_bars is None (should have been set in qr_on_start)")
-                return
+            return
         
         # Check if enough bars before proceeding with trading logic
         if self.m_bot_bars.count < self.bollinger_period:
@@ -476,10 +475,10 @@ class Quantrobot:
             
             # If still NaN, log and return
             if math.isnan(upper) or math.isnan(lower) or math.isnan(main):
-            if self.m_tick_count % 10000 == 0:  # Debug every 10k ticks
+                if self.m_tick_count % 10000 == 0:  # Debug every 10k ticks
                     source_val = self.m_bot_bars.close_bids.data[bar_idx] if bar_idx < len(self.m_bot_bars.close_bids.data) else float('nan')
-                    pass  # Indicator not ready yet
-            return
+                pass  # Indicator not ready yet
+                return
         
         # Get current prices
         spread = self.bot_symbol.spread
@@ -837,8 +836,16 @@ class Kanga2(KitaApi):
                     ",BollingerMain"
             
             
-            base_filename = f"{self.version.split(' ')[0]} {self.config_path.replace('Config', '')}"
-            log_filename = base_filename.replace(".csv", "_Python.csv") if base_filename.endswith(".csv") else f"{base_filename}_Python"
+            # Generate log filename: use version name and sanitize config path
+            version_name = self.version.split(' ')[0]  # "Kanga2"
+            if self.config_path:
+                # Extract just the directory name from config path (e.g., "Kanga2" from "G:\...\ConfigFiles\Kanga2")
+                import os
+                config_dir = os.path.basename(self.config_path.rstrip(os.sep))
+                base_filename = f"{version_name} {config_dir}"
+            else:
+                base_filename = version_name
+            log_filename = f"{base_filename}_Python.csv"
             self.open_logfile(log_filename, PyLogger.SELF_MADE, header)
         
         self.m_start_balance = self.account.balance

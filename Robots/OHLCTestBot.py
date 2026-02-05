@@ -2,6 +2,7 @@
 OHLC Test Bot - Logs bars only (M1, M5, H1, H4)
 """
 import os
+import math
 from datetime import datetime
 from Api.KitaApi import KitaApi
 from Api.Symbol import Symbol
@@ -107,14 +108,46 @@ class OHLCTestBot(KitaApi):
                 'dict': indicators_dict,
                 'list': ind_list
             }
-        # Create indicators for all timeframes using Open prices (not Close)
-        self.m_inds["M1"] = create_t_indicators(self.m_bars_m1)
+        # Create indicators for all timeframes
+        # NOTE: RSI should use ClosePrices to match C# behavior (C# uses ClosePrices by default)
+        # Other indicators can use OpenPrices for testing
+        def create_t_indicators_with_close_rsi(bars):
+            sma = self.Indicators.simple_moving_average(bars.OpenPrices, self.m_periods)
+            ema = self.Indicators.exponential_moving_average(bars.OpenPrices, self.m_periods)
+            wma = self.Indicators.weighted_moving_average(bars.OpenPrices, self.m_periods)
+            hma = self.Indicators.hull_moving_average(bars.OpenPrices, self.m_periods)
+            sd = self.Indicators.standard_deviation(bars.OpenPrices, self.m_periods)
+            err, bb = self.Indicators.bollinger_bands(bars.OpenPrices, self.m_periods, 1.4, MovingAverageType.Simple)
+            # RSI uses ClosePrices to match C# behavior
+            rsi = self.Indicators.relative_strength_index(bars.ClosePrices, self.m_periods)
+            macd = self.Indicators.macd(bars.OpenPrices, 12, 26, 9)
+            indicators_dict = {
+                'SMA': sma,
+                'EMA': ema,
+                'WMA': wma,
+                'HMA': hma,
+                'SD': sd,
+                'BB_TOP': bb.top,
+                'BB_MAIN': bb.main,
+                'BB_BOTTOM': bb.bottom,
+                'RSI': rsi,
+                'MACD': macd.macd,
+                'MACD_SIGNAL': macd.signal,
+                'MACD_HIST': macd.histogram
+            }
+            ind_list = [sma, ema, wma, hma, sd, bb.top, rsi, macd.macd]
+            return {
+                'dict': indicators_dict,
+                'list': ind_list
+            }
+        # Create indicators for all timeframes
+        self.m_inds["M1"] = create_t_indicators_with_close_rsi(self.m_bars_m1)
         self._debug_log("  M1 indicators created")
-        self.m_inds["M5"] = create_t_indicators(self.m_bars_m5)
+        self.m_inds["M5"] = create_t_indicators_with_close_rsi(self.m_bars_m5)
         self._debug_log("  M5 indicators created")
-        self.m_inds["H1"] = create_t_indicators(self.m_bars_h1)
+        self.m_inds["H1"] = create_t_indicators_with_close_rsi(self.m_bars_h1)
         self._debug_log("  H1 indicators created")
-        self.m_inds["H4"] = create_t_indicators(self.m_bars_h4)
+        self.m_inds["H4"] = create_t_indicators_with_close_rsi(self.m_bars_h4)
         self._debug_log("  H4 indicators created")
         
         self._debug_log("Registering BarOpened event handlers...")
@@ -184,6 +217,90 @@ class OHLCTestBot(KitaApi):
             inds = self.m_inds[tf]['dict']
             
             try:
+                # Get RSI indicator to access internal EMAs
+                rsi = inds['RSI']
+                rsi_val = rsi.result.last(1)
+                
+                # Get internal EMA values for debugging
+                # CRITICAL: Use the same absolute index as RSI result to ensure consistency
+                # RSI uses source._add_count, so we need to use the same index for internal EMAs
+                # The internal EMAs use _gains/_losses as source, which should have the same _add_count as source
+                ema_gain_val = None
+                ema_loss_val = None
+                gain_val = None
+                loss_val = None
+                
+                # Get the absolute index that RSI result.last(1) uses
+                # This ensures we log the EMA values for the same bar as the RSI value
+                if hasattr(rsi, 'source') and hasattr(rsi.source, '_add_count'):
+                    source_add_count = rsi.source._add_count
+                    abs_index = max(0, source_add_count - 1 - 1)  # last(1) = index - 1 - 1
+                    
+                    # PREFERRED: Use exact gain/loss values stored during RSI calculation (if available)
+                    # This ensures we log the exact values used in the RSI calculation
+                    # CRITICAL: Only use exact values if they were calculated for the same index we're logging
+                    # When lazy_calculate is called, it might calculate multiple indices, so _last_calc_index
+                    # might be for a different index than abs_index
+                    if hasattr(rsi, '_last_calc_index') and rsi._last_calc_index == abs_index:
+                        if hasattr(rsi, '_last_gain') and rsi._last_gain is not None:
+                            gain_val = rsi._last_gain
+                        if hasattr(rsi, '_last_loss') and rsi._last_loss is not None:
+                            loss_val = rsi._last_loss
+                        if hasattr(rsi, '_last_ema_gain') and rsi._last_ema_gain is not None:
+                            ema_gain_val = rsi._last_ema_gain
+                        if hasattr(rsi, '_last_ema_loss') and rsi._last_ema_loss is not None:
+                            ema_loss_val = rsi._last_ema_loss
+                    
+                    # Fallback: Calculate gain/loss directly from source values if exact values not available
+                    # This matches exactly how RSI calculates gains/losses
+                    # NOTE: RSI now uses ClosePrices, so source contains Close prices
+                    if gain_val is None or loss_val is None:
+                        if abs_index >= 1 and hasattr(rsi, 'source'):
+                            try:
+                                current_price = rsi.source[abs_index]
+                                prev_price = rsi.source[abs_index - 1]
+                                if current_price > prev_price:
+                                    gain_val = current_price - prev_price
+                                    loss_val = 0.0
+                                elif current_price < prev_price:
+                                    gain_val = 0.0
+                                    loss_val = prev_price - current_price
+                                else:
+                                    gain_val = 0.0
+                                    loss_val = 0.0
+                            except:
+                                pass
+                    
+                    # Fallback: Read from DataSeries if exact values not available
+                    if ema_gain_val is None and hasattr(rsi, '_exponentialMovingAverageGain') and rsi._exponentialMovingAverageGain:
+                        try:
+                            # Use absolute index directly instead of last(1) to ensure consistency
+                            ema_gain_val = rsi._exponentialMovingAverageGain.result[abs_index]
+                        except:
+                            try:
+                                # Fallback to last(1) if direct index fails
+                                ema_gain_val = rsi._exponentialMovingAverageGain.result.last(1)
+                            except:
+                                pass
+                    if ema_loss_val is None and hasattr(rsi, '_exponentialMovingAverageLoss') and rsi._exponentialMovingAverageLoss:
+                        try:
+                            # Use absolute index directly instead of last(1) to ensure consistency
+                            ema_loss_val = rsi._exponentialMovingAverageLoss.result[abs_index]
+                        except:
+                            try:
+                                # Fallback to last(1) if direct index fails
+                                ema_loss_val = rsi._exponentialMovingAverageLoss.result.last(1)
+                            except:
+                                pass
+                
+                # Format EMA values with higher precision to preserve exact values used in calculation
+                # Use .10f for EMA values to preserve full precision (they're used in division, so precision matters)
+                # Use regular fmt for gain/loss (they're just for reference)
+                ema_gain_str = f"{ema_gain_val:.10f}" if ema_gain_val is not None and not math.isnan(ema_gain_val) else "nan"
+                ema_loss_str = f"{ema_loss_val:.10f}" if ema_loss_val is not None and not math.isnan(ema_loss_val) else "nan"
+                gain_str = f"{gain_val:{fmt}}" if gain_val is not None else "nan"
+                loss_str = f"{loss_val:{fmt}}" if loss_val is not None else "nan"
+                
                 ind_line = f"FINAL_IND|{tf}|{bar_time}|" + \
                     f"SMA={inds['SMA'].result.last(1):{fmt}}|" + \
                     f"EMA={inds['EMA'].result.last(1):{fmt}}|" + \
@@ -193,7 +310,11 @@ class OHLCTestBot(KitaApi):
                     f"BB_TOP={inds['BB_TOP'].last(1):{fmt}}|" + \
                     f"BB_MAIN={inds['BB_MAIN'].last(1):{fmt}}|" + \
                     f"BB_BOTTOM={inds['BB_BOTTOM'].last(1):{fmt}}|" + \
-                    f"RSI={inds['RSI'].result.last(1):{fmt}}|" + \
+                    f"RSI={rsi_val:{fmt}}|" + \
+                    f"RSI_EMA_GAIN={ema_gain_str}|" + \
+                    f"RSI_EMA_LOSS={ema_loss_str}|" + \
+                    f"RSI_GAIN={gain_str}|" + \
+                    f"RSI_LOSS={loss_str}|" + \
                     f"MACD={inds['MACD'].last(1):{fmt}}|" + \
                     f"MACD_SIGNAL={inds['MACD_SIGNAL'].last(1):{fmt}}|" + \
                     f"MACD_HIST={inds['MACD_HIST'].last(1):{fmt}}"
@@ -205,9 +326,11 @@ class OHLCTestBot(KitaApi):
                 
                 # Print to console
                 print(ind_line)
-            except Exception as e:
+                except Exception as e:
                 self._debug_log(f"Error logging indicators for {tf}: {e}")
-    
+                    import traceback
+                    self._debug_log(traceback.format_exc())
+            
     def _log(self, message: str):
         if self.log_file:
             if message.startswith("FINAL_BAR|"):
@@ -217,5 +340,9 @@ class OHLCTestBot(KitaApi):
                 self.log_file.write(f"{timestamp} | Info | {message}\n")
             self.log_file.flush()
     
-            except Exception as e:
-                self._debug_log(f"Error logging indicators for {tf}: {e}")
+    def _debug_log(self, message: str):
+        """Write debug message to debug log file (not stdout)"""
+        if self.debug_log_file:
+            timestamp = datetime.now().strftime("%d.%m.%Y %H:%M:%S.%f")[:-3]
+            self.debug_log_file.write(f"{timestamp} | DEBUG | {message}\n")
+            self.debug_log_file.flush()

@@ -92,14 +92,14 @@ class Platforms(Enum):
 
 
 class MovingAverageType(Enum):
-    Simple = 1
-    Exponential = 2
-    TimeSeries = 3
-    Triangular = 4
-    Vidya = 5
-    Weighted = 6
-    WilderSmoothing = 7
-    Hull = 8
+    Simple = 0  # Match cTrader API (starts at 0)
+    Exponential = 1
+    TimeSeries = 2
+    Triangular = 3
+    Vidya = 4
+    Weighted = 5
+    WilderSmoothing = 6
+    Hull = 7
 
 
 class ChartIconType(Enum):

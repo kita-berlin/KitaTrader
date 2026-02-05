@@ -40,6 +40,14 @@ class Indicators:
         indicator.initialize()
         self._created_indicators.append(indicator)
         return indicator
+    
+    def test_recursive_indicator(self, source, periods):
+        """Test indicator for debugging ringbuffer indexing issues"""
+        from Indicators.TestRecursiveIndicator import TestRecursiveIndicator
+        indicator = TestRecursiveIndicator(source, periods)
+        indicator.initialize()
+        self._created_indicators.append(indicator)
+        return indicator
 
     def bollinger_bands(self, source, periods, standard_deviations, ma_type):
         from Indicators.BollingerBands import BollingerBands

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import List, Callable, Optional, Any
+import pytz
 from Api.TimeSeries import TimeSeries
 from Api.DataSeries import DataSeries
 from Api.KitaApiEnums import *
@@ -299,6 +300,22 @@ class Bars:
                 current_bar_time = None
             
             if current_bar_time is None or bar_start_time > current_bar_time:
+                # CRITICAL: Check if this new bar would be at or after BacktestEndUtc BEFORE starting it
+                # This matches C# behavior - stop before creating a bar that is >= BacktestEndUtc
+                if self._symbol and hasattr(self._symbol, 'api') and hasattr(self._symbol.api, 'robot'):
+                    if hasattr(self._symbol.api.robot, '_BacktestEndUtc'):
+                        backtest_end_utc = self._symbol.api.robot._BacktestEndUtc
+                        # Ensure both are timezone-aware for proper comparison
+                        if backtest_end_utc.tzinfo is None:
+                            backtest_end_utc = backtest_end_utc.replace(tzinfo=pytz.UTC)
+                        if bar_start_time.tzinfo is None:
+                            bar_start_time = bar_start_time.replace(tzinfo=pytz.UTC)
+                        # If bar_start_time >= BacktestEndUtc, don't start this bar
+                        if bar_start_time >= backtest_end_utc:
+                            # Set flag to signal stop and return early
+                            self._symbol._should_stop_processing = True
+                            return  # Don't start this bar
+                
                 # New bar started - the previous bar is now closed
                 # Start new bar (read_index will be updated to point to the new bar)
                 self._start_new_bar(bar_start_time, bid, ask, tick_volume)

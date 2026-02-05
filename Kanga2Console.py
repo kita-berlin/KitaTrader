@@ -39,10 +39,21 @@ class MainConsole:
         # region
         # BacktestStart/BacktestEnd are interpreted as UTC 00:00 (midnight UTC)
         # This matches cTrader CLI behavior where dates are interpreted as UTC 00:00
+        # Time range: 01.12.2025 to 06.01.2026 (matching C# bot)
         self.robot.WarmupStart = datetime.strptime("24.11.2025", "%d.%m.%Y")
         self.robot.BacktestStart = datetime.strptime("01.12.2025", "%d.%m.%Y")
-        self.robot.BacktestEnd = datetime.strptime("04.12.2025", "%d.%m.%Y")  # End of day 3 (inclusive)
+        # Set to 06.01.2026 (date only) - framework will convert to end of day (23:59:59.999)
+        self.robot.BacktestEnd = datetime.strptime("06.01.2026", "%d.%m.%Y")  # End of day (inclusive)
         # endregion
+        
+        # Enable logging for comparison
+        self.robot.is_do_logging = True
+        
+        # Load config file to match C# bot parameters
+        # Use the same config file as C# bot: "Kanga2, AUDNZD h1 Long.cbotset"
+        self.robot.config_path = r"G:\Meine Ablage\ConfigFiles\Kanga2"
+        # Set symbol to match config (will be loaded from config file)
+        self.robot.symbol_csv_all_visual = "AUDNZD"
 
         # 3. Initialize the platform and the robot
         # region

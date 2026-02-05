@@ -43,16 +43,16 @@ class OHLCTestConsole:
         
         # 2. Define the backtest time window
         # region
-        # Date range: Dec 1-3, 2025 (3 days, matching C# bot)
+        # Date range: Dec 1-3, 2025 (3 days)
         # Framework will convert BacktestEnd to next day 00:00:00 (exclusive)
         # This ensures we get all bars from Dec 1 00:00:00 to Dec 3 23:59:59
         from datetime import timedelta
 
         self.robot.WarmupStart = datetime.strptime("24.11.2025", "%d.%m.%Y")
         self.robot.BacktestStart = datetime.strptime("01.12.2025", "%d.%m.%Y")
-        # Set to Dec 3 (date only) - framework will convert to Dec 3 23:59:59.999 (inclusive end)
-        # This ensures we get all bars from Dec 1 00:00:00 to Dec 3 23:59:59 (matching C# bot)
-        self.robot.BacktestEnd = datetime.strptime("03.12.2025", "%d.%m.%Y")  # Dec 1-3 (inclusive)
+        # Set to Dec 4 (date only) - framework will convert to Dec 4 00:00:00 (exclusive)
+        # This ensures we get all bars from Dec 1 00:00:00 to Dec 3 23:59:59
+        self.robot.BacktestEnd = datetime.strptime("04.12.2025", "%d.%m.%Y")  # Dec 1-3 (inclusive)
         # endregion
 
         # 3. Initialize the platform and the robot

@@ -387,7 +387,12 @@ class DataSeries:
             
         if index == self._add_count:
             # Append mode
-            self.write_indicator_value(value)
+            if self._is_indicator_result:
+                self.write_indicator_value(value)
+            else:
+                # For non-indicator-result DataSeries, use append() directly
+                rounded_value = value if not np.isnan(value) else float('nan')
+                self.data.add(rounded_value)
         elif index < self._add_count:
             # Update mode
             if self._add_count > self._size:
@@ -416,8 +421,15 @@ class DataSeries:
             # to prevent reading NaNs when accessing historical values
             # However, we can't access the source here, so we'll just fill up to the requested index
             while self._add_count < index:
-                self.write_indicator_value(float("nan"))
-            self.write_indicator_value(value)
+                if self._is_indicator_result:
+                    self.write_indicator_value(float("nan"))
+                else:
+                    self.data.add(float("nan"))
+            if self._is_indicator_result:
+                self.write_indicator_value(value)
+            else:
+                rounded_value = value if not np.isnan(value) else float('nan')
+                self.data.add(rounded_value)
 
     def _get_nearest_index(self, timestamp: datetime) -> int:
         """
